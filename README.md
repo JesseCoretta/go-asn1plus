@@ -67,7 +67,7 @@ This package relies upon the following packages from the `golang/x/exp` library:
 
 <sup>
   <sup><b>†</b>  - used ONLY for testing/examples</sup><br>
-  <sup><b>††</b> - WARNING: Experimental!
+  <sup><b>††</b> - WARNING: Experimental!</sup><br>
 </sup>
 
 ## Constraints
@@ -85,7 +85,7 @@ When using any number of `Constraint`s via `Options`, the `Constraint` function 
 
 There are many examples compiled into the package on this topic.
 
-## Native Go Type Support
+# Native Go Type Support
 
 In addition to the ASN.1 primitive types defined in this package, users may opt for standard Go types such as `[]byte`, `string`, `int` and a few others to be supported via internal "type adapters".
 
