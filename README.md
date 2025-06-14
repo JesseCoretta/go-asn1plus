@@ -52,9 +52,9 @@ This package relies upon the following packages from the standard library:
   - `math/bits`
   - `reflect`
   - `sort`
-  - `sync`
   - `strconv`
   - `strings`
+  - `sync`
   - `testing`
   - `time`
   - `unicode`
