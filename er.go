@@ -30,19 +30,22 @@ the final byte. If none are provided, an empty (but initialized) [Packet]
 is returned as-is.
 */
 func (r EncodingRule) New(data ...byte) Packet {
-	var pkt Packet = invalidPacket{}
+    var pkt Packet = invalidPacket{}
 
-	switch r {
-	case BER:
-		pkt = &BERPacket{}
-		pkt.Append(data...)
-	case DER:
-		pkt = &DERPacket{}
-		pkt.Append(data...)
-	}
-	pkt.SetOffset(-1)
+    switch r {
+    case BER:
+        b := &BERPacket{}
+        b.data = data
+        pkt = b
 
-	return pkt
+    case DER:
+        d := &DERPacket{}
+        d.data = data
+        pkt = d
+    }
+
+    pkt.SetOffset(-1)
+    return pkt
 }
 
 func (r EncodingRule) newTLV(class, tag, length int, compound bool, value ...byte) (tlv TLV) {

@@ -74,7 +74,10 @@ func TestBER_codecov(_ *testing.T) {
 }
 
 func TestBERPacket_OutOfBoundsGuards(t *testing.T) {
-	pkt := BER.New(0x02, 0x01, 0x00)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	pkt := BER.New((*tmpBuf)...)
+	pkt.Append(0x02, 0x01, 0x00)
 	pkt.SetOffset(pkt.Len())
 
 	if _, err := pkt.Class(); err != errorOutOfBounds {

@@ -4,10 +4,6 @@ import (
 	"testing"
 )
 
-func TestChoiceError(t *testing.T) {
-	_ = errorNoChoicesMethod("name")
-}
-
 func TestExpectError(t *testing.T) {
 	_ = errorASN1Expect(1, 2, "Tag")
 	_ = errorASN1Expect(1, 2, "Class")

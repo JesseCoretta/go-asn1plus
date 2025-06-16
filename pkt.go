@@ -113,9 +113,13 @@ func extractPacket(pkt Packet, L int) (sub Packet, err error) {
 	if pkt.Offset()+L > pkt.Len() {
 		err = errorASN1Expect(L, pkt.Len()-pkt.Offset(), "Length")
 	} else {
-		inner := pkt.Type().New(pkt.Data()[pkt.Offset() : pkt.Offset()+L]...)
+		tmpBuf := getBuf()
+		defer putBuf(tmpBuf)
+		inner := pkt.Type().New((*tmpBuf)...)
+		inner.Append(pkt.Data()[pkt.Offset() : pkt.Offset()+L]...)
 		pkt.SetOffset(pkt.Offset() + L)
-		sub = pkt.Type().New(inner.Data()...)
+		sub = pkt.Type().New((*tmpBuf)...)
+		sub.Append(inner.Data()...)
 	}
 
 	return sub, err

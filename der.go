@@ -139,7 +139,10 @@ PeekTLV returns [TLV] alongside an error. This method is similar to the standard
 [Packet.TLV] method, except this method does not advance the offset.
 */
 func (r *DERPacket) PeekTLV() (TLV, error) {
-	sub := r.Type().New(r.Data()...)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	sub := r.Type().New((*tmpBuf)...)
+	sub.Append(r.Data()...)
 	sub.SetOffset(r.Offset())
 	return getTLV(sub)
 }

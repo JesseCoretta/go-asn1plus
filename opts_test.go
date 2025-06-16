@@ -53,5 +53,5 @@ func TestOptions_codecov(_ *testing.T) {
 	_ = opts.String()
 	field := reflect.StructField{Tag: "blarg"}
 	_, _ = NewOptions("asn1:")
-	_, _ = extractOptions(field)
+	_, _ = extractOptions(field, 0, false)
 }

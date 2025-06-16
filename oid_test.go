@@ -59,8 +59,6 @@ func TestObjectIdentifier_InStruct(t *testing.T) {
 		if err = Unmarshal(pkt, &my2); err != nil {
 			t.Fatalf("%s failed [%s decoding]: %v\n", t.Name(), rule, err)
 		}
-
-		t.Logf("MY2: %#v\n", my2)
 	}
 }
 

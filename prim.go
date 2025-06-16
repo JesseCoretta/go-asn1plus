@@ -60,7 +60,10 @@ func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (dat
 	// When an explicit wrapper is used, we assume its value holds the
 	// complete encoding of the inner TLV. Here we re‑parse that inner TLV
 	// and return its “trimmed” value.
-	innerPkt := pkt.Type().New(tlv.Value...)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	innerPkt := pkt.Type().New((*tmpBuf)...)
+	innerPkt.Append(tlv.Value...)
 	innerPkt.SetOffset(0)
 
 	var innerTLV TLV

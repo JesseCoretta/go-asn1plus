@@ -17,19 +17,22 @@ of this type serve two purposes.
   - Simplify package internals by having a portable storage type for parsed struct field instructions which bear the "asn1:" tag prefix
 */
 type Options struct {
-	Explicit    bool     // if true, wrap the field in an explicit tag
-	Optional    bool     // if true, the field is optional
-	OmitEmpty   bool     // whether to ignore empty slice values
-	Set         bool     // if true, encode as SET instead of SEQUENCE (for collections)
-	Indefinite  bool     // whether a field is known to be of an indefinite length
-	tag         *int     // if non-nil, indicates an alternative tag number.
-	class       *int     // represents the ASN.1 class: universal, application, context-specific, or private.
-	Identifier  string   // "ia5", "numeric", "utf8" etc. (for string fields)
-	Constraints []string // references to registered Constraint/ConstraintGroup instances
-	Default     any      // default value
+	Explicit    bool               // if true, wrap the field in an explicit tag
+	Optional    bool               // if true, the field is optional
+	OmitEmpty   bool               // whether to ignore empty slice values
+	Set         bool               // if true, encode as SET instead of SEQUENCE (for collections)
+	Indefinite  bool               // whether a field is known to be of an indefinite length
+	Automatic   bool               // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
+	Choices     string             // Name of ChoicesMap key for the associated Choices of a single SEQUENCE field
+	Identifier  string             // "ia5", "numeric", "utf8" etc. (for string fields)
+	Constraints []string           // references to registered Constraint/ConstraintGroup instances
+	Default     any                // default value
+	ChoicesMap  map[string]Choices // map of Choices for any number of Choice fields (maps to tag "choices:<name>")
 
-	choiceTag    *int     // tag for choice selection, if provided
-	unidentified []string // for unidentified or superfluous keywords, mostly for maintainer troubleshooting
+	tag, // if non-nil, indicates an alternative tag number.
+	class, // represents the ASN.1 class: universal, application, context-specific, or private.
+	choiceTag *int // tag for choice selection, if provided
+	unidentified []string // for unidentified or superfluous keywords
 }
 
 // defaultOptions returns default options (e.g., no explicit tagging, context-specific for tagged fields)
@@ -83,6 +86,7 @@ func (r Options) String() string {
 	}
 	addStringConfigValue(&parts, r.Explicit, "explicit")
 	addStringConfigValue(&parts, r.Optional, "optional")
+	addStringConfigValue(&parts, r.Automatic, "automatic")
 	addStringConfigValue(&parts, r.Set, "set")
 
 	// constraints (leave the single loop ‑ counts as one branch)
@@ -97,6 +101,7 @@ func (r Options) String() string {
 	}
 
 	addStringConfigValue(&parts, r.Identifier != "", lc(r.Identifier))
+	addStringConfigValue(&parts, r.Choices != "", lc(r.Choices))
 
 	return join(parts, ",")
 }
@@ -149,18 +154,12 @@ func parseOptions(tagStr string) (opts Options, err error) {
 			// use context-specific instead of universal. This may be
 			// overridden.
 			opts.SetClass(ClassContextSpecific)
-		case token == "explicit":
-			opts.Explicit = true
-		case token == "optional":
-			opts.Optional = true
-		case token == "omitempty":
-			opts.OmitEmpty = true
-		case token == "set":
-			opts.Set = true
+		case strInSlice(token, []string{"explicit", "optional", "automatic", "set", "omitempty", "indefinite"}):
+			opts.setBool(token)
 		case hasPfx(token, "constraint:"):
 			opts.Constraints = append(opts.Constraints, trimPfx(token, "constraint:"))
-		case token == "indefinite":
-			opts.Indefinite = true
+		case hasPfx(token, "choices:"):
+			opts.Choices = trimPfx(token, "choices:")
 		case hasPfx(token, "default:"):
 			opts.parseOptionDefault(token)
 		default:
@@ -177,9 +176,27 @@ func parseOptions(tagStr string) (opts Options, err error) {
 	return opts, err
 }
 
+func (r *Options) setBool(name string) {
+	switch {
+	case name == "explicit":
+		r.Explicit = true
+	case name == "automatic":
+		r.Automatic = true
+	case name == "omitempty":
+		r.OmitEmpty = true
+	case name == "optional":
+		r.Optional = true
+	case name == "set":
+		r.Set = true
+	case name == "indefinite":
+		r.Indefinite = true
+	}
+}
+
 func (r *Options) writeClassToken(name string) (written bool) {
 	// NOTE: universal NOT listed because the "universal"
-	// token is NOT related to ClassUniversal.
+	// token is NOT related to ClassUniversal, rather it
+	// relates to the ASN.1 UNIVERSAL STRING type.
 	switch {
 	case name == "application":
 		r.SetClass(ClassApplication)
@@ -241,13 +258,28 @@ func swapAlias(alias string) (token string) {
 	return
 }
 
-func extractOptions(field reflect.StructField) (opts Options, err error) {
+func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (opts Options, err error) {
 	if tagStr, ok := field.Tag.Lookup("asn1"); ok {
 		var parsedOpts Options
 		if parsedOpts, err = parseOptions(tagStr); err != nil {
-			err = mkerr("Marshal: error parsing tag for field " + field.Name + ": " + err.Error())
+			err = mkerr("Marshal: error parsing tag for field " + field.Name +
+				"(" + itoa(fieldNum) + "): " + err.Error())
 		} else {
 			opts = parsedOpts
+		}
+
+		if !opts.HasTag() && automatic {
+			if opts.Explicit {
+				err = mkerr("EXPLICIT and AUTOMATIC are mutually exclusive")
+				return
+			}
+			if opts.Class() == ClassUniversal {
+				// UNLESS the user chose to override
+				// the default class, here we impose
+				// CONTEXT SPECIFIC (class 2).
+				opts.SetClass(ClassContextSpecific)
+			}
+			opts.SetTag(fieldNum)
 		}
 	} else {
 		opts = implicitOptions()
@@ -288,4 +320,18 @@ func (r Options) Class() int {
 		return *r.class
 	}
 	return 0 // UNIVERSAL default
+}
+
+func clearChildOpts(o *Options) (c *Options) {
+	if o != nil {
+		d := *o
+		c = &d
+
+		// remove per-field overrides
+		c.tag = nil
+		c.class = nil
+		c.Explicit = false
+	}
+
+	return
 }

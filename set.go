@@ -62,15 +62,20 @@ func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 
 	var elements [][]byte
 	for i := 0; i < v.Len(); i++ {
-		tmp := pkt.Type().New()
-		defer tmp.Free()
+
+		tmpBuf := getBuf()
+		defer putBuf(tmpBuf)
+		tmp := pkt.Type().New((*tmpBuf)...)
+
+		subOpts := clearChildOpts(opts)
 
 		// DO NOT pass global options to inner SET elements.
-		if err := marshalValue(v.Index(i), tmp, nil, depth+1); err != nil {
+		if err := marshalValue(v.Index(i), tmp, subOpts, depth+1); err != nil {
 			return mkerr("marshalSet: error marshaling element " + itoa(i) + ": " + err.Error())
 		}
 		elements = append(elements, tmp.Data())
 	}
+
 	if pkt.Type() == DER {
 		sort.Slice(elements, func(i, j int) bool {
 			return bytes.Compare(elements[i], elements[j]) < 0
@@ -133,11 +138,23 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts ...Options) error {
 	elemType := v.Type().Elem()
 	var elements []reflect.Value
 
+	var subOpts *Options
+	if len(opts) > 0 {
+		o := opts[0]
+		subOpts = clearChildOpts(&o)
+	}
+
 	// Decode elements until no more data is available.
 	// (pkt here is assumed to contain only the SET’s inner payload.)
 	for pkt.Offset() < pkt.Len() {
 		tmp := reflect.New(elemType).Elem()
-		if err = unmarshalValue(pkt, tmp, opts...); err != nil {
+		if subOpts != nil {
+			err = unmarshalValue(pkt, tmp, *subOpts)
+		} else {
+			err = unmarshalValue(pkt, tmp)
+		}
+
+		if err != nil {
 			return mkerr("unmarshalSet: error unmarshaling SET element: " + err.Error())
 		}
 		elements = append(elements, tmp)

@@ -41,8 +41,9 @@ would otherwise lead to an ambiguous Choice state.  For an example
 of this in the real world, see the [EmbeddedPDV] ASN.1 schema definition.
 */
 type Choice struct {
-	Value any
-	Tag   *int // for field tagging
+	Value    any
+	Tag      *int // for field tagging
+	Explicit bool
 }
 
 /*
@@ -80,15 +81,24 @@ declaring alternatives from which a [Choice] may be made. See [Choices.Choose]
 for a means of verifying the chosen [Choice].
 */
 type Choices struct {
-	alts []choiceAlternative
+	cfg   Options
+	alts  []choiceAlternative
+	tagIx map[int]int
 }
 
 /*
 NewChoices allocates and returns an instance of [Choices]. See [Choices.Register]
 and [Choices.Choose] for a means of interacting with the return instance.
+
+The input options instance can be used to deliver an instance of [Options] which
+contains an "Automatic" Boolean value of true.
 */
-func NewChoices() (c Choices) {
+func NewChoices(opts ...Options) (c Choices) {
+	if len(opts) > 0 {
+		c.cfg = opts[0]
+	}
 	c.alts = make([]choiceAlternative, 0)
+	c.tagIx = make(map[int]int)
 	return
 }
 
@@ -107,11 +117,25 @@ func (r *Choices) Register(instance any, opts ...string) error {
 		return mkerr("cannot register nil instance; hint: for ASN.1 NULL, use Null type")
 	}
 
-	var options choiceOptions
+	var options choiceOptions = choiceOptions{Tag: -1, UTag: -1}
 	if len(opts) > 0 {
-		options = tokenizeChoiceOptions(opts[0])
+		options = r.tokenizeChoiceOptions(opts[0])
 	}
 
+	if r.cfg.Automatic {
+		r.cfg.Explicit = true
+		var tag int = len(r.alts)
+		// If automatic, grab the last choiceAlternative
+		// tag number and increment by one.
+		if options.Tag == -1 {
+			options.Tag = tag // OVERRIDE
+		}
+	}
+
+        if _, dup := r.tagIx[options.Tag]; dup {
+		return mkerr("duplicate CHOICE tag " + itoa(options.Tag))
+	}
+        r.tagIx[options.Tag] = len(r.alts)
 	r.alts = append(r.alts, choiceAlternative{
 		Type: derefTypePtr(reflect.TypeOf(instance)),
 		Opts: options,
@@ -138,13 +162,12 @@ func (r Choices) byTag(t any) (calt choiceAlternative, ok bool) {
 		tag = *tv
 	}
 
-	for _, alt := range r.alts {
-		if alt.Opts.Tag == tag {
-			calt = alt
-			ok = true
-			break
-		}
+	var i int
+        i, ok = r.tagIx[tag]
+	if !ok {
+		return
 	}
+	calt = r.alts[i]
 	return
 }
 
@@ -168,18 +191,12 @@ func (r Choices) Choose(instance any, opts ...string) (c Choice, err error) {
 	)
 
 	if len(opts) > 0 {
-		o = tokenizeChoiceOptions(opts[0])
+		o = r.tokenizeChoiceOptions(opts[0])
 		mID = true
 	}
 
-	matchID := func(alt choiceAlternative) (matched bool) {
-		if o.Name != "" {
-			matched = alt.Opts.Name == o.Name && alt.Opts.Tag == o.Tag
-		} else {
-			matched = alt.Opts.Tag == o.Tag
-		}
-
-		return
+	matchID := func(alt choiceAlternative) bool {
+		return alt.Opts.Tag == o.Tag
 	}
 
 	if instance == nil {
@@ -206,7 +223,7 @@ func (r Choices) Choose(instance any, opts ...string) (c Choice, err error) {
 	case 0:
 		err = errorNoChoiceMatched(inputType.String())
 	case 1:
-		c = Choice{Value: instance, Tag: &o.Tag}
+		c = Choice{Value: instance, Tag: &matches[0].Opts.Tag, Explicit: matches[0].Opts.Explicit}
 	default:
 		err = errorAmbiguousChoice
 	}
@@ -239,12 +256,13 @@ Thus, MyStruct would extend:
 Naturally the return Choices instance should contain one or more empty pointer
 values, each of a valid alternative type (e.g.: OctetString). For instance:
 
-	Choice := {
-	      new(TypeName),
-	      new(OtherType),
-	      &ThisWorksTooForSomeTypes{},
-	      ....
-	}
+	        // note: this is an abstract example
+		Choice := {
+		      new(TypeName),
+		      new(OtherType),
+		      &ThisWorksTooForSomeTypes{},
+		      ....
+		}
 
 The return type is tailored for the field it is meant to facilitate. This
 method naming requirement exists because it is possible for a single struct
@@ -276,11 +294,29 @@ func getChoicesMethod(field string, x any) (func() Choices, bool) {
 	return choicesFunc, true
 }
 
-func callChoicesMethod(n string, constructed any, pkt Packet, opts Options) (alt Choice, err error) {
+func selectFieldChoice(n string, constructed any, pkt Packet, opts Options) (alt Choice, err error) {
+	// First see if the construct type exports a
+	// choices method of <FieldName>Choices. If so,
+	// derive our Choices instance from that.
+	var choices Choices
 	meth, found := getChoicesMethod(n, constructed)
-	if !found {
-		err = errorNoChoicesMethod(n)
-		return
+	if found {
+		choices = meth()
+	} else {
+		// No <FieldName>Choices method was discovered. But
+		// before we fail, see if a ChoicesMap was included
+		// in the Options payload. If so, we can forego the
+		// error if we find a match.
+		if opts.ChoicesMap != nil {
+			var ok bool
+			if choices, ok = opts.ChoicesMap[opts.Choices]; !ok {
+				err = errorNoChoicesAvailable
+				return
+			}
+		} else {
+			err = errorNoChoicesAvailable
+			return
+		}
 	}
 
 	var candidate any
@@ -297,42 +333,50 @@ func callChoicesMethod(n string, constructed any, pkt Packet, opts Options) (alt
 			// Build a structTag string that will be used for candidate matching.
 			opts.choiceTag = &extractedTag // Now opts.Tag is properly set (instead of -1).
 			structTag = "choice:tag:" + itoa((*opts.choiceTag))
-			candidate, err = chooseChoiceCandidateBER(n, constructed, pkt, tlv, meth(), opts)
+			candidate, err = chooseChoiceCandidateBER(pkt, tlv, choices, opts)
 		}
 	default:
 		err = mkerr("Encoding rule not supported")
 	}
 
 	if err == nil {
-		alt, err = meth().Choose(candidate, structTag)
+		alt, err = choices.Choose(candidate, structTag)
 	}
 
 	return
 }
 
-func chooseChoiceCandidateBER(n string, constructed any, pkt Packet, tlv TLV, choices Choices, opts Options) (candidate any, err error) {
-	// Lookup the candidate alternative using opts.Tag (set by callChoicesMethod)
+func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts Options) (candidate any, err error) {
+	// First try choicesTag, if defined
 	alt, ok := choices.byTag(opts.choiceTag)
 	if !ok {
-		return nil, mkerr("unknown choice tag")
+		// FALLBACK: Lookup the candidate alternative using opts.Tag
+		if alt, ok = choices.byTag(opts.Tag()); !ok {
+			return nil, mkerr("unknown choice tag: " + itoa(opts.Tag()))
+		}
 	}
 
 	// Allocate a new instance of the candidate type.
 	candidateInst := reflect.New(alt.Type).Interface()
 
 	if isPrimitive(candidateInst) {
-		contentLen := tlv.Length
-		candidateContent := pkt.Data()[2 : 2+contentLen]
+		candidateContent := tlv.Value
+		ptag := alt.Opts.Tag
 
-		sub := pkt.Type().New(byte(alt.Opts.UTag))
+		sub := pkt.Type().New(byte(ptag))
 		sub.Append(pkt.Data()[1:]...)
 		sub.SetOffset(pkt.Offset())
-		opts.SetTag(alt.Opts.UTag)
-		pkt = sub
+		if !opts.HasTag() {
+			opts.SetTag(ptag)
+		}
 
-		subTLV := pkt.Type().newTLV(0, alt.Opts.UTag, tlv.Length, tlv.Compound, candidateContent...)
+		tag, class := effectiveTag(ptag, 0, opts)
+		if alt.Opts.Explicit {
+			class |= 0x20
+		}
+		subTLV := pkt.Type().newTLV(class, tag, tlv.Length, tlv.Compound, candidateContent...)
 		if reader, ok := candidateInst.(asn1Reader); ok {
-			err = reader.read(pkt, subTLV, opts)
+			err = reader.read(sub, subTLV, opts)
 		} else {
 			err = mkerr("Primitive has no read method")
 		}
@@ -357,12 +401,13 @@ func chooseChoiceCandidateBER(n string, constructed any, pkt Packet, tlv TLV, ch
 }
 
 type choiceOptions struct {
-	Name string // name of choice per ASN.1 schema
-	Tag, // ASN.1 context tag
+	Name     string // name of choice per ASN.1 schema
+	Explicit bool   // whether the alternative is EXPLICIT
+	Tag,     // ASN.1 context tag
 	UTag int // ASN.1 tag number
 }
 
-func tokenizeChoiceOptions(opts string) (options choiceOptions) {
+func (r Choices) tokenizeChoiceOptions(opts string) (options choiceOptions) {
 	options.Tag, options.UTag = -1, -1
 	if opts = lc(opts); hasPfx(opts, "choice:") {
 		sp := split(trimPfx(opts, "choice:"), `,`)
@@ -371,6 +416,10 @@ func tokenizeChoiceOptions(opts string) (options choiceOptions) {
 			case hasPfx(slice, "tag:"):
 				if t, err := atoi(trimPfx(slice, "tag:")); err == nil && options.Tag == -1 {
 					options.Tag = t
+				}
+			case slice == "explicit":
+				if !r.cfg.Automatic {
+					options.Explicit = true
 				}
 			case hasPfx(slice, "universal-tag:"):
 				if t, err := atoi(trimPfx(slice, "universal-tag:")); err == nil && options.UTag == -1 {

@@ -52,7 +52,10 @@ func (r *testPacket) Free() {
 }
 
 func (r *testPacket) PeekTLV() (TLV, error) {
-	sub := r.Type().New(r.Data()...)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	sub := r.Type().New((*tmpBuf)...)
+	sub.Append(r.Data()...)
 	sub.SetOffset(r.Offset())
 	return getTLV(sub)
 }
@@ -95,7 +98,10 @@ func ExamplePacket_manualCreation() {
 		0x38, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67,
 	}
 
-	pkt := BER.New(berBytes...)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	pkt := BER.New((*tmpBuf)...)
+	pkt.Append(berBytes...)
 
 	var u8 UTF8String
 
@@ -767,4 +773,20 @@ func TestSequence_PrimitiveFieldsImplicit(t *testing.T) {
 			t.Fatalf("%s failed [implicit, decoding]: %v", t.Name(), err)
 		}
 	}
+}
+
+func BenchmarkEncodeDirectoryString(b *testing.B) {
+    dir := Choice{Value: PrintableString("Hello")}
+    for n := 0; n < b.N; n++ {
+        _, _ = Marshal(dir)
+    }
+}
+
+func BenchmarkDecodeDirectoryString(b *testing.B) {
+    pkt, _ := Marshal(Choice{Value: PrintableString("Hello")})
+    var out Choice
+    b.ResetTimer()
+    for n := 0; n < b.N; n++ {
+        _ = Unmarshal(pkt, &out)
+    }
 }

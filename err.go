@@ -7,6 +7,7 @@ throughout this package.
 
 var (
 	errorAmbiguousChoice       error = mkerr("ambiguous alternative: multiple registered alternatives match the instance")
+	errorNoChoicesAvailable    error = mkerr("no CHOICE alternatives available")
 	errorNoChoiceForType       error = mkerr("no matching alternative found for input type")
 	errorNilInput              error = mkerr("nil input instance")
 	errorNilReceiver           error = mkerr("nil receiver instance")
@@ -28,10 +29,6 @@ var (
 
 func errorNoChoiceMatched(name string) (err error) {
 	return mkerr(errorNoChoiceForType.Error() + " " + name)
-}
-
-func errorNoChoicesMethod(name string) (err error) {
-	return mkerr("Found no " + name + "Choices() method for struct containing CHOICE field; cannot determine alternatives")
 }
 
 func errorASN1Expect(a, b any, typ string) (err error) {

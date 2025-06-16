@@ -28,9 +28,14 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 		}
 	}
 
+	// Whether automatic tagging is enabled.
+	auto := globalOpts != nil && globalOpts.Automatic
+
 	// Create a temporary sub-packet for encoding this sequence’s fields.
-	sub := pkt.Type().New()
-	defer sub.Free()
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	sub := pkt.Type().New((*tmpBuf)...)
+
 	typ := v.Type()
 
 	for i := 0; i < v.NumField(); i++ {
@@ -42,7 +47,7 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 
 		// Begin with the implicit options for this field.
 		var fieldOpts Options
-		if fieldOpts, err = extractOptions(field); err != nil {
+		if fieldOpts, err = extractOptions(field, i, auto); err != nil {
 			return
 		}
 
@@ -66,13 +71,19 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 	}
 
 	// wrap the entire sequence from the sub-packet.
+	err = marshalSequenceWrap(sub, pkt, globalOpts, depth, seqTag)
+
+	return
+}
+
+func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err error) {
 	var tlv TLV
 	sub.SetOffset(0)
-	if depth == 1 && globalOpts != nil {
+	if depth == 1 && opts != nil {
 		// At the outermost level (depth==1), if global options were provided, use them.
 		content := sub.Data()
-		tlv = pkt.Type().newTLV(globalOpts.Class(), seqTag, len(content), true, content...)
-		encoded := encodeTLV(tlv, *globalOpts)
+		tlv = pkt.Type().newTLV(opts.Class(), seqTag, len(content), true, content...)
+		encoded := encodeTLV(tlv, *opts)
 		pkt.Append(encoded...)
 	} else if tlv, err = sub.TLV(); err == nil {
 		// Inner sequences use the universal SEQUENCE tag (0x30).
@@ -86,18 +97,28 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 }
 
 func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth int) (err error) {
-	// Restore your original CHOICE code:
 	if ch.Tag != nil {
 		opts.choiceTag = ch.Tag
 		opts.SetClass(ClassContextSpecific)
 	}
 
 	if isPrimitive(ch.Value) {
-		// For a primitive alternative, simply let it write itself.
-		// (Note: using toPtr as in your original code.)
 		_, err = toPtr(reflect.ValueOf(ch.Value)).Interface().(Primitive).write(sub, opts)
+		if err == nil && ch.Explicit {
+			inner := sub.Data()[sub.Offset():] // bytes we just wrote
+			// rebuild the sub-packet to insert the wrapper
+			wrapped := pkt.Type().New()
+			id := byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
+			wrapped.Append(id)
+			wrapped.Append(encodeLength(pkt.Type(), len(inner))...)
+			wrapped.Append(inner...)
+
+			// replace the old bytes in ‘sub’
+			nsub := pkt.Type().New(sub.Data()[:sub.Offset()]...)
+			nsub.Append(wrapped.Data()...)
+			sub = nsub
+		}
 	} else {
-		// For a compound CHOICE, encode recursively.
 		tmp := pkt.Type().New()
 		defer tmp.Free()
 		if err = marshalValue(reflect.ValueOf(ch.Value), tmp, &opts, depth+1); err == nil {
@@ -141,9 +162,20 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 
 	seqContent := pkt.Data()[start:end]
 	pkt.SetOffset(end)
-	sub := pkt.Type().New(seqContent...)
-	defer sub.Free()
+        tmpBuf := getBuf()                    
+        defer putBuf(tmpBuf)                  
+        sub := pkt.Type().New((*tmpBuf)...)
+	sub.Append(seqContent...)
 	sub.SetOffset(0)
+
+	// Whether automatic tagging is enabled.
+	var auto bool
+	var choicesMap map[string]Choices
+
+	if len(options) > 0 {
+		auto = options[0].Automatic
+		choicesMap = options[0].ChoicesMap
+	}
 
 	typ := v.Type()
 	for i := 0; i < v.NumField() && err == nil; i++ {
@@ -154,16 +186,17 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 
 		var opts Options = implicitOptions()
 		if field.Tag != "" {
-			if opts, err = extractOptions(field); err != nil {
+			if opts, err = extractOptions(field, i, auto); err != nil {
 				return
 			}
 		}
+		opts.ChoicesMap = choicesMap
 
 		fv := v.Field(i)
 		switch fv.Interface().(type) {
 		case Choice, *Choice:
 			var alt Choice
-			if alt, err = callChoicesMethod(field.Name, v.Interface(), sub, opts); err == nil {
+			if alt, err = selectFieldChoice(field.Name, v.Interface(), sub, opts); err == nil {
 				fv.Set(reflect.ValueOf(Choice{Value: alt.Value}))
 			}
 		default:
@@ -171,7 +204,12 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 				if !opts.Optional {
 					err = mkerr("unmarshalValue: failed for field " + field.Name + ": " + err.Error())
 				} else {
-					err = nil // if optional, discard error
+					// TODO: change this so that this is
+					// ignored ONLY if there was NO error
+					// **AND** no data. Optional should
+					// not "mask" a problem with (bogus)
+					// content assigned to the field.
+					err = nil
 				}
 			}
 		}

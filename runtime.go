@@ -97,7 +97,26 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 
 	// CHOICE unwrap
 	if ch, ok := v.Interface().(Choice); ok {
-		return marshalValue(reflect.ValueOf(ch.Value), pkt, opts, depth)
+		if !ch.Explicit {
+			return marshalValue(reflect.ValueOf(ch.Value), pkt, opts, depth+1)
+		} else if ch.Tag == nil {
+			return mkerr("choice tag undefined")
+		}
+
+	        tmpBuf := getBuf()
+	        defer putBuf(tmpBuf)
+        	tmp := pkt.Type().New((*tmpBuf)...)
+
+		if err := marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err != nil {
+			return err
+		}
+		inner := tmp.Data()
+
+		id := byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
+		pkt.Append(id)
+		pkt.Append(encodeLength(pkt.Type(), len(inner))...)
+		pkt.Append(inner...)
+		return nil
 	}
 
 	// Adapter path
@@ -170,8 +189,9 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 }
 
 func wrapMarshalExplicit(pkt Packet, prim Primitive, opts *Options) (err error) {
-	tmp := pkt.Type().New()
-	defer tmp.Free()
+        tmpBuf := getBuf()
+        defer putBuf(tmpBuf)
+        tmp := pkt.Type().New((*tmpBuf)...)
 
 	innerOpts := *opts
 	innerOpts.Explicit = false
@@ -246,13 +266,10 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 	}
 
 	kw := ""
-	if len(options) > 0 {
-		kw = options[0].Identifier
-	}
-
 	opts := implicitOptions()
 	if len(options) > 0 {
 		opts = options[0]
+		kw = opts.Identifier
 	}
 
 	if ad, ok := adapterForValue(v, kw); ok {
@@ -265,7 +282,7 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 
 		start := pkt.Offset()
 
-		if err = unmarshalHandleTag(kw, pkt, opts, tlv); err != nil {
+		if err = unmarshalHandleTag(kw, pkt, tlv, opts); err != nil {
 			return
 		}
 
@@ -298,23 +315,27 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 
 	switch v.Kind() {
 	case reflect.Slice:
-		return unmarshalSet(v, pkt, options...)
+		err = unmarshalSet(v, pkt, opts)
 	case reflect.Struct:
-		return unmarshalSequence(v, pkt, options...)
+		err = unmarshalSequence(v, pkt, opts)
 	default:
-		return mkerr("unmarshalValue: unsupported type " + v.Kind().String())
+		err = mkerr("unmarshalValue: unsupported type " + v.Kind().String())
 	}
+
+	return
 }
 
-func unmarshalHandleTag(kw string, pkt Packet, opts Options, tlv TLV) (err error) {
+func unmarshalHandleTag(kw string, pkt Packet, tlv TLV, opts Options) (err error) {
 	if opts.HasTag() {
 		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
 			err = mkerr("identifier mismatch decoding " + kw)
 		} else if opts.Explicit {
-			inner := pkt.Type().New()
+		        tmpBuf := getBuf()
+		        defer putBuf(tmpBuf)
+        		inner := pkt.Type().New((*tmpBuf)...)
 			inner.Append(tlv.Value...)
 			if tlv, err = inner.TLV(); err == nil {
-				pkt = inner
+				//pkt = inner
 				opts.Explicit = false
 				opts.tag = nil
 				opts.class = nil
