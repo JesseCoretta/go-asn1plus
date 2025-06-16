@@ -103,9 +103,9 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 			return mkerr("choice tag undefined")
 		}
 
-	        tmpBuf := getBuf()
-	        defer putBuf(tmpBuf)
-        	tmp := pkt.Type().New((*tmpBuf)...)
+		tmpBuf := getBuf()
+		defer putBuf(tmpBuf)
+		tmp := pkt.Type().New((*tmpBuf)...)
 
 		if err := marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err != nil {
 			return err
@@ -189,9 +189,9 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 }
 
 func wrapMarshalExplicit(pkt Packet, prim Primitive, opts *Options) (err error) {
-        tmpBuf := getBuf()
-        defer putBuf(tmpBuf)
-        tmp := pkt.Type().New((*tmpBuf)...)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	tmp := pkt.Type().New((*tmpBuf)...)
 
 	innerOpts := *opts
 	innerOpts.Explicit = false
@@ -330,9 +330,9 @@ func unmarshalHandleTag(kw string, pkt Packet, tlv TLV, opts Options) (err error
 		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
 			err = mkerr("identifier mismatch decoding " + kw)
 		} else if opts.Explicit {
-		        tmpBuf := getBuf()
-		        defer putBuf(tmpBuf)
-        		inner := pkt.Type().New((*tmpBuf)...)
+			tmpBuf := getBuf()
+			defer putBuf(tmpBuf)
+			inner := pkt.Type().New((*tmpBuf)...)
 			inner.Append(tlv.Value...)
 			if tlv, err = inner.TLV(); err == nil {
 				//pkt = inner

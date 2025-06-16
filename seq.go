@@ -162,9 +162,9 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 
 	seqContent := pkt.Data()[start:end]
 	pkt.SetOffset(end)
-        tmpBuf := getBuf()                    
-        defer putBuf(tmpBuf)                  
-        sub := pkt.Type().New((*tmpBuf)...)
+	tmpBuf := getBuf()
+	defer putBuf(tmpBuf)
+	sub := pkt.Type().New((*tmpBuf)...)
 	sub.Append(seqContent...)
 	sub.SetOffset(0)
 

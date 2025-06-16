@@ -132,10 +132,10 @@ func (r *Choices) Register(instance any, opts ...string) error {
 		}
 	}
 
-        if _, dup := r.tagIx[options.Tag]; dup {
+	if _, dup := r.tagIx[options.Tag]; dup {
 		return mkerr("duplicate CHOICE tag " + itoa(options.Tag))
 	}
-        r.tagIx[options.Tag] = len(r.alts)
+	r.tagIx[options.Tag] = len(r.alts)
 	r.alts = append(r.alts, choiceAlternative{
 		Type: derefTypePtr(reflect.TypeOf(instance)),
 		Opts: options,
@@ -163,7 +163,7 @@ func (r Choices) byTag(t any) (calt choiceAlternative, ok bool) {
 	}
 
 	var i int
-        i, ok = r.tagIx[tag]
+	i, ok = r.tagIx[tag]
 	if !ok {
 		return
 	}

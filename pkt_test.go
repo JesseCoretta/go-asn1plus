@@ -776,17 +776,17 @@ func TestSequence_PrimitiveFieldsImplicit(t *testing.T) {
 }
 
 func BenchmarkEncodeDirectoryString(b *testing.B) {
-    dir := Choice{Value: PrintableString("Hello")}
-    for n := 0; n < b.N; n++ {
-        _, _ = Marshal(dir)
-    }
+	dir := Choice{Value: PrintableString("Hello")}
+	for n := 0; n < b.N; n++ {
+		_, _ = Marshal(dir)
+	}
 }
 
 func BenchmarkDecodeDirectoryString(b *testing.B) {
-    pkt, _ := Marshal(Choice{Value: PrintableString("Hello")})
-    var out Choice
-    b.ResetTimer()
-    for n := 0; n < b.N; n++ {
-        _ = Unmarshal(pkt, &out)
-    }
+	pkt, _ := Marshal(Choice{Value: PrintableString("Hello")})
+	var out Choice
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		_ = Unmarshal(pkt, &out)
+	}
 }
