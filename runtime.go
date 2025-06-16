@@ -15,7 +15,7 @@ The variadic [EncodingOption] input value is used to further user control using
 one or more of:
 
   - [EncodingRule] (e.g.: [BER], [DER])
-  - [Options] (e.g.: to declare a value to be of an INDEFINITE-LENGTH, or for a class override.
+  - [Options] (e.g.: to declare a value to be of an INDEFINITE-LENGTH, or for a class override)
 
 If an encoding rule is not specified, [DER] encoding is used as the default.
 
