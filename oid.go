@@ -215,7 +215,8 @@ func (r ObjectIdentifier) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(content), false, content...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(content), false, content...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}

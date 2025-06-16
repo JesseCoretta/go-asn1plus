@@ -18,7 +18,7 @@ func isSet(target any, opts ...*Options) (set bool) {
 		var tag int = -1
 		if len(opts) > 0 {
 			if opts[0] != nil {
-				tag = opts[0].Tag
+				tag = opts[0].Tag()
 			}
 		}
 		if t.Elem().Kind() != reflect.Uint8 {

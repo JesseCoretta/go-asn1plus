@@ -80,14 +80,11 @@ func (e Enumerated) Int() int {
 
 func (r Enumerated) write(pkt Packet, opts Options) (n int, err error) {
 	data := encodeNativeInt(int(r))
-	if opts.Tag == -1 {
-		opts.Tag = r.Tag()
-	}
-
+	tag, class := effectiveTag(r.Tag(), 0, opts)
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		l := encodeLength(t, sizeOfInt(int(r)))
-		ct := byte(opts.Class + opts.Tag)
+		ct := byte(class + tag)
 		head := append([]byte{ct}, l...)
 		pkt.Append(append(head, data...)...)
 		n = len(data)
@@ -112,12 +109,12 @@ func (r *Enumerated) read(pkt Packet, tlv TLV, opts Options) (err error) {
 
 func (r *Enumerated) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
 	class, tag := ClassUniversal, r.Tag()
-	if validClass(opts.Class) {
-		class = opts.Class
+	if validClass(opts.Class()) {
+		class = opts.Class()
 	}
 
-	if opts.Tag >= 0 {
-		tag = opts.Tag
+	if opts.Tag() >= 0 {
+		tag = opts.Tag()
 	}
 
 	if class != tlv.Class || tag != tlv.Tag || tlv.Compound {

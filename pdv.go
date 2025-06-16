@@ -100,7 +100,10 @@ func (_ EmbeddedPDV) IdentificationChoices() Choices {
 }
 
 func embeddedPDVSpecial() *Options {
-	return &Options{Class: 1, Tag: TagEmbeddedPDV}
+	opts := &Options{}
+	opts.SetClass(1)
+	opts.SetTag(TagEmbeddedPDV)
+	return opts
 }
 
 /*
@@ -121,7 +124,10 @@ Tag returns the integer constant [TagExternal].
 func (r External) Tag() int { return TagExternal }
 
 func externalSpecial() *Options {
-	return &Options{Class: 0, Tag: TagExternal}
+	opts := &Options{}
+	opts.SetClass(0)
+	opts.SetTag(TagExternal)
+	return opts
 }
 
 func init() {

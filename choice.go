@@ -126,7 +126,18 @@ the receiver instance.
 */
 func (r Choices) Len() int { return len(r.alts) }
 
-func (r Choices) byTag(tag int) (calt choiceAlternative, ok bool) {
+func (r Choices) byTag(t any) (calt choiceAlternative, ok bool) {
+	var tag int
+	switch tv := t.(type) {
+	case int:
+		tag = tv
+	case *int:
+		if tv == nil {
+			return
+		}
+		tag = *tv
+	}
+
 	for _, alt := range r.alts {
 		if alt.Opts.Tag == tag {
 			calt = alt
@@ -284,8 +295,8 @@ func callChoicesMethod(n string, constructed any, pkt Packet, opts Options) (alt
 			// This ensures that the opts used for choosing the candidate get a valid tag.
 			extractedTag := tlv.Tag // For example, if identifier is 0xA4, then extractedTag will be 4.
 			// Build a structTag string that will be used for candidate matching.
-			opts.Tag = extractedTag // Now opts.Tag is properly set (instead of -1).
-			structTag = "choice:tag:" + itoa(opts.Tag)
+			opts.choiceTag = &extractedTag // Now opts.Tag is properly set (instead of -1).
+			structTag = "choice:tag:" + itoa((*opts.choiceTag))
 			candidate, err = chooseChoiceCandidateBER(n, constructed, pkt, tlv, meth(), opts)
 		}
 	default:
@@ -301,9 +312,9 @@ func callChoicesMethod(n string, constructed any, pkt Packet, opts Options) (alt
 
 func chooseChoiceCandidateBER(n string, constructed any, pkt Packet, tlv TLV, choices Choices, opts Options) (candidate any, err error) {
 	// Lookup the candidate alternative using opts.Tag (set by callChoicesMethod)
-	alt, ok := choices.byTag(opts.Tag)
+	alt, ok := choices.byTag(opts.choiceTag)
 	if !ok {
-		return nil, mkerr("unknown choice tag " + itoa(opts.Tag))
+		return nil, mkerr("unknown choice tag")
 	}
 
 	// Allocate a new instance of the candidate type.
@@ -316,7 +327,7 @@ func chooseChoiceCandidateBER(n string, constructed any, pkt Packet, tlv TLV, ch
 		sub := pkt.Type().New(byte(alt.Opts.UTag))
 		sub.Append(pkt.Data()[1:]...)
 		sub.SetOffset(pkt.Offset())
-		opts.Tag = alt.Opts.UTag
+		opts.SetTag(alt.Opts.UTag)
 		pkt = sub
 
 		subTLV := pkt.Type().newTLV(0, alt.Opts.UTag, tlv.Length, tlv.Compound, candidateContent...)
@@ -332,7 +343,7 @@ func chooseChoiceCandidateBER(n string, constructed any, pkt Packet, tlv TLV, ch
 			// IMPORTANT: Clear the tag override before decoding inner fields.
 			// This allows inner decoders (for, say, ObjectIdentifier) to use
 			// their natural universal tag.
-			opts.Tag = -1
+			opts.tag = nil
 			err = unmarshalValue(sub, reflect.ValueOf(candidateInst), opts)
 		}
 	}

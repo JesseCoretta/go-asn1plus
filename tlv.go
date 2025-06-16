@@ -77,24 +77,34 @@ func (r TLV) Eq(tlv TLV, length ...bool) bool {
 
 func encodeTLV(t TLV, opts ...Options) []byte {
 	bufPtr := getBuf()
-	b := *bufPtr // local slice variable for brevity
+	b := *bufPtr
 
-	classVal := t.Class
-	tagVal := t.Tag
+	classVal := t.Class // class bits from the TLV
+	tagVal := t.Tag     // tag from the TLV
 	compound := t.Compound
-	if len(opts) > 0 && opts[0].Tag >= 0 {
+
+	if len(opts) > 0 {
 		o := opts[0]
-		classVal = o.Class
-		tagVal = o.Tag
+
+		classVal = o.Class()
+		if o.HasTag() {
+			tagVal = o.Tag()
+		}
 		if o.Explicit {
 			compound = true
 		}
+	}
+
+	// TODO: is panic the most appropriate action?
+	if tagVal < 0 {
+		panic("encodeTLV: negative tag reached encoder")
 	}
 
 	var id byte = byte(classVal << 6)
 	if compound {
 		id |= 0x20
 	}
+
 	if tagVal < 31 {
 		id |= byte(tagVal)
 		b = append(b, id)
@@ -120,12 +130,9 @@ func encodeTLV(t TLV, opts ...Options) []byte {
 }
 
 func getTLV(r Packet, opts ...Options) (TLV, error) {
-	var err error
-
 	if r.Offset() >= r.Len() {
-		err = mkerr(r.Type().String() + " Packet.TLV: no data available at offset " +
+		return TLV{}, mkerr(r.Type().String() + " Packet.TLV: no data available at offset " +
 			itoa(r.Offset()) + " (len:" + itoa(r.Len()) + ")")
-		return TLV{}, err
 	}
 
 	d := r.Data()
@@ -136,23 +143,29 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 		return TLV{}, err
 	}
 
-	compound, _ := parseCompoundIdentifier(sub) // basically an un-trippable error
+	compound, _ := parseCompoundIdentifier(sub)
 
 	tag, idLen, err := parseTagIdentifier(sub)
 	if err != nil {
 		return TLV{}, mkerr(r.Type().String() +
 			" Packet.TLV: error reading tag: " + err.Error())
 	}
-
 	r.SetOffset(r.Offset() + idLen)
 
-	if len(opts) > 0 && opts[0].Tag >= 0 {
+	if len(opts) > 0 {
 		o := opts[0]
-		if o.Explicit && !compound {
-			return TLV{}, mkerr("Expected constructed TLV for explicit tagging override")
+
+		if o.HasTag() || o.HasClass() {
+			if o.Explicit && !compound {
+				return TLV{}, mkerr("Expected constructed TLV for explicit tagging override")
+			}
+			if o.HasClass() {
+				class = o.Class()
+			}
+			if o.HasTag() {
+				tag = o.Tag()
+			}
 		}
-		class = o.Class
-		tag = o.Tag
 	}
 
 	length, lenLen, err := parseLength(d[r.Offset():])
@@ -160,7 +173,6 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 		return TLV{}, mkerr(r.Type().String() +
 			" Packet.TLV: error reading length: " + err.Error())
 	}
-	// move cursor past length octets (now points at start-of-value)
 	r.SetOffset(r.Offset() + lenLen)
 
 	var tlv TLV
@@ -168,23 +180,23 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 	case BER, DER:
 		tlv = r.Type().newTLV(class, tag, length, compound, d[r.Offset():]...)
 	default:
-		err = mkerr("Unsupported encoding rule")
+		return TLV{}, mkerr("Unsupported encoding rule")
 	}
 
-	return tlv, err
+	return tlv, nil
 }
 
 func writeTLV(r Packet, t TLV, opts ...Options) error {
-	typ := r.Type()
-
 	if !(t.Type() == BER || t.Type() == DER) {
 		return mkerr(r.Type().String() + " Packet.WriteTLV: expected " +
-			typ.String() + ", got " + t.Type().String())
+			r.Type().String() + ", got " + t.Type().String())
 	}
 
 	encoded := encodeTLV(t, opts...)
 	r.Append(encoded...)
-	if t.Type() == BER && (len(opts) > 0 && opts[0].Indefinite) {
+
+	// Add end-of-contents for BER-indefinite.
+	if t.Type() == BER && len(opts) > 0 && opts[0].Indefinite {
 		r.Append(0x00, 0x00)
 	}
 	r.SetOffset(r.Len())

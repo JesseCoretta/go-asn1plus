@@ -156,11 +156,10 @@ func TestGetTLV_BadTagIdentifier(t *testing.T) {
 func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
 	pkt := BER.New(0x02, 0x01, 0x09)
 
-	opts := Options{
-		Explicit: true,
-		Tag:      3,
-		Class:    0,
-	}
+	opts := Options{Explicit: true}
+	opts.SetTag(3)
+	opts.SetClass(0)
+
 	_, err := getTLV(pkt, opts)
 	testWantSub(t, err, "Expected constructed TLV for explicit tagging")
 }
@@ -192,11 +191,9 @@ func TestGetTLV_TagClassOverrideSuccess(t *testing.T) {
 
 	// Supply an *implicit* (Explicit=false) override so that the class/tag
 	// replacement path runs.
-	opts := Options{
-		Class: 2, // APPLICATION class
-		Tag:   5, // arbitrary
-		// Explicit is false ⇒ “replace”, not “wrap”, therefore allowed
-	}
+	opts := Options{}
+	opts.SetClass(2)
+	opts.SetTag(5)
 
 	tlv, err := getTLV(pkt, opts)
 	if err != nil {
@@ -306,14 +303,11 @@ func TestEncodeTLV_ExplicitSetsCompound(t *testing.T) {
 		Value:    []byte{0xAA},
 	}
 
-	out := encodeTLV(
-		tlv,
-		Options{
-			Class:    2, // CONTEXT-SPECIFIC
-			Tag:      3,
-			Explicit: true, // should set compound=true inside encodeTLV
-		},
-	)
+	opts := Options{}
+	opts.SetClass(2)
+	opts.SetTag(3)
+	opts.Explicit = true
+	out := encodeTLV(tlv, opts)
 
 	// First identifier octet must now carry bit-6 (0x20) = “constructed”.
 	if out[0]&0x20 == 0 {

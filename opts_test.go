@@ -19,12 +19,10 @@ func ExampleOptions_byParse() {
 }
 
 func ExampleOptions_byAssembly() {
-	opts := Options{
-		Class:    1,
-		Tag:      11,
-		Explicit: true,
-	}
-
+	opts := Options{}
+	opts.SetClass(1)
+	opts.SetTag(11)
+	opts.Explicit = true
 	fmt.Println(opts)
 	// Output: tag:11,application,explicit
 }

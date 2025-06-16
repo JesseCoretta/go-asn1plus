@@ -435,7 +435,8 @@ func (r BitString) write(pkt Packet, opts Options) (n int, err error) {
 		bts[0] = byte(unused)
 		copy(bts[1:], r.Bytes)
 
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(bts), false, bts...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(bts), false, bts...), opts); err == nil {
 			poff := pkt.Offset()
 			n = pkt.Offset() - poff + 1
 		}

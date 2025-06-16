@@ -94,7 +94,8 @@ func (r VideotexString) write(pkt Packet, opts Options) (n int, err error) {
 	case BER, DER:
 		start := pkt.Offset()
 		data := stringBytes(string(r))
-		tlv := t.newTLV(0, r.Tag(), len(data), false, data...)
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		tlv := t.newTLV(class, tag, len(data), false, data...)
 		if err = writeTLV(pkt, tlv, opts); err == nil {
 			n = pkt.Offset() - start
 		}

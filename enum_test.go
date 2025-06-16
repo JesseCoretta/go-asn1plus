@@ -57,7 +57,9 @@ func TestEnumerated_codecov(t *testing.T) {
 	e.Tag()
 	e.Int()
 	e.IsPrimitive()
-	e.readBER(&BERPacket{data: []byte{0x00}}, TLV{}, Options{Tag: 4})
+	opts := Options{}
+	opts.SetTag(4)
+	e.readBER(&BERPacket{data: []byte{0x00}}, TLV{}, opts)
 
 	for _, rule := range encodingRules {
 		var pkt Packet

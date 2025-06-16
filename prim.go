@@ -47,7 +47,7 @@ type Primitive interface {
 }
 
 func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
-	if tlv.Class != opts.Class || tlv.Tag != opts.Tag || !tlv.Compound {
+	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
 		err = mkerr("Invalid explicit " + TagNames[tag] + " header in " +
 			pkt.Type().String() + " packet; received TLV: " + tlv.String())
 		return
@@ -76,23 +76,30 @@ func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (dat
 }
 
 func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
-	if tlv.Class != opts.Class || tlv.Tag != opts.Tag || tlv.Compound {
-		err = mkerr("Invalid implicit " + TagNames[tag] + " header in " +
-			pkt.Type().String() + " packet; received TLV: " + tlv.String())
-		return
-	}
 
-	if len(pkt.Data()) < 2 {
-		err = mkerr("Truncated TLV header")
+	overlay := opts.HasTag() || opts.HasClass()
+
+	if overlay {
+		if opts.HasClass() && tlv.Class != opts.Class() {
+			return nil, mkerr("Class mismatch for implicit tag")
+		}
+		if opts.HasTag() && tlv.Tag != opts.Tag() {
+			return nil, mkerr("Tag mismatch for implicit tag")
+		}
+		// no constructed check: implicit may keep compound bit unchanged
 	} else {
-		if full := tlv.Value; len(full) > tlv.Length {
-			data = full[:tlv.Length]
-		} else {
-			data = full
+		/* no overlay: expect universal header */
+		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
+			return nil, mkerr("Invalid " + TagNames[tag] + " header in " +
+				pkt.Type().String() + " packet; received TLV: " + tlv.String())
 		}
 	}
 
-	return
+	full := tlv.Value
+	if tlv.Length >= 0 && len(full) > tlv.Length {
+		full = full[:tlv.Length]
+	}
+	return full, nil
 }
 
 func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
@@ -126,7 +133,7 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte
 
 func primitiveCheckReadOverride(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
 	// If a tagging override was provided, handle it.
-	if opts.Tag >= 0 {
+	if opts.HasTag() {
 		if opts.Explicit {
 			data, err = primitiveCheckExplicitRead(tag, pkt, tlv, opts)
 		} else {

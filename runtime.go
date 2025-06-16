@@ -64,8 +64,8 @@ func marshalPrepareSpecialOptions(v any, o *Options) *Options {
 	if o == nil {
 		o = override
 	} else {
-		o.Class = override.Class
-		o.Tag = override.Tag
+		o.SetClass(override.Class())
+		o.SetTag(override.Tag())
 	}
 
 	return o
@@ -85,11 +85,6 @@ func checkBadMarshalOptions(rule EncodingRule, o *Options) (err error) {
 	return
 }
 
-/*
-marshalValue returns an error following an attempt to marshal v into pkt,
-possibly aided by configuration options.  This function is called by the
-top-level Marshal function as well as lower-level functions via recursion.
-*/
 func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 	switch {
 	case v.Kind() == reflect.Invalid:
@@ -100,18 +95,22 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 		v = v.Elem()
 	}
 
+	// CHOICE unwrap
 	if ch, ok := v.Interface().(Choice); ok {
 		return marshalValue(reflect.ValueOf(ch.Value), pkt, opts, depth)
 	}
 
+	// Adapter path
 	if done, err := marshalViaAdapter(v, pkt, opts); done {
 		return err
 	}
 
+	// Primitive path
 	if done, err := marshalPrimitive(v, pkt, opts); done {
 		return err
 	}
 
+	// Composite types
 	var err error
 	switch v.Kind() {
 	case reflect.Slice:
@@ -133,28 +132,20 @@ func marshalViaAdapter(v reflect.Value, pkt Packet, opts *Options) (handled bool
 
 	ad, ok := adapterForValue(v, kw)
 	if !ok {
-		return false, nil // not an adapter case
+		return false, nil
 	}
 
-	// Make sure we have a concrete Options value we can tweak.
-	iopts := implicitOptions()
-	if opts == nil {
-		opts = &iopts
-	}
-
-	// Build the transient codec.
 	codec := ad.newCodec()
 	if err = ad.fromGo(v.Interface(), codec, *opts); err != nil {
 		return true, err
 	}
 
-	iopts.Indefinite = opts.Indefinite // mirror original code order
-
 	if opts.Explicit {
 		err = wrapMarshalExplicit(pkt, codec.(Primitive), opts)
 	} else {
-		_, err = codec.(Primitive).write(pkt, iopts)
+		_, err = codec.(Primitive).write(pkt, *opts)
 	}
+
 	return true, err
 }
 
@@ -163,14 +154,17 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 		return false, nil
 	}
 
-	iopts := implicitOptions()
-	iopts.Indefinite = opts != nil && opts.Indefinite
+	// Ensure we have an Options object.
+	if opts == nil {
+		tmp := implicitOptions()
+		opts = &tmp
+	}
 
 	prim := toPtr(v).Interface().(Primitive)
-	if opts != nil && opts.Explicit {
+	if opts.Explicit {
 		err = wrapMarshalExplicit(pkt, prim, opts)
 	} else {
-		_, err = prim.write(pkt, iopts)
+		_, err = prim.write(pkt, *opts)
 	}
 	return true, err
 }
@@ -179,13 +173,15 @@ func wrapMarshalExplicit(pkt Packet, prim Primitive, opts *Options) (err error) 
 	tmp := pkt.Type().New()
 	defer tmp.Free()
 
-	iopts := implicitOptions()
-	iopts.Indefinite = opts != nil && opts.Indefinite
+	innerOpts := *opts
+	innerOpts.Explicit = false
+	innerOpts.tag = nil
+	innerOpts.class = nil
 
-	if _, err = prim.write(tmp, iopts); err == nil {
+	if _, err = prim.write(tmp, innerOpts); err == nil {
 		content := tmp.Data()
 
-		id := byte(opts.Class<<6) | 0x20 | byte(opts.Tag)
+		id := byte(opts.Class()<<6) | 0x20 | byte(opts.Tag())
 		pkt.Append(id)
 		pkt.Append(encodeLength(pkt.Type(), len(content))...)
 		pkt.Append(content...)
@@ -201,15 +197,17 @@ into x. x MUST be a pointer.
 The variadic [EncodingOption] input value allows for [Options] directives meant to
 further control the decoding process.
 
-It is not necessary to declare a particular [EncodingRule], as the input instance of
-[Packet] already has this information.
+It is not necessary to declare a particular [EncodingRule] using the [WithEncoding]
+package-level function, as the input instance of [Packet] already has this information.
+Providing an [EncodingRule] to Unmarshal -- whether valid or not -- will produce no
+perceptible effect.
 
 See also [Marshal].
 */
 func Unmarshal(pkt Packet, x any, options ...EncodingOption) error {
-	// Validate that target is a non-nil pointer.
 	rv := reflect.ValueOf(x)
 	var err error
+	// Validate that target x is a non-nil pointer.
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		err = mkerr("Unmarshal: target must be a non-nil pointer")
 		return err
@@ -239,7 +237,6 @@ This function is called by the top-level Unmarshal function, as well as certain 
 level functions via recursion.
 */
 func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error) {
-	// First, if v is a pointer, work on its element.
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			err = mkerr("unmarshalValue: input pointer is nil")
@@ -252,6 +249,12 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 	if len(options) > 0 {
 		kw = options[0].Identifier
 	}
+
+	opts := implicitOptions()
+	if len(options) > 0 {
+		opts = options[0]
+	}
+
 	if ad, ok := adapterForValue(v, kw); ok {
 		codec := ad.newCodec()
 
@@ -259,49 +262,64 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 		if tlv, err = pkt.TLV(); err != nil {
 			return
 		}
+
 		start := pkt.Offset()
-		if err = codec.(Primitive).read(pkt, tlv, implicitOptions()); err != nil {
+
+		if err = unmarshalHandleTag(kw, pkt, opts, tlv); err != nil {
+			return
+		}
+
+		if err = codec.(Primitive).read(pkt, tlv, opts); err != nil {
 			return
 		}
 		pkt.SetOffset(start + tlv.Length)
 
 		goVal := reflect.ValueOf(ad.toGo(codec))
 		if !goVal.Type().AssignableTo(v.Type()) {
-			return mkerr("type mismatch decoding " + kw)
+			err = mkerr("type mismatch decoding " + kw)
+			return
 		}
 		v.Set(goVal)
 		return
 	}
 
-	// If the value is a primitive, let it decode itself.
 	if val := v.Interface(); isPrimitive(val) {
-
-		// Get the current options (or use defaults)
-		var opts Options = implicitOptions()
-		if len(options) > 0 {
-			opts = options[0]
-		}
-
 		var tlv TLV
 		if tlv, err = pkt.TLV(); err != nil {
 			err = mkerr("unmarshalValue: failed reading tag/length for primitive: " + err.Error())
 			return
 		}
-
 		startOffset := pkt.Offset()
-		err = toPtr(v).Interface().(Primitive).read(pkt, tlv, opts)
-		pkt.SetOffset(startOffset + tlv.Length)
-
+		if err = toPtr(v).Interface().(Primitive).read(pkt, tlv, opts); err == nil {
+			pkt.SetOffset(startOffset + tlv.Length)
+		}
 		return
 	}
 
 	switch v.Kind() {
 	case reflect.Slice:
-		err = unmarshalSet(v, pkt, options...)
+		return unmarshalSet(v, pkt, options...)
 	case reflect.Struct:
-		err = unmarshalSequence(v, pkt, options...)
+		return unmarshalSequence(v, pkt, options...)
 	default:
-		err = mkerr("unmarshalValue: unsupported type " + v.Kind().String())
+		return mkerr("unmarshalValue: unsupported type " + v.Kind().String())
+	}
+}
+
+func unmarshalHandleTag(kw string, pkt Packet, opts Options, tlv TLV) (err error) {
+	if opts.HasTag() {
+		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
+			err = mkerr("identifier mismatch decoding " + kw)
+		} else if opts.Explicit {
+			inner := pkt.Type().New()
+			inner.Append(tlv.Value...)
+			if tlv, err = inner.TLV(); err == nil {
+				pkt = inner
+				opts.Explicit = false
+				opts.tag = nil
+				opts.class = nil
+			}
+		}
 	}
 
 	return

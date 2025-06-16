@@ -22,8 +22,8 @@ type Options struct {
 	OmitEmpty   bool     // whether to ignore empty slice values
 	Set         bool     // if true, encode as SET instead of SEQUENCE (for collections)
 	Indefinite  bool     // whether a field is known to be of an indefinite length
-	Tag         int      // if non-negative, indicates an alternative tag number.
-	Class       int      // represents the ASN.1 class: universal, application, context-specific, or private.
+	tag         *int     // if non-nil, indicates an alternative tag number.
+	class       *int     // represents the ASN.1 class: universal, application, context-specific, or private.
 	Identifier  string   // "ia5", "numeric", "utf8" etc. (for string fields)
 	Constraints []string // references to registered Constraint/ConstraintGroup instances
 	Default     any      // default value
@@ -35,15 +35,15 @@ type Options struct {
 // defaultOptions returns default options (e.g., no explicit tagging, context-specific for tagged fields)
 func defaultOptions() Options {
 	// For tagged fields we typically default to context-specific unless overridden.
+	class := ClassContextSpecific
 	return Options{
-		Tag:   -1,                   // -1 indicates no override.
-		Class: ClassContextSpecific, // by default, a "tag:x" implies context-specific.
+		class: &class, // by default, a "tag:x" implies context-specific.
 	}
 }
 
 func implicitOptions() Options {
 	opts := defaultOptions()
-	opts.Class = ClassUniversal
+	opts.SetClass(ClassUniversal)
 	return opts
 }
 
@@ -76,8 +76,8 @@ String returns the string representation of the receiver instance.
 func (r Options) String() string {
 	var parts []string
 
-	addStringConfigValue(&parts, r.Tag >= 0, "tag:"+itoa(r.Tag))
-	addStringConfigValue(&parts, validClass(r.Class) && r.Class > 0, lc(ClassNames[r.Class]))
+	addStringConfigValue(&parts, r.Tag() >= 0, "tag:"+itoa(r.Tag()))
+	addStringConfigValue(&parts, validClass(r.Class()) && r.Class() > 0, lc(ClassNames[r.Class()]))
 	if r.choiceTag != nil {
 		addStringConfigValue(&parts, true, "choice-tag:"+itoa(*r.choiceTag))
 	}
@@ -130,7 +130,7 @@ func NewOptions(tag string) (Options, error) {
 }
 
 func parseOptions(tagStr string) (opts Options, err error) {
-	opts = defaultOptions()
+	opts = implicitOptions()
 	tagStr = trim(tagStr, `"`)
 	tokens := split(tagStr, ",")
 
@@ -144,21 +144,17 @@ func parseOptions(tagStr string) (opts Options, err error) {
 				err = mkerr("invalid tag number " + numStr)
 				return opts, err
 			}
-			opts.Tag = tag
+			opts.SetTag(tag)
 			// If a tag is provided and no class keyword is present,
 			// use context-specific instead of universal. This may be
 			// overridden.
-			opts.Class = ClassContextSpecific
+			opts.SetClass(ClassContextSpecific)
 		case token == "explicit":
 			opts.Explicit = true
 		case token == "optional":
 			opts.Optional = true
 		case token == "omitempty":
 			opts.OmitEmpty = true
-		case token == "application":
-			opts.Class = ClassApplication
-		case token == "private":
-			opts.Class = ClassPrivate
 		case token == "set":
 			opts.Set = true
 		case hasPfx(token, "constraint:"):
@@ -168,7 +164,9 @@ func parseOptions(tagStr string) (opts Options, err error) {
 		case hasPfx(token, "default:"):
 			opts.parseOptionDefault(token)
 		default:
-			opts.parseOptionKeyword(token)
+			if isClass := opts.writeClassToken(token); !isClass {
+				opts.parseOptionKeyword(token)
+			}
 		}
 	}
 
@@ -177,6 +175,24 @@ func parseOptions(tagStr string) (opts Options, err error) {
 	}
 
 	return opts, err
+}
+
+func (r *Options) writeClassToken(name string) (written bool) {
+	// NOTE: universal NOT listed because the "universal"
+	// token is NOT related to ClassUniversal.
+	switch {
+	case name == "application":
+		r.SetClass(ClassApplication)
+		written = true
+	case name == "context-specific" || name == "context specific":
+		r.SetClass(ClassContextSpecific)
+		written = true
+	case name == "private":
+		r.SetClass(ClassPrivate)
+		written = true
+	}
+
+	return
 }
 
 func (r *Options) parseOptionDefault(token string) {
@@ -234,8 +250,42 @@ func extractOptions(field reflect.StructField) (opts Options, err error) {
 			opts = parsedOpts
 		}
 	} else {
-		opts = defaultOptions()
+		opts = implicitOptions()
 	}
 
 	return
+}
+
+func headerOpts(tlv TLV) Options {
+	opts := Options{}
+	opts.SetTag(tlv.Tag)
+	opts.SetClass(tlv.Class)
+	return opts
+}
+
+func (r *Options) SetTag(n int) {
+	if n >= 0 {
+		r.tag = &n
+	}
+}
+func (r Options) HasTag() bool { return r.tag != nil }
+func (r Options) Tag() int {
+	if r.tag != nil {
+		return *r.tag
+	}
+	return -1 // NO valid default
+}
+
+func (r *Options) SetClass(n int) {
+	if n >= 0 {
+		r.class = &n
+	}
+}
+
+func (r Options) HasClass() bool { return r.class != nil }
+func (r Options) Class() int {
+	if r.class != nil {
+		return *r.class
+	}
+	return 0 // UNIVERSAL default
 }

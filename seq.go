@@ -18,6 +18,16 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 		return
 	}
 
+	seqTag := TagSequence // 16
+	if globalOpts != nil {
+		switch {
+		case globalOpts.HasTag(): // caller supplied a tag
+			seqTag = globalOpts.Tag()
+		case globalOpts.Class() != ClassUniversal: // class changed ⇒ default tag 0
+			seqTag = 0
+		}
+	}
+
 	// Create a temporary sub-packet for encoding this sequence’s fields.
 	sub := pkt.Type().New()
 	defer sub.Free()
@@ -61,7 +71,7 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 	if depth == 1 && globalOpts != nil {
 		// At the outermost level (depth==1), if global options were provided, use them.
 		content := sub.Data()
-		tlv = pkt.Type().newTLV(globalOpts.Class, globalOpts.Tag, len(content), true, content...)
+		tlv = pkt.Type().newTLV(globalOpts.Class(), seqTag, len(content), true, content...)
 		encoded := encodeTLV(tlv, *globalOpts)
 		pkt.Append(encoded...)
 	} else if tlv, err = sub.TLV(); err == nil {
@@ -78,8 +88,8 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth int) (err error) {
 	// Restore your original CHOICE code:
 	if ch.Tag != nil {
-		opts.Tag = *ch.Tag
-		opts.Class = ClassContextSpecific
+		opts.choiceTag = ch.Tag
+		opts.SetClass(ClassContextSpecific)
 	}
 
 	if isPrimitive(ch.Value) {
@@ -95,8 +105,12 @@ func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth 
 
 			// Now build an explicit wrapper using opts.
 			// The identifier for an explicit context-specific tag is computed as:
-			//    (opts.Class << 6) | 0x20 | (opts.Tag)
-			explicitID := byte(opts.Class<<6) | 0x20 | byte(opts.Tag)
+			//    (opts.Class << 6) | 0x20 | byte((*opts.choiceTag))
+			// use context tag [N] (opts.choiceTag), and **NOT** the type tag
+			var explicitID byte
+			if opts.choiceTag != nil {
+				explicitID = byte(opts.Class()<<6) | 0x20 | byte((*opts.choiceTag))
+			}
 			sub.Append(explicitID)
 			lenBytes := encodeLength(sub.Type(), len(innerEnc))
 			sub.Append(lenBytes...)

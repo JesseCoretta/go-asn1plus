@@ -242,11 +242,16 @@ func TestPacket_codecov(_ *testing.T) {
 	Marshal(&slice)
 
 	Unmarshal(&BERPacket{}, nil)
-	Unmarshal(&BERPacket{}, &struct{}{}, WithOptions(Options{Class: 3, Tag: 26}))
+	opts := Options{}
+	opts.SetClass(3)
+	opts.SetTag(26)
+	Unmarshal(&BERPacket{}, &struct{}{}, WithOptions(opts))
 	var value *EmbeddedPDV
 	unmarshalValue(&BERPacket{}, reflect.ValueOf(value))
 
-	marshalPrepareSpecialOptions(EmbeddedPDV{}, &Options{Tag: 4, Class: 3})
+	opts.SetTag(4)
+	opts.SetClass(3)
+	marshalPrepareSpecialOptions(EmbeddedPDV{}, &opts)
 	checkBadMarshalOptions(DER, &Options{Indefinite: true})
 }
 
@@ -608,11 +613,14 @@ func ExamplePacket_sequenceWithGoStringAndInteger() {
 		Age  int    `asn1:"integer"`
 	}
 
+	opts := Options{}
+	opts.SetClass(1) // encode sequence as APPLICATION class
+
 	mine := MySequence{"Jesse", 48}
 
 	pkt, err := Marshal(mine,
 		WithEncoding(DER),
-		WithOptions(Options{Class: 1}), // encode sequence as APPLICATION class
+		WithOptions(opts),
 	)
 	if err != nil {
 		fmt.Println(err)
@@ -631,4 +639,132 @@ func ExamplePacket_sequenceWithGoStringAndInteger() {
 	// Output:
 	// Encoded value: 60 0A 13054A65737365020130
 	// Decoded value: Jesse,48
+}
+
+func TestSequence_FieldsExplicit(t *testing.T) {
+	type mySequence struct {
+		Field0 string `asn1:"explicit,octet,tag:0"`
+		Field1 string `asn1:"explicit,octet,tag:1,optional"`
+		Field2 string `asn1:"explicit,octet,tag:2"`
+	}
+
+	mine := mySequence{"Hello", "World", "!!!"}
+
+	hexes := map[EncodingRule]string{
+		BER: `30 19 A007040548656C6C6FA1070405576F726C64A2050403212121`,
+		DER: `30 19 A007040548656C6C6FA1070405576F726C64A2050403212121`,
+	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(mine, WithEncoding(rule))
+		if err != nil {
+			t.Fatalf("%s failed [explicit, encoding]: %v", t.Name(), err)
+		}
+
+		got := pkt.Hex()
+		if want := hexes[rule]; want != got {
+			t.Fatalf("%s failed [%s explicit encoding mismatch]\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rule, want, got)
+		}
+
+		var mine2 mySequence
+		if err = Unmarshal(pkt, &mine2); err != nil {
+			t.Fatalf("%s failed [explicit, decoding]: %v", t.Name(), err)
+		}
+	}
+}
+
+func TestSequence_FieldsImplicit(t *testing.T) {
+	type mySequence struct {
+		Field0 string `asn1:"octet,tag:0"`
+		Field1 string `asn1:"octet,tag:1,optional"`
+		Field2 string `asn1:"octet,tag:2"`
+	}
+
+	mine := mySequence{"Hello", "World", "!!!"}
+
+	hexes := map[EncodingRule]string{
+		BER: `30 13 800548656C6C6F8105576F726C648203212121`,
+		DER: `30 13 800548656C6C6F8105576F726C648203212121`,
+	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(mine, WithEncoding(rule))
+		if err != nil {
+			t.Fatalf("%s failed [implicit, encoding]: %v", t.Name(), err)
+		}
+
+		got := pkt.Hex()
+		if want := hexes[rule]; want != got {
+			t.Fatalf("%s failed [%s implicit encoding mismatch]\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rule, want, got)
+		}
+
+		var mine2 mySequence
+		if err = Unmarshal(pkt, &mine2); err != nil {
+			t.Fatalf("%s failed [implicit, decoding]: %v", t.Name(), err)
+		}
+	}
+}
+
+func TestSequence_PrimitiveFieldsExplicit(t *testing.T) {
+	type mySequence struct {
+		Field0 OctetString `asn1:"explicit,tag:0"`
+		Field1 OctetString `asn1:"explicit,tag:1,optional"`
+		Field2 OctetString `asn1:"explicit,tag:2"`
+	}
+
+	mine := mySequence{OctetString("Hello"), OctetString("World"), OctetString("!!!")}
+
+	hexes := map[EncodingRule]string{
+		BER: `30 19 A007040548656C6C6FA1070405576F726C64A2050403212121`,
+		DER: `30 19 A007040548656C6C6FA1070405576F726C64A2050403212121`,
+	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(mine, WithEncoding(rule))
+		if err != nil {
+			t.Fatalf("%s failed [explicit, encoding]: %v", t.Name(), err)
+		}
+
+		got := pkt.Hex()
+		if want := hexes[rule]; want != got {
+			t.Fatalf("%s failed [%s explicit encoding mismatch]\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rule, want, got)
+		}
+
+		var mine2 mySequence
+		if err = Unmarshal(pkt, &mine2); err != nil {
+			t.Fatalf("%s failed [explicit, decoding]: %v", t.Name(), err)
+		}
+	}
+}
+
+func TestSequence_PrimitiveFieldsImplicit(t *testing.T) {
+	type mySequence struct {
+		Field0 OctetString `asn1:"tag:0"`
+		Field1 OctetString `asn1:"tag:1,optional"`
+		Field2 OctetString `asn1:"tag:2"`
+	}
+
+	mine := mySequence{OctetString("Hello"), OctetString("World"), OctetString("!!!")}
+
+	hexes := map[EncodingRule]string{
+		BER: `30 13 800548656C6C6F8105576F726C648203212121`,
+		DER: `30 13 800548656C6C6F8105576F726C648203212121`,
+	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(mine, WithEncoding(rule))
+		if err != nil {
+			t.Fatalf("%s failed [implicit, encoding]: %v", t.Name(), err)
+		}
+
+		got := pkt.Hex()
+		if want := hexes[rule]; want != got {
+			t.Fatalf("%s failed [%s implicit encoding mismatch]\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rule, want, got)
+		}
+
+		var mine2 mySequence
+		if err = Unmarshal(pkt, &mine2); err != nil {
+			t.Fatalf("%s failed [implicit, decoding]: %v", t.Name(), err)
+		}
+	}
 }

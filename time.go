@@ -181,7 +181,8 @@ func (r Date) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(str), false, []byte(str)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}
@@ -326,7 +327,8 @@ func (r DateTime) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(str), false, []byte(str)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}
@@ -491,7 +493,8 @@ func (r TimeOfDay) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(str), false, []byte(str)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}
@@ -851,7 +854,8 @@ func (r Duration) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(str), false, []byte(str)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}
@@ -1160,7 +1164,8 @@ func (r GeneralizedTime) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(str), false, []byte(str)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}
@@ -1444,7 +1449,8 @@ func (r UTCTime) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(str), false, []byte(str)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}

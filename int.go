@@ -191,6 +191,7 @@ func (r *Integer) read(pkt Packet, tlv TLV, opts Options) (err error) {
 func (r *Integer) readBER(pkt Packet, tlv TLV, opts Options, decoder func([]byte) *big.Int) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
+		// len(data) was tlv.Length
 		if pkt.Offset()+tlv.Length > pkt.Len() {
 			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
 		} else {
@@ -220,7 +221,8 @@ func (r Integer) write(pkt Packet, opts Options) (n int, err error) {
 
 	switch t := pkt.Type(); t {
 	case BER, DER:
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(content), false, content...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, len(content), false, content...), opts); err == nil {
 			poff := pkt.Offset()
 			n = pkt.Offset() - poff + 1
 		}

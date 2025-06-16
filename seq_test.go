@@ -16,13 +16,14 @@ func TestMarshal_SequenceEncodingRulesWithOptions(t *testing.T) {
 		PrintableString("Hello1"),
 	}
 
+	opts := Options{}
+	opts.SetTag(TagSequence)
+	opts.SetClass(ClassApplication)
+
 	for _, rule := range encodingRules {
 		pkt, err := Marshal(my,
 			WithEncoding(rule),
-			WithOptions(Options{
-				Class: ClassApplication,
-				Tag:   TagSequence,
-			}))
+			WithOptions(opts))
 
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)

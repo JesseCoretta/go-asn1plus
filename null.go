@@ -37,7 +37,8 @@ func (_ Null) IsPrimitive() bool { return true }
 func (r Null) write(pkt Packet, opts Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), 0, false), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, 0, false), opts); err == nil {
 			pkt.SetOffset(0)
 		}
 	}

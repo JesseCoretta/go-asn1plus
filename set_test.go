@@ -67,7 +67,10 @@ func TestSet_encodingRules(t *testing.T) {
 func TestSet_codecov(_ *testing.T) {
 	isSet(struct{}{})
 	isSet([]string{})
-	isSet([]string{}, &Options{Tag: 14})
+
+	opts := &Options{}
+	opts.SetTag(14)
+	isSet([]string{}, opts)
 	isSet([]uint8{})
 
 	type mySequence struct {

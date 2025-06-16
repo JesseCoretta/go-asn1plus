@@ -291,7 +291,8 @@ func (r *Real) writeBER(pkt Packet, opts Options) (n int, err error) {
 	}
 
 	off := pkt.Offset()
-	if err = writeTLV(pkt, pkt.Type().newTLV(0, r.Tag(), len(content), false, content...), opts); err == nil {
+	tag, class := effectiveTag(r.Tag(), 0, opts)
+	if err = writeTLV(pkt, pkt.Type().newTLV(class, tag, len(content), false, content...), opts); err == nil {
 		n = pkt.Offset() - off
 	}
 

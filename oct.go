@@ -80,10 +80,12 @@ func (r OctetString) Len() int {
 }
 
 func (r OctetString) write(pkt Packet, opts Options) (n int, err error) {
+
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), r.Len(), false, []byte(r)...), opts); err == nil {
+		tag, class := effectiveTag(r.Tag(), 0, opts)
+		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
 			n = pkt.Offset() - off
 		}
 	}
