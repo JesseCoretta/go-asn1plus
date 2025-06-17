@@ -53,11 +53,11 @@ func TestEnumerated_codecov(t *testing.T) {
 	_, _ = NewEnumerated(struct{}{})
 	_, _ = NewEnumerated(Enumerated(3))
 	e, _ := NewEnumerated(3)
-	e.write(&DERPacket{data: []byte{0x00}}, Options{})
+	e.write(&DERPacket{data: []byte{0x00}}, &Options{})
 	e.Tag()
 	e.Int()
 	e.IsPrimitive()
-	opts := Options{}
+	opts := &Options{}
 	opts.SetTag(4)
 	e.readBER(&BERPacket{data: []byte{0x00}}, TLV{}, opts)
 

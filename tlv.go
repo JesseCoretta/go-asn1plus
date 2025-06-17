@@ -75,7 +75,7 @@ func (r TLV) Eq(tlv TLV, length ...bool) bool {
 	return tlvEqual(r, tlv, length...)
 }
 
-func encodeTLV(t TLV, opts ...Options) []byte {
+func encodeTLV(t TLV, opts *Options) []byte {
 	bufPtr := getBuf()
 	b := *bufPtr
 
@@ -83,14 +83,12 @@ func encodeTLV(t TLV, opts ...Options) []byte {
 	tagVal := t.Tag     // tag from the TLV
 	compound := t.Compound
 
-	if len(opts) > 0 {
-		o := opts[0]
-
-		classVal = o.Class()
-		if o.HasTag() {
-			tagVal = o.Tag()
+	if opts != nil {
+		classVal = opts.Class()
+		if opts.HasTag() {
+			tagVal = opts.Tag()
 		}
-		if o.Explicit {
+		if opts.Explicit {
 			compound = true
 		}
 	}
@@ -115,7 +113,7 @@ func encodeTLV(t TLV, opts ...Options) []byte {
 	}
 
 	indef := t.Type() == BER &&
-		((len(opts) > 0 && opts[0].Indefinite) || t.Length < 0)
+		(opts != nil && opts.Indefinite) || t.Length < 0
 	if indef {
 		b = append(b, 0x80)
 	} else {
@@ -129,7 +127,7 @@ func encodeTLV(t TLV, opts ...Options) []byte {
 	return out
 }
 
-func getTLV(r Packet, opts ...Options) (TLV, error) {
+func getTLV(r Packet, opts *Options) (TLV, error) {
 	if r.Offset() >= r.Len() {
 		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: no data available at offset ",
 			itoa(r.Offset()), " (len:", itoa(r.Len()), ")")
@@ -152,18 +150,16 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 	}
 	r.SetOffset(r.Offset() + idLen)
 
-	if len(opts) > 0 {
-		o := opts[0]
-
-		if o.HasTag() || o.HasClass() {
-			if o.Explicit && !compound {
+	if opts != nil {
+		if opts.HasTag() || opts.HasClass() {
+			if opts.Explicit && !compound {
 				return TLV{}, mkerr("Expected constructed TLV for explicit tagging override")
 			}
-			if o.HasClass() {
-				class = o.Class()
+			if opts.HasClass() {
+				class = opts.Class()
 			}
-			if o.HasTag() {
-				tag = o.Tag()
+			if opts.HasTag() {
+				tag = opts.Tag()
 			}
 		}
 	}
@@ -186,17 +182,17 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 	return tlv, nil
 }
 
-func writeTLV(r Packet, t TLV, opts ...Options) error {
+func writeTLV(r Packet, t TLV, opts *Options) error {
 	if !(t.Type() == BER || t.Type() == DER) {
 		return mkerrf(r.Type().String(), " Packet.WriteTLV: expected ",
 			r.Type().String(), ", got ", t.Type().String())
 	}
 
-	encoded := encodeTLV(t, opts...)
+	encoded := encodeTLV(t, opts)
 	r.Append(encoded...)
 
 	// Add end-of-contents for BER-indefinite.
-	if t.Type() == BER && len(opts) > 0 && opts[0].Indefinite {
+	if t.Type() == BER && opts != nil && opts.Indefinite {
 		r.Append(0x00, 0x00)
 	}
 	r.SetOffset(r.Len())

@@ -423,7 +423,7 @@ func verifyBitStringDigitSet(base int, digits []byte) (err error) {
 	return
 }
 
-func (r BitString) write(pkt Packet, opts Options) (n int, err error) {
+func (r BitString) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		remainder := r.BitLength % 8 // For 7 bits, remainder = 7.
@@ -444,7 +444,7 @@ func (r BitString) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *BitString) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *BitString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -458,7 +458,7 @@ func (r *BitString) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *BitString) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *BitString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {

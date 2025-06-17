@@ -12,17 +12,15 @@ import (
 )
 
 // isSet returns true if the target's type is a slice.
-func isSet(target any, opts ...*Options) (set bool) {
+func isSet(target any, opts *Options) (set bool) {
 	t := derefTypePtr(reflect.TypeOf(target))
 	if t.Kind() == reflect.Slice {
 		var tag int = -1
-		if len(opts) > 0 {
-			if opts[0] != nil {
-				tag = opts[0].Tag()
-			}
+		if opts != nil {
+			tag = opts.Tag()
 		}
 		if t.Elem().Kind() != reflect.Uint8 {
-			set = hasSfx(t.Name(), "SET") || (len(opts) > 0 && tag == TagSet)
+			set = hasSfx(t.Name(), "SET") || (opts != nil && tag == TagSet)
 		}
 	} else if hasSfx(t.Name(), "SET") {
 		set = true
@@ -86,7 +84,7 @@ func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 	}
 
 	tlv := pkt.Type().newTLV(ClassUniversal, TagSet, len(concatenated), true, concatenated...)
-	encoded := encodeTLV(tlv)
+	encoded := encodeTLV(tlv, nil)
 	// TODO: and this.
 	putBuf(bufPtr)
 
@@ -99,7 +97,7 @@ unmarshalSet returns an error following an attempt to decode a SET
 from pkt into the value v. v is expected to be either a slice (e.g.
 []Integer) or a struct whose first exported field is a slice.
 */
-func unmarshalSet(v reflect.Value, pkt Packet, opts ...Options) error {
+func unmarshalSet(v reflect.Value, pkt Packet, opts *Options) error {
 	var err error
 
 	// NOTE: We do not call pkt.TLV() here because the outer
@@ -137,9 +135,8 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts ...Options) error {
 	var elements []reflect.Value
 
 	var subOpts *Options
-	if len(opts) > 0 {
-		o := opts[0]
-		subOpts = clearChildOpts(&o)
+	if opts != nil {
+		subOpts = clearChildOpts(opts)
 	}
 
 	// Decode elements until no more data is available.
@@ -147,9 +144,9 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts ...Options) error {
 	for pkt.Offset() < pkt.Len() {
 		tmp := reflect.New(elemType).Elem()
 		if subOpts != nil {
-			err = unmarshalValue(pkt, tmp, *subOpts)
+			err = unmarshalValue(pkt, tmp, subOpts)
 		} else {
-			err = unmarshalValue(pkt, tmp)
+			err = unmarshalValue(pkt, tmp, nil)
 		}
 
 		if err != nil {

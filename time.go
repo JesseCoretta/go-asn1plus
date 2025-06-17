@@ -176,7 +176,7 @@ Cast returns the receiver instance cast as an instance of [time.Time].
 */
 func (r Date) Cast() time.Time { return time.Time(r) }
 
-func (r Date) write(pkt Packet, opts Options) (n int, err error) {
+func (r Date) write(pkt Packet, opts *Options) (n int, err error) {
 	str := r.String()
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -189,7 +189,7 @@ func (r Date) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *Date) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Date) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -205,7 +205,7 @@ func (r *Date) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *Date) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Date) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {
@@ -322,7 +322,7 @@ func formatDateTime(t time.Time) string {
 	return string(b[:]) // one unavoidable copy; still zero allocs on parse path
 }
 
-func (r DateTime) write(pkt Packet, opts Options) (n int, err error) {
+func (r DateTime) write(pkt Packet, opts *Options) (n int, err error) {
 	str := r.String()
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -335,7 +335,7 @@ func (r DateTime) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *DateTime) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *DateTime) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -351,7 +351,7 @@ func (r *DateTime) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *DateTime) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *DateTime) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {
@@ -488,7 +488,7 @@ Cast returns the receiver instance cast as an instance of [time.Time].
 */
 func (r TimeOfDay) Cast() time.Time { return time.Time(r) }
 
-func (r TimeOfDay) write(pkt Packet, opts Options) (n int, err error) {
+func (r TimeOfDay) write(pkt Packet, opts *Options) (n int, err error) {
 	str := r.String()
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -501,7 +501,7 @@ func (r TimeOfDay) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *TimeOfDay) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *TimeOfDay) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -517,7 +517,7 @@ func (r *TimeOfDay) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *TimeOfDay) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *TimeOfDay) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {
@@ -849,7 +849,7 @@ func (r Duration) String() string {
 	return bld.String()
 }
 
-func (r Duration) write(pkt Packet, opts Options) (n int, err error) {
+func (r Duration) write(pkt Packet, opts *Options) (n int, err error) {
 	str := r.String()
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -862,7 +862,7 @@ func (r Duration) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *Duration) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Duration) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -878,7 +878,7 @@ func (r *Duration) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *Duration) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Duration) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {
@@ -1159,7 +1159,7 @@ func (r GeneralizedTime) Cast() time.Time {
 	return time.Time(r)
 }
 
-func (r GeneralizedTime) write(pkt Packet, opts Options) (n int, err error) {
+func (r GeneralizedTime) write(pkt Packet, opts *Options) (n int, err error) {
 	str := r.String()
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -1172,7 +1172,7 @@ func (r GeneralizedTime) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *GeneralizedTime) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *GeneralizedTime) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}
@@ -1187,7 +1187,7 @@ func (r *GeneralizedTime) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *GeneralizedTime) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *GeneralizedTime) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {
@@ -1444,7 +1444,7 @@ func uTCHandler(raw, sec, diff, format string) (utc UTCTime, err error) {
 	return
 }
 
-func (r UTCTime) write(pkt Packet, opts Options) (n int, err error) {
+func (r UTCTime) write(pkt Packet, opts *Options) (n int, err error) {
 	str := r.String()
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -1457,7 +1457,7 @@ func (r UTCTime) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *UTCTime) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *UTCTime) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}
@@ -1472,7 +1472,7 @@ func (r *UTCTime) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *UTCTime) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *UTCTime) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {

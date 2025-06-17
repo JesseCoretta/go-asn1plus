@@ -215,7 +215,7 @@ func TestRealDecodeErrors(t *testing.T) {
 	pkt := &DERPacket{data: []byte{byte(TagReal), 2, 0x80}, offset: 0}
 	tlv := pkt.Type().newTLV(0, TagReal, 2, false)
 	var rDecoded Real
-	err := rDecoded.read(pkt, tlv, Options{})
+	err := rDecoded.read(pkt, tlv, &Options{})
 	if err == nil {
 		t.Errorf("Expected error for truncated REAL, but got none")
 	}

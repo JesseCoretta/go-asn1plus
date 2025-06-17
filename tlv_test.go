@@ -42,7 +42,7 @@ func TestTLVEncode(t *testing.T) {
 		Length:   6,
 		Value:    []byte("Hello0"),
 	}
-	encoded := encodeTLV(a)
+	encoded := encodeTLV(a, nil)
 	// Expect: identifier octet: 0x04 (0<<6 | 0x04), then length 0x06, then "Hello0".
 	expected := append([]byte{0x04, 0x06}, []byte("Hello0")...)
 	if !reflect.DeepEqual(encoded, expected) {
@@ -84,10 +84,10 @@ func TestBERWriteTLV(t *testing.T) {
 		Length:   5,
 		Value:    []byte("Hello"),
 	}
-	if err := writeTLV(pkt, tlv); err != nil {
+	if err := writeTLV(pkt, tlv, nil); err != nil {
 		t.Fatalf("writeTLV error: %v", err)
 	}
-	expected := encodeTLV(tlv)
+	expected := encodeTLV(tlv, nil)
 	if !reflect.DeepEqual(pkt.data, expected) {
 		t.Errorf("berWriteTLV: pkt.data = %x; want %x", pkt.data, expected)
 	}
@@ -141,22 +141,22 @@ func TestGetTLV_NoDataAtOffset(t *testing.T) {
 	pkt := BER.New(0x02, 0x01, 0x00)
 	pkt.SetOffset(pkt.Len())
 
-	_, err := getTLV(pkt)
+	_, err := getTLV(pkt, nil)
 	testWantSub(t, err, "no data available")
 }
 
 func TestGetTLV_BadTagIdentifier(t *testing.T) {
 	pkt := BER.New(0x1F, 0x80)
 
-	_, _ = getTLV(invalidPacket{})
-	_, err := getTLV(pkt)
+	_, _ = getTLV(invalidPacket{}, nil)
+	_, err := getTLV(pkt, nil)
 	testWantSub(t, err, "BER Packet.TLV: error reading length: length bytes not found")
 }
 
 func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
 	pkt := BER.New(0x02, 0x01, 0x09)
 
-	opts := Options{Explicit: true}
+	opts := &Options{Explicit: true}
 	opts.SetTag(3)
 	opts.SetClass(0)
 
@@ -167,7 +167,7 @@ func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
 func TestGetTLV_BadLengthHeader(t *testing.T) {
 	pkt := BER.New(0x02, 0x82)
 
-	_, err := getTLV(pkt)
+	_, err := getTLV(pkt, nil)
 	testWantSub(t, err, "error reading length:")
 }
 
@@ -191,7 +191,7 @@ func TestGetTLV_TagClassOverrideSuccess(t *testing.T) {
 
 	// Supply an *implicit* (Explicit=false) override so that the class/tag
 	// replacement path runs.
-	opts := Options{}
+	opts := &Options{}
 	opts.SetClass(2)
 	opts.SetTag(5)
 
@@ -212,7 +212,7 @@ func TestGetTLV_ErrorReadingTag(t *testing.T) {
 	pkt := BER.New((*tmpBuf)...)
 	pkt.Append(0x1F)
 
-	_, err := getTLV(pkt)
+	_, err := getTLV(pkt, nil)
 	if err == nil || !cntns(err.Error(), "error reading tag") {
 		t.Fatalf("%s failed: expected tag-parse error, got %v", t.Name(), err)
 	}
@@ -220,7 +220,7 @@ func TestGetTLV_ErrorReadingTag(t *testing.T) {
 
 func TestGetTLV_InvalidPacket(t *testing.T) {
 	pkt := invalidPacket{}
-	if _, err := getTLV(pkt); err == nil {
+	if _, err := getTLV(pkt, nil); err == nil {
 		t.Fatalf("%s failed: expected error, got nil", t.Name())
 	}
 }
@@ -232,7 +232,7 @@ func TestGetTLV_ParseClassIdentifierError(t *testing.T) {
 		length: 1,
 	}
 
-	_, err := getTLV(pkt)
+	_, err := getTLV(pkt, nil)
 	if err == nil || err.Error() != errorEmptyIdentifier.Error() {
 		t.Fatalf("expected errorEmptyIdentifier, got %v", err)
 	}
@@ -249,7 +249,7 @@ func TestGetTLV_UnsupportedEncodingRule(t *testing.T) {
 		typ:    3,      // 3 ⇒ neither BER(0) nor DER(1) → default case
 	}
 
-	_, err := getTLV(pkt)
+	_, err := getTLV(pkt, nil)
 	if err == nil || err.Error() != "Unsupported encoding rule" {
 		t.Fatalf("expected 'Unsupported encoding rule', got %v", err)
 	}
@@ -306,7 +306,7 @@ func TestEncodeTLV_ExplicitSetsCompound(t *testing.T) {
 		Value:    []byte{0xAA},
 	}
 
-	opts := Options{}
+	opts := &Options{}
 	opts.SetClass(2)
 	opts.SetTag(3)
 	opts.Explicit = true

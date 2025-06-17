@@ -107,7 +107,7 @@ func convertToNumericString(x any) (str string, err error) {
 	return
 }
 
-func (r NumericString) write(pkt Packet, opts Options) (n int, err error) {
+func (r NumericString) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
@@ -120,7 +120,7 @@ func (r NumericString) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *NumericString) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *NumericString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}

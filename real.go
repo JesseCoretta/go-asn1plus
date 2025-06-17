@@ -198,7 +198,7 @@ ASN.1 primitive.
 */
 func (r Real) IsPrimitive() bool { return true }
 
-func (r Real) write(pkt Packet, opts Options) (n int, err error) {
+func (r Real) write(pkt Packet, opts *Options) (n int, err error) {
 	switch pkt.Type() {
 	case BER, DER:
 		n, err = r.writeBER(pkt, opts)
@@ -210,7 +210,7 @@ func (r Real) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *Real) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Real) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -227,7 +227,7 @@ func (r *Real) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *Real) writeBER(pkt Packet, opts Options) (n int, err error) {
+func (r *Real) writeBER(pkt Packet, opts *Options) (n int, err error) {
 	// Handle special REAL values first.
 	if r.Special != RealNormal {
 		if r.Special == RealPlusInfinity {
@@ -299,7 +299,7 @@ func (r *Real) writeBER(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *Real) readBER(pkt Packet, tlv TLV, opts Options) error {
+func (r *Real) readBER(pkt Packet, tlv TLV, opts *Options) error {
 	var data []byte
 	var err error
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err != nil {

@@ -12,17 +12,17 @@ import (
 // used by chainAdapters’ callers.
 type stubPrimitive struct{}
 
-func (p stubPrimitive) String() string                          { return `` }
-func (p stubPrimitive) Tag() int                                { return 999 }
-func (p stubPrimitive) IsPrimitive() bool                       { return true }
-func (p *stubPrimitive) write(_ Packet, _ Options) (int, error) { return 0, nil }
-func (p *stubPrimitive) read(_ Packet, _ TLV, _ Options) error  { return nil }
+func (p stubPrimitive) String() string                           { return `` }
+func (p stubPrimitive) Tag() int                                 { return 999 }
+func (p stubPrimitive) IsPrimitive() bool                        { return true }
+func (p *stubPrimitive) write(_ Packet, _ *Options) (int, error) { return 0, nil }
+func (p *stubPrimitive) read(_ Packet, _ TLV, _ *Options) error  { return nil }
 
 // helper that returns an adapter whose fromGo either fails or succeeds.
 func testMakeAdapter(shouldSucceed bool) adapter {
 	return adapter{
 		// newCodec / toGo are irrelevant for this test
-		fromGo: func(_ any, _ Primitive, _ Options) error {
+		fromGo: func(_ any, _ Primitive, _ *Options) error {
 			if shouldSucceed {
 				return nil
 			}
@@ -33,7 +33,7 @@ func testMakeAdapter(shouldSucceed bool) adapter {
 
 func TestChainAdapters(t *testing.T) {
 	pr := &stubPrimitive{}
-	opts := Options{}
+	opts := &Options{}
 
 	// Case 1: first adapter fails, second succeeds
 	ad := chainAdapters([]adapter{

@@ -73,7 +73,7 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 */
 func (r UniversalString) IsZero() bool { return len(r) == 0 }
 
-func (r UniversalString) write(pkt Packet, opts Options) (n int, err error) {
+func (r UniversalString) write(pkt Packet, opts *Options) (n int, err error) {
 	runes := []rune(r)
 	content := make([]byte, 4*len(runes))
 	for i, ru := range runes {
@@ -91,7 +91,7 @@ func (r UniversalString) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *UniversalString) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *UniversalString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}
@@ -106,7 +106,7 @@ func (r *UniversalString) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *UniversalString) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *UniversalString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		if pkt.Offset()+tlv.Length > pkt.Len() {

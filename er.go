@@ -94,6 +94,35 @@ type encodingConfig struct {
 }
 
 /*
+With encapsulates instances of [EncodingRule] and [Options] into a single payload for
+submission to [Marshal] and [Unmarshal]. This function is intended to be executed
+in-line as a variadic input value to [Marshal] and [Unmarshal]
+
+It is unnecessary -- but harmless -- to include an [EncodingRule] when submitting to
+[Unmarshal], as the input [Packet] instance knows what [EncodingRule] it implements.
+*/
+func With(args ...any) EncodingOption {
+	var rule EncodingRule = invalidEncodingRule
+	var opts *Options
+
+	for i := 0; i < len(args); i++ {
+		switch tv := args[i].(type) {
+		case EncodingRule:
+			rule = tv
+		case Options:
+			opts = &tv
+		case *Options:
+			opts = tv
+		}
+	}
+
+	return func(cfg *encodingConfig) {
+		cfg.rule = rule
+		cfg.opts = opts
+	}
+}
+
+/*
 WithEncoding returns an option to set the encoding rule. This function is intended to
 be executed in-line as a varadic input value to [Marshal].
 

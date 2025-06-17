@@ -98,7 +98,7 @@ func TestMarshal_SequenceNested(t *testing.T) {
 }
 
 func TestSequence_codecov(_ *testing.T) {
-	unmarshalSequence(reflect.ValueOf(struct{}{}), &BERPacket{}, []Options{}...)
+	unmarshalSequence(reflect.ValueOf(struct{}{}), &BERPacket{}, nil)
 }
 
 func ExamplePacket_automaticTaggingBER() {

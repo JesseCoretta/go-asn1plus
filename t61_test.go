@@ -84,9 +84,9 @@ func TestT61String_AllowedCharacters(t *testing.T) {
 func TestT61String_codecov(_ *testing.T) {
 	t61, _ := NewT61String("HELLO")
 	t61.Tag()
-	t61.read(nil, TLV{Class: 4}, Options{})
-	t61.read(nil, TLV{Class: 0, Tag: TagOID}, Options{})
-	t61.read(&DERPacket{}, TLV{Class: 0, Tag: t61.Tag(), Length: 100}, Options{})
+	t61.read(nil, TLV{Class: 4}, &Options{})
+	t61.read(nil, TLV{Class: 0, Tag: TagOID}, &Options{})
+	t61.read(&DERPacket{}, TLV{Class: 0, Tag: t61.Tag(), Length: 100}, &Options{})
 
 	pkt, _ := Marshal(t61)
 	var tt T61String

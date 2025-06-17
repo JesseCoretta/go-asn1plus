@@ -34,7 +34,7 @@ qualified instances from other interfaces of a similar design.
 */
 func (_ Null) IsPrimitive() bool { return true }
 
-func (r Null) write(pkt Packet, opts Options) (n int, err error) {
+func (r Null) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		tag, class := effectiveTag(r.Tag(), 0, opts)
@@ -45,7 +45,7 @@ func (r Null) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *Null) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Null) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}

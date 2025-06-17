@@ -133,8 +133,8 @@ func TestBMPString_codecov(t *testing.T) {
 	NewBMPString(BMPString{0x1e, 0x0})
 
 	b := BMPString{0x1e, 0x5, 0x0, 0x48, 0x0, 0x45, 0x0, 0x4c, 0x0, 0x4c, 0x0, 0x4f}
-	b.read(nil, TLV{typ: DER, Class: 5, Tag: TagBMPString}, Options{})
-	b.read(&DERPacket{offset: 5}, TLV{typ: DER, Class: 0, Tag: TagBMPString}, Options{})
+	b.read(nil, TLV{typ: DER, Class: 5, Tag: TagBMPString}, &Options{})
+	b.read(&DERPacket{offset: 5}, TLV{typ: DER, Class: 0, Tag: TagBMPString}, &Options{})
 	b.Tag()
 	b.Len()
 	b.IsPrimitive()

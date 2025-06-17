@@ -175,7 +175,7 @@ func newObjectIdentifierStr(dot string) (r ObjectIdentifier, err error) {
 	return
 }
 
-func (r ObjectIdentifier) write(pkt Packet, opts Options) (n int, err error) {
+func (r ObjectIdentifier) write(pkt Packet, opts *Options) (n int, err error) {
 	if r.Len() < 2 {
 		err = mkerr("Length below encoding minimum")
 		return
@@ -224,7 +224,7 @@ func (r ObjectIdentifier) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *ObjectIdentifier) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *ObjectIdentifier) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil DER packet")
 	}
@@ -237,7 +237,7 @@ func (r *ObjectIdentifier) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *ObjectIdentifier) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *ObjectIdentifier) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err != nil {
 		return
@@ -607,7 +607,7 @@ Len returns the integer length of the receiver instance.
 */
 func (r RelativeOID) Len() int { return len(r) }
 
-func (r RelativeOID) write(pkt Packet, opts Options) (n int, err error) {
+func (r RelativeOID) write(pkt Packet, opts *Options) (n int, err error) {
 	if len(r) < 1 {
 		return 0, mkerr("Relative OID must have at least one arc")
 	}
@@ -632,7 +632,7 @@ func (r RelativeOID) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *RelativeOID) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *RelativeOID) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil DER packet")
 	}
@@ -647,7 +647,7 @@ func (r *RelativeOID) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *RelativeOID) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *RelativeOID) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err != nil {
 		return

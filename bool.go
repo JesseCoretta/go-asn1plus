@@ -77,7 +77,7 @@ func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error
 	return b, err
 }
 
-func (r *Boolean) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Boolean) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -99,7 +99,7 @@ func (r *Boolean) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r Boolean) write(pkt Packet, opts Options) (n int, err error) {
+func (r Boolean) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()

@@ -89,7 +89,7 @@ func checkIA5String(raw string) (err error) {
 	return
 }
 
-func (r *IA5String) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *IA5String) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -111,7 +111,7 @@ func (r *IA5String) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r IA5String) write(pkt Packet, opts Options) (n int, err error) {
+func (r IA5String) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()

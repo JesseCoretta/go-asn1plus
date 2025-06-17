@@ -94,7 +94,7 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 */
 func (r UTF8String) IsZero() bool { return len(r) == 0 }
 
-func (r *UTF8String) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *UTF8String) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		err = mkerr("Nil Packet encountered during read")
 		return
@@ -118,7 +118,7 @@ func (r *UTF8String) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r UTF8String) write(pkt Packet, opts Options) (n int, err error) {
+func (r UTF8String) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()

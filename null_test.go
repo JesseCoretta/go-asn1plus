@@ -31,8 +31,8 @@ func TestNull_codecov(t *testing.T) {
 	null.IsPrimitive()
 	_ = null.String()
 
-	null.read(nil, TLV{}, Options{})
-	null.read(&BERPacket{}, TLV{typ: BER, Class: 2}, Options{})
-	null.read(&BERPacket{}, TLV{typ: BER, Class: 0, Tag: 11}, Options{})
-	null.read(&BERPacket{}, TLV{typ: BER, Class: 0, Tag: 5, Length: 1}, Options{})
+	null.read(nil, TLV{}, &Options{})
+	null.read(&BERPacket{}, TLV{typ: BER, Class: 2}, &Options{})
+	null.read(&BERPacket{}, TLV{typ: BER, Class: 0, Tag: 11}, &Options{})
+	null.read(&BERPacket{}, TLV{typ: BER, Class: 0, Tag: 5, Length: 1}, &Options{})
 }

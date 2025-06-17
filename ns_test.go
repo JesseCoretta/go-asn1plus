@@ -92,8 +92,8 @@ func TestNumericString_String(t *testing.T) {
 func TestNumericString_codecov(_ *testing.T) {
 	var ns NumericString
 	ns.Tag()
-	ns.read(nil, TLV{typ: DER, Class: 1, Tag: 22}, Options{})
-	ns.read(&DERPacket{}, TLV{typ: DER, Class: 0, Tag: ns.Tag(), Length: 222}, Options{})
+	ns.read(nil, TLV{typ: DER, Class: 1, Tag: 22}, &Options{})
+	ns.read(&DERPacket{}, TLV{typ: DER, Class: 0, Tag: ns.Tag(), Length: 222}, &Options{})
 }
 
 func ExampleNumericString_dER() {

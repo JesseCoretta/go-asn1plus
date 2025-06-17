@@ -103,7 +103,7 @@ func sizeOfInt(i int) int {
 asn1Reader is qualified through any type which bears the "read(Packet, TagAndLength) error" method.
 */
 type asn1Reader interface {
-	read(Packet, TLV, Options) error
+	read(Packet, TLV, *Options) error
 }
 
 func newStrBuilder() strings.Builder { return strings.Builder{} }
@@ -223,7 +223,7 @@ func stringBytes(s string) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(sh.Data)), sh.Len)
 }
 
-func effectiveTag(baseTag, baseClass int, o Options) (int, int) {
+func effectiveTag(baseTag, baseClass int, o *Options) (int, int) {
 	// 0. Highest priority: CHOICE helper supplying an explicit tag.
 	if o.choiceTag != nil {
 		baseTag = *o.choiceTag

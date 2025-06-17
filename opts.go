@@ -44,21 +44,14 @@ var defaultOptionsTemplate = Options{
 	class: &ctxspec, // “tag:x” -> context-specific unless overridden
 }
 
-/*
-defaultOptions returns default options (e.g., no explicit
-tagging, context-specific for tagged fields)
-*/
-func defaultOptions() Options { return defaultOptionsTemplate }
+func defaultOptions() *Options {
+	c := ClassContextSpecific // each call gets its OWN variable
+	return &Options{class: &c}
+}
 
-/*
-implicitOptions returns an instance of Options identical to
-that returned by defaultOptions, except with the class replaced
-with ClassUniversal.
-*/
-func implicitOptions() Options {
-	opts := defaultOptions()
-	opts.SetClass(ClassUniversal)
-	return opts
+func implicitOptions() *Options {
+	c := ClassUniversal
+	return &Options{class: &c}
 }
 
 func addStringConfigValue(dst *[]string, cond bool, val string) {
@@ -149,8 +142,8 @@ func NewOptions(tag string) (Options, error) {
 // In hot paths we borrow an *Options from optPool, work on it, then copy
 // the final value out so the caller still receives a detached struct.
 func parseOptions(tagStr string) (opts Options, err error) {
-	po := borrowOptions()   // ← pooled working object
-	*po = implicitOptions() // start from defaults
+	po := borrowOptions()
+	*po = *implicitOptions()
 
 	tagStr = trim(tagStr, `"`)
 	tokens := split(tagStr, ",")
@@ -196,9 +189,9 @@ func parseOptions(tagStr string) (opts Options, err error) {
 	}
 
 Done:
-	opts = *po         // detach result from pooled object
-	releaseOptions(po) // ALWAYS return to pool
-	return
+	out := *po
+	releaseOptions(po)
+	return out, err
 }
 
 func isBoolKeyword(tok string) bool  { _, ok := boolKeywords[tok]; return ok }
@@ -302,14 +295,14 @@ func swapAlias(alias string) (token string) {
 	return
 }
 
-func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (opts Options, err error) {
+func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (opts *Options, err error) {
 	if tagStr, ok := field.Tag.Lookup("asn1"); ok {
 		var parsedOpts Options
 		if parsedOpts, err = parseOptions(tagStr); err != nil {
 			err = mkerrf("Marshal: error parsing tag for field ", field.Name,
 				"(", itoa(fieldNum), "): ", err.Error())
 		} else {
-			opts = parsedOpts
+			opts = &parsedOpts
 		}
 
 		if !opts.HasTag() && automatic {
@@ -332,8 +325,8 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 	return
 }
 
-func headerOpts(tlv TLV) Options {
-	opts := Options{}
+func headerOpts(tlv TLV) *Options {
+	opts := &Options{}
 	opts.SetTag(tlv.Tag)
 	opts.SetClass(tlv.Class)
 	return opts

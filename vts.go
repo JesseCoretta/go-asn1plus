@@ -89,7 +89,7 @@ ASN.1 primitive.
 */
 func (r VideotexString) IsPrimitive() bool { return true }
 
-func (r VideotexString) write(pkt Packet, opts Options) (n int, err error) {
+func (r VideotexString) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		start := pkt.Offset()
@@ -105,7 +105,7 @@ func (r VideotexString) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *VideotexString) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *VideotexString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}

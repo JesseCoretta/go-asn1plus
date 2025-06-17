@@ -65,13 +65,13 @@ func TestSet_encodingRules(t *testing.T) {
 }
 
 func TestSet_codecov(_ *testing.T) {
-	isSet(struct{}{})
-	isSet([]string{})
+	isSet(struct{}{}, nil)
+	isSet([]string{}, nil)
 
 	opts := &Options{}
 	opts.SetTag(14)
 	isSet([]string{}, opts)
-	isSet([]uint8{})
+	isSet([]uint8{}, nil)
 
 	type mySequence struct {
 		OctetString
@@ -85,5 +85,5 @@ func TestSet_codecov(_ *testing.T) {
 
 	pkt := BER.New()
 
-	unmarshalSet(reflect.ValueOf(&mine), pkt)
+	unmarshalSet(reflect.ValueOf(&mine), pkt, nil)
 }

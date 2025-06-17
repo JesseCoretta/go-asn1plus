@@ -15,11 +15,11 @@ The variadic [EncodingOption] input value is used to further user control using
 one or more of:
 
   - [EncodingRule] (e.g.: [BER], [DER])
-  - [Options] (e.g.: to declare a value to be of an INDEFINITE-LENGTH, or for a class override)
+  - [EncodingOption] (e.g.: to declare a value to be of an INDEFINITE-LENGTH, or for a class override)
 
 If an encoding rule is not specified, [DER] encoding is used as the default.
 
-See also [Unmarshal].
+See also [Unmarshal], [WithEncoding] and [WithOptions].
 */
 func Marshal(x any, options ...EncodingOption) (pkt Packet, err error) {
 	// For example, we default to DER and to a default Options value.
@@ -153,14 +153,14 @@ func marshalViaAdapter(v reflect.Value, pkt Packet, opts *Options) (handled bool
 	}
 
 	codec := ad.newCodec()
-	if err = ad.fromGo(v.Interface(), codec, *opts); err != nil {
+	if err = ad.fromGo(v.Interface(), codec, opts); err != nil {
 		return true, err
 	}
 
 	if opts.Explicit {
 		err = wrapMarshalExplicit(pkt, codec.(Primitive), opts)
 	} else {
-		_, err = codec.(Primitive).write(pkt, *opts)
+		_, err = codec.(Primitive).write(pkt, opts)
 	}
 
 	return true, err
@@ -173,15 +173,14 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 
 	// Ensure we have an Options object.
 	if opts == nil {
-		tmp := implicitOptions()
-		opts = &tmp
+		opts = implicitOptions()
 	}
 
 	prim := toPtr(v).Interface().(Primitive)
 	if opts.Explicit {
 		err = wrapMarshalExplicit(pkt, prim, opts)
 	} else {
-		_, err = prim.write(pkt, *opts)
+		_, err = prim.write(pkt, opts)
 	}
 	return true, err
 }
@@ -193,7 +192,7 @@ func wrapMarshalExplicit(pkt Packet, prim Primitive, opts *Options) (err error) 
 	innerOpts.tag = nil
 	innerOpts.class = nil
 
-	if _, err = prim.write(tmp, innerOpts); err == nil {
+	if _, err = prim.write(tmp, &innerOpts); err == nil {
 		content := tmp.Data()
 
 		id := byte(opts.Class()<<6) | 0x20 | byte(opts.Tag())
@@ -236,9 +235,9 @@ func Unmarshal(pkt Packet, x any, options ...EncodingOption) error {
 	}
 
 	if cfg.opts != nil {
-		err = unmarshalValue(pkt, rv.Elem(), (*cfg.opts))
+		err = unmarshalValue(pkt, rv.Elem(), cfg.opts)
 	} else {
-		err = unmarshalValue(pkt, rv.Elem())
+		err = unmarshalValue(pkt, rv.Elem(), nil)
 	}
 
 	return err
@@ -251,7 +250,7 @@ aided by [Options] directives.
 This function is called by the top-level Unmarshal function, as well as certain low
 level functions via recursion.
 */
-func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error) {
+func unmarshalValue(pkt Packet, v reflect.Value, options *Options) (err error) {
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			err = mkerr("unmarshalValue: input pointer is nil")
@@ -262,8 +261,8 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 
 	kw := ""
 	opts := implicitOptions()
-	if len(options) > 0 {
-		opts = options[0]
+	if options != nil {
+		opts = options
 		kw = opts.Identifier
 	}
 
@@ -275,16 +274,17 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 			return
 		}
 
+		outerLen := tlv.Length
 		start := pkt.Offset()
 
-		if err = unmarshalHandleTag(kw, pkt, tlv, opts); err != nil {
+		if err = unmarshalHandleTag(kw, pkt, &tlv, opts); err != nil {
 			return
 		}
 
 		if err = codec.(Primitive).read(pkt, tlv, opts); err != nil {
 			return
 		}
-		pkt.SetOffset(start + tlv.Length)
+		pkt.SetOffset(start + outerLen)
 
 		goVal := reflect.ValueOf(ad.toGo(codec))
 		if !goVal.Type().AssignableTo(v.Type()) {
@@ -320,14 +320,18 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 	return
 }
 
-func unmarshalHandleTag(kw string, pkt Packet, tlv TLV, opts Options) (err error) {
+func unmarshalHandleTag(kw string, pkt Packet, tlv *TLV, opts *Options) (err error) {
 	if opts.HasTag() {
 		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
 			err = mkerrf("identifier mismatch decoding ", kw)
 		} else if opts.Explicit {
 			inner := pkt.Type().New()
-			inner.Append(tlv.Value...) // TODO: determine why this is necessary (else, breaks "TestSequence_FieldsExplicit" via New(data...))
-			if tlv, err = inner.TLV(); err == nil {
+			// TODO: determine why this is necessary (else, breaks
+			// "TestSequence_FieldsExplicit" via New(data...))
+			inner.Append(tlv.Value...)
+			var innerTLV TLV
+			if innerTLV, err = inner.TLV(); err == nil {
+				*tlv = innerTLV
 				opts.Explicit = false
 				opts.tag = nil
 				opts.class = nil

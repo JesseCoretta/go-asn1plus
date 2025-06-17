@@ -224,9 +224,9 @@ func TestUTF8String_codecov(_ *testing.T) {
 	u.IsZero()
 	u.Tag()
 	pkt, _ := Marshal(u)
-	u.read(nil, TLV{typ: pkt.Type(), Class: 2, Tag: 55}, Options{})
-	u.read(pkt, TLV{typ: pkt.Type(), Class: 2, Tag: 55}, Options{})
-	u.read(pkt, TLV{typ: pkt.Type(), Class: 0, Tag: 55}, Options{})
-	u.read(pkt, TLV{typ: pkt.Type(), Class: 0, Tag: u.Tag(), Length: 1000}, Options{})
+	u.read(nil, TLV{typ: pkt.Type(), Class: 2, Tag: 55}, &Options{})
+	u.read(pkt, TLV{typ: pkt.Type(), Class: 2, Tag: 55}, &Options{})
+	u.read(pkt, TLV{typ: pkt.Type(), Class: 0, Tag: 55}, &Options{})
+	u.read(pkt, TLV{typ: pkt.Type(), Class: 0, Tag: u.Tag(), Length: 1000}, &Options{})
 
 }

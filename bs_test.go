@@ -40,10 +40,10 @@ func TestBitString(t *testing.T) {
 		tlv := rule.newTLV(2, -1, bs.Len(), false, bs.Bytes...)
 
 		pkt.SetOffset()
-		bs2.read(nil, tlv, Options{})
+		bs2.read(nil, tlv, &Options{})
 
 		tlv = rule.newTLV(2, bs.Tag(), 5000, false, bs.Bytes...)
-		bs2.read(pkt, tlv, Options{})
+		bs2.read(pkt, tlv, &Options{})
 	}
 
 	_, _ = NewBitString([]byte(`'1010111'B`))

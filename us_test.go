@@ -168,7 +168,7 @@ func TestDerUniversalString_InvalidLength(t *testing.T) {
 	}
 	dp.Append([]byte{0, 0, 0, 0, 0}...)
 	var us UniversalString
-	if err := us.read(dp, invalidTLV, Options{}); err == nil {
+	if err := us.read(dp, invalidTLV, &Options{}); err == nil {
 		t.Error("Expected error for invalid content length (not a multiple of 4), got nil")
 	}
 }
@@ -217,10 +217,10 @@ func TestUniversalString_codecov(_ *testing.T) {
 	var us2 UniversalString
 	_ = Unmarshal(pkt, &us2)
 
-	us.read(nil, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400}, Options{})
-	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400}, Options{})
-	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400, Value: []byte{byte(us.Tag()), 0x03, 0x1, 0x2, 0x3}}, Options{})
-	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 3, Value: []byte{byte(us.Tag()), 0x03, 0x1, 0x2, 0x3}}, Options{})
+	us.read(nil, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400}, &Options{})
+	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400}, &Options{})
+	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400, Value: []byte{byte(us.Tag()), 0x03, 0x1, 0x2, 0x3}}, &Options{})
+	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 3, Value: []byte{byte(us.Tag()), 0x03, 0x1, 0x2, 0x3}}, &Options{})
 }
 
 func ExampleUniversalString_withConstraints() {

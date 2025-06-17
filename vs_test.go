@@ -114,6 +114,6 @@ func TestVisibleString_codecov(t *testing.T) {
 	NewVisibleString([]byte{0x7F, 0x7F, 0x08})
 	_, _ = NewVisibleString(struct{}{})
 	var vs VisibleString
-	vs.read(nil, TLV{}, Options{})
-	vs.read(&DERPacket{}, TLV{}, Options{})
+	vs.read(nil, TLV{}, &Options{})
+	vs.read(&DERPacket{}, TLV{}, &Options{})
 }

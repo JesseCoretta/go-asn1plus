@@ -78,7 +78,7 @@ func (e Enumerated) Int() int {
 	return int(e)
 }
 
-func (r Enumerated) write(pkt Packet, opts Options) (n int, err error) {
+func (r Enumerated) write(pkt Packet, opts *Options) (n int, err error) {
 	data := encodeNativeInt(int(r))
 	tag, class := effectiveTag(r.Tag(), 0, opts)
 	switch t := pkt.Type(); t {
@@ -92,7 +92,7 @@ func (r Enumerated) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *Enumerated) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Enumerated) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}
@@ -107,7 +107,7 @@ func (r *Enumerated) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *Enumerated) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Enumerated) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	class, tag := ClassUniversal, r.Tag()
 	if validClass(opts.Class()) {
 		class = opts.Class()

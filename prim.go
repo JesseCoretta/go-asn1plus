@@ -42,11 +42,11 @@ type Primitive interface {
 	String() string
 	IsPrimitive() bool
 
-	write(Packet, Options) (int, error)
-	read(Packet, TLV, Options) error
+	write(Packet, *Options) (int, error)
+	read(Packet, TLV, *Options) error
 }
 
-func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
+func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
 	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
 		err = mkerrf("Invalid explicit ", TagNames[tag], " header in ",
 			pkt.Type().String(), " packet; received TLV: ", tlv.String())
@@ -76,7 +76,7 @@ func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (dat
 	return
 }
 
-func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
+func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
 
 	overlay := opts.HasTag() || opts.HasClass()
 
@@ -103,7 +103,7 @@ func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (dat
 	return full, nil
 }
 
-func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
+func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
 	if data, err = primitiveCheckReadOverride(tag, pkt, tlv, opts); err == nil {
 		if len(data) == 0 {
 			if tag != TagNull {
@@ -132,9 +132,9 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte
 	return
 }
 
-func primitiveCheckReadOverride(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
+func primitiveCheckReadOverride(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
 	// If a tagging override was provided, handle it.
-	if opts.HasTag() {
+	if opts != nil && opts.HasTag() {
 		if opts.Explicit {
 			data, err = primitiveCheckExplicitRead(tag, pkt, tlv, opts)
 		} else {

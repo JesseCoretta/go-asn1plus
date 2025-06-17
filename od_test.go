@@ -53,7 +53,7 @@ func TestObjectDescriptor_codecov(_ *testing.T) {
 	_, _ = NewObjectDescriptor(nil)
 	_, _ = NewObjectDescriptor(string(rune(2)))
 	_, _ = NewObjectDescriptor(struct{}{})
-	od.read(nil, TLV{}, Options{})
+	od.read(nil, TLV{}, nil)
 }
 
 func TestObjectDescriptor_encodingRules(t *testing.T) {

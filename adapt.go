@@ -105,7 +105,7 @@ func RegisterAdapter[T any, GoT any](
 		toGo: func(p Primitive) any {
 			return asGo(any(p).(*T))
 		},
-		fromGo: func(g any, prim Primitive, opts Options) error {
+		fromGo: func(g any, prim Primitive, opts *Options) error {
 			cs, err := collectConstraint[T](opts.Constraints)
 			if err == nil {
 				goVal, ok := g.(GoT)
@@ -266,9 +266,9 @@ adapter is a private type which serves to "bind" Go types
 with ASN.1 primitives (e.g.: string -> uTF8String)
 */
 type adapter struct {
-	newCodec func() Primitive                    // factory for temp value
-	toGo     func(Primitive) any                 // codec → plain Go
-	fromGo   func(any, Primitive, Options) error // plain Go → codec
+	newCodec func() Primitive                     // factory for temp value
+	toGo     func(Primitive) any                  // codec → plain Go
+	fromGo   func(any, Primitive, *Options) error // plain Go → codec
 }
 
 var (
@@ -364,7 +364,7 @@ func chainAdapters(candidates []adapter) adapter {
 	return adapter{
 		newCodec: candidates[0].newCodec, // any of them is fine
 		toGo:     candidates[0].toGo,     // we’ll only call this after success
-		fromGo: func(g any, prim Primitive, opts Options) error {
+		fromGo: func(g any, prim Primitive, opts *Options) error {
 			for _, ad := range candidates {
 				if err := ad.fromGo(g, prim, opts); err == nil {
 					return nil // success!

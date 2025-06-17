@@ -26,8 +26,8 @@ func (r testPacket) Len() int                      { return r.length }
 func (r testPacket) Type() EncodingRule            { return r.typ }
 func (r testPacket) Hex() string                   { return formatHex(r) }
 func (r *testPacket) HasMoreData() bool            { return r.offset < len(r.data) }
-func (r *testPacket) TLV() (TLV, error)            { return getTLV(r) }
-func (r *testPacket) WriteTLV(tlv TLV) error       { return writeTLV(r, tlv) }
+func (r *testPacket) TLV() (TLV, error)            { return getTLV(r, nil) }
+func (r *testPacket) WriteTLV(tlv TLV) error       { return writeTLV(r, tlv, nil) }
 func (r *testPacket) Packet(L int) (Packet, error) { return extractPacket(r, L) }
 
 func (r *testPacket) Bytes() ([]byte, error) {
@@ -73,7 +73,7 @@ func (r *testPacket) Free() {
 func (r *testPacket) PeekTLV() (TLV, error) {
 	sub := r.Type().New(r.Data()...)
 	sub.SetOffset(r.Offset())
-	return getTLV(sub)
+	return getTLV(sub, nil)
 }
 
 func (r *testPacket) Compound() (bool, error) {
@@ -269,7 +269,7 @@ func TestPacket_codecov(_ *testing.T) {
 	opts.SetTag(26)
 	Unmarshal(&BERPacket{}, &struct{}{}, WithOptions(opts))
 	var value *EmbeddedPDV
-	unmarshalValue(&BERPacket{}, reflect.ValueOf(value))
+	unmarshalValue(&BERPacket{}, reflect.ValueOf(value), nil)
 
 	opts.SetTag(4)
 	opts.SetClass(3)
@@ -814,4 +814,3 @@ func putTestPacket(p *testPacket) {
 	*p = testPacket{}
 	testPktPool.Put(p)
 }
-

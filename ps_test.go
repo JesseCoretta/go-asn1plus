@@ -99,8 +99,8 @@ func TestPrintableString_encodingRules(t *testing.T) {
 func TestPrintableString_codecov(_ *testing.T) {
 	ps, _ := NewPrintableString(`Hello.`)
 	ps.IsZero()
-	ps.read(nil, TLV{Class: 2, Tag: ps.Tag()}, Options{})
-	ps.read(nil, TLV{Class: 0, Tag: TagOID}, Options{})
-	ps.read(&DERPacket{}, TLV{Class: 0, Tag: ps.Tag(), Length: 100}, Options{})
+	ps.read(nil, TLV{Class: 2, Tag: ps.Tag()}, &Options{})
+	ps.read(nil, TLV{Class: 0, Tag: TagOID}, &Options{})
+	ps.read(&DERPacket{}, TLV{Class: 0, Tag: ps.Tag(), Length: 100}, &Options{})
 	_, _ = NewPrintableString(ps)
 }

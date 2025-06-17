@@ -294,7 +294,7 @@ func getChoicesMethod(field string, x any) (func() Choices, bool) {
 	return choicesFunc, true
 }
 
-func selectFieldChoice(n string, constructed any, pkt Packet, opts Options) (alt Choice, err error) {
+func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (alt Choice, err error) {
 	// First see if the construct type exports a
 	// choices method of <FieldName>Choices. If so,
 	// derive our Choices instance from that.
@@ -346,7 +346,7 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts Options) (alt
 	return
 }
 
-func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts Options) (candidate any, err error) {
+func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts *Options) (candidate any, err error) {
 	// First try choicesTag, if defined
 	alt, ok := choices.byTag(opts.choiceTag)
 	if !ok {

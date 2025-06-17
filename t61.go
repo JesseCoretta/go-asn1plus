@@ -91,7 +91,7 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 	return t61, err
 }
 
-func (r T61String) write(pkt Packet, opts Options) (n int, err error) {
+func (r T61String) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
@@ -103,7 +103,7 @@ func (r T61String) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *T61String) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *T61String) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}

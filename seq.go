@@ -44,7 +44,7 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 		}
 
 		// Begin with the implicit options for this field.
-		var fieldOpts Options
+		var fieldOpts *Options
 		if fieldOpts, err = extractOptions(field, i, auto); err != nil {
 			return
 		}
@@ -59,7 +59,7 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 			}
 		} else {
 			// For all non-CHOICE fields, encode using fieldOpts.
-			if err = marshalValue(fv, sub, &fieldOpts, depth+1); err != nil {
+			if err = marshalValue(fv, sub, fieldOpts, depth+1); err != nil {
 				if !fieldOpts.Optional {
 					err = mkerrf("marshalValue failed for field ", field.Name, ": ", err.Error())
 					return
@@ -81,12 +81,12 @@ func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err
 		// At the outermost level (depth==1), if global options were provided, use them.
 		content := sub.Data()
 		tlv = pkt.Type().newTLV(opts.Class(), seqTag, len(content), true, content...)
-		encoded := encodeTLV(tlv, *opts)
+		encoded := encodeTLV(tlv, opts)
 		pkt.Append(encoded...)
 	} else if tlv, err = sub.TLV(); err == nil {
 		// Inner sequences use the universal SEQUENCE tag (0x30).
 		pkt.Append(0x30)
-		enc := encodeTLV(tlv)
+		enc := encodeTLV(tlv, nil)
 		pkt.Append(encodeLength(sub.Type(), len(enc))...)
 		pkt.Append(enc...)
 	}
@@ -94,7 +94,7 @@ func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err
 	return
 }
 
-func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth int) (err error) {
+func marshalSequenceChoiceField(opts *Options, ch Choice, pkt, sub Packet, depth int) (err error) {
 	if ch.Tag != nil {
 		opts.choiceTag = ch.Tag
 		opts.SetClass(ClassContextSpecific)
@@ -125,7 +125,7 @@ func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth 
 	} else {
 		tmp := pkt.Type().New()
 		defer tmp.Free()
-		if err = marshalValue(reflect.ValueOf(ch.Value), tmp, &opts, depth+1); err == nil {
+		if err = marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err == nil {
 			innerEnc := tmp.Data()
 
 			// Now build an explicit wrapper using opts.
@@ -149,7 +149,7 @@ func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth 
 /*
 unmarshalSequence returns an error following an attempt to write pkt into sequence (struct) v.
 */
-func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err error) {
+func unmarshalSequence(v reflect.Value, pkt Packet, options *Options) (err error) {
 
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
@@ -173,9 +173,9 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 	var auto bool
 	var choicesMap map[string]Choices
 
-	if len(options) > 0 {
-		auto = options[0].Automatic
-		choicesMap = options[0].ChoicesMap
+	if options != nil {
+		auto = options.Automatic
+		choicesMap = options.ChoicesMap
 	}
 
 	typ := v.Type()
@@ -185,7 +185,7 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 			continue
 		}
 
-		var opts Options = implicitOptions()
+		opts := implicitOptions()
 		if field.Tag != "" {
 			if opts, err = extractOptions(field, i, auto); err != nil {
 				return

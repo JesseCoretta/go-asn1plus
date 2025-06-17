@@ -158,7 +158,7 @@ func (r Integer) Le(x Integer) bool {
 	return r.Big().Cmp(x.Big()) <= 0
 }
 
-func (r *Integer) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *Integer) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	// Helper to decode a DER‐encoded integer into a *big.Int.
 	// This applies the DER sign rule: if the first byte’s MSB is set,
 	// the number is considered negative.
@@ -188,7 +188,7 @@ func (r *Integer) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *Integer) readBER(pkt Packet, tlv TLV, opts Options, decoder func([]byte) *big.Int) (err error) {
+func (r *Integer) readBER(pkt Packet, tlv TLV, opts *Options, decoder func([]byte) *big.Int) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		// len(data) was tlv.Length
@@ -208,7 +208,7 @@ func (r *Integer) readBER(pkt Packet, tlv TLV, opts Options, decoder func([]byte
 	return
 }
 
-func (r Integer) write(pkt Packet, opts Options) (n int, err error) {
+func (r Integer) write(pkt Packet, opts *Options) (n int, err error) {
 	var i *big.Int
 	if !r.big {
 		i = newBigInt(r.native)

@@ -9,7 +9,7 @@ func TestOctetString_codecov(_ *testing.T) {
 	o, _ := NewOctetString(`test`)
 	o.Tag()
 	pkt, _ := Marshal(o)
-	o.read(pkt, TLV{typ: DER, Class: 0, Tag: o.Tag(), Length: 1000}, Options{})
+	o.read(pkt, TLV{typ: DER, Class: 0, Tag: o.Tag(), Length: 1000}, nil)
 	_, _ = NewOctetString(nil)
 	_, _ = NewOctetString(struct{}{})
 	NewOctetString(string(rune(0xFFFFF)))

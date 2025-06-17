@@ -168,20 +168,20 @@ PeekTLV returns [TLV] alongside an error. This method is similar to the standard
 func (r *BERPacket) PeekTLV() (TLV, error) {
 	sub := r.Type().New(r.Data()...)
 	sub.SetOffset(r.Offset())
-	return getTLV(sub)
+	return getTLV(sub, nil)
 }
 
 /*
 TLV returns an instance of [TLV] alongside an error following an attempt
 to read the next [BER] tag/length header.
 */
-func (r *BERPacket) TLV() (TLV, error) { return getTLV(r) }
+func (r *BERPacket) TLV() (TLV, error) { return getTLV(r, nil) }
 
 /*
 WriteTLV returns an int following an attempt to write a [BER] tag/length
 header to the receiver buffer.
 */
-func (r *BERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv) }
+func (r *BERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }
 
 /*
 Packet returns an instance of [Packet] alongside an error following an attempt to read

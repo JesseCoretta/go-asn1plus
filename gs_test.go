@@ -53,7 +53,7 @@ func TestGraphicString_codecov(_ *testing.T) {
 	_, _ = NewGraphicString(nil)
 	_, _ = NewGraphicString(string(rune(2)))
 	_, _ = NewGraphicString(struct{}{})
-	od.read(nil, TLV{}, Options{})
+	od.read(nil, TLV{}, &Options{})
 	scanGeneralStringChars(string(rune(0)))
 }
 

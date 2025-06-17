@@ -84,7 +84,7 @@ a known ASN.1 primitive.
 */
 func (r GeneralString) IsPrimitive() bool { return true }
 
-func (r GeneralString) write(pkt Packet, opts Options) (n int, err error) {
+func (r GeneralString) write(pkt Packet, opts *Options) (n int, err error) {
 	switch t := pkt.Type(); t {
 	case BER, DER:
 		off := pkt.Offset()
@@ -96,7 +96,7 @@ func (r GeneralString) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *GeneralString) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *GeneralString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}
@@ -107,7 +107,7 @@ func (r *GeneralString) read(pkt Packet, tlv TLV, opts Options) (err error) {
 	return
 }
 
-func (r *GeneralString) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *GeneralString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 	var data []byte
 	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
 		var gen string

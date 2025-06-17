@@ -79,7 +79,7 @@ func (r OctetString) Len() int {
 	return l
 }
 
-func (r OctetString) write(pkt Packet, opts Options) (n int, err error) {
+func (r OctetString) write(pkt Packet, opts *Options) (n int, err error) {
 
 	switch t := pkt.Type(); t {
 	case BER, DER:
@@ -93,7 +93,7 @@ func (r OctetString) write(pkt Packet, opts Options) (n int, err error) {
 	return
 }
 
-func (r *OctetString) read(pkt Packet, tlv TLV, opts Options) (err error) {
+func (r *OctetString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	if pkt == nil {
 		return mkerr("Nil Packet encountered during read")
 	}
