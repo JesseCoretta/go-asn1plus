@@ -22,15 +22,9 @@ Interested? [Email me](mailto:jesse.coretta@icloud.com).
 
 This package has no dependence upon the `encoding/asn1` package, as this package is meant to serve as an alternative.
 
-## Encoding rules
-
-`asn1plus` presently supports [BER](## "Basic Encoding Rules") and [DER](## "Distinguished Encoding Rules").
-
-Other encoding rules, such as [PER/APER](## "[Aligned] Packed Encoding Rules") and [UPER](## "Unaligned Packed Encoding Rules"), may follow.
-
 ## Features
 
- - Fast ASN.1 encoding/decoding
+ - Fast ASN.1 [BER](## "Basic Encoding Rules") and [DER](## "Distinguished Encoding Rules") encoding/decoding
    - With parallel executions disabled and no cache utilization, this package runs well over 300 unit tests in approximately 0.009s
  - Full ASN.1 primitive type support -- twenty six (26) types are implemented, such as`OctetString`, `Time`, `Real` and many others (including legacy/deprecated types)
  - `SET` and `SEQUENCE` support
@@ -51,15 +45,18 @@ This package relies upon the following packages from the standard library:
   - `math/big`
   - `math/bits`
   - `reflect`
+  - `slices`
   - `sort`
   - `strconv`
   - `strings`
   - `sync`
+  - `sync/atomic`
   - `testing`
   - `time`
   - `unicode`
   - `unicode/utf8`
   - `unicode/utf16`
+  - `unsafe`
 
 This package relies upon the following packages from the `golang/x/exp` library:
 
@@ -115,7 +112,7 @@ The caveat to using tagged instructions in this manner -- as opposed to actual A
 
 This section contains various benchmark and utilization commands.
 
-# Package Benchmarks With Allocation Counts
+### Package Benchmarks With Allocation Counts
 
 ```
 $ go test -run=^$ -bench=. -benchmem ./...
@@ -129,7 +126,7 @@ BenchmarkDecodeDirectoryString-8   	 1000000	      1093 ns/op	     488 B/op	    
 BenchmarkVideotexConstructor-8     	25877163	        39.20 ns/op	       0 B/op	       0 allocs/op
 ```
 
-# CPU/Heap Profiles During Benchmarks
+### CPU/Heap Profiles During Benchmarks
 
 ```
 $ go test -run=^$ -bench=. -cpuprofile=cpu.out -memprofile=mem.out ./...
@@ -145,7 +142,7 @@ PASS
 ok  	github.com/JesseCoretta/go-asn1plus	3.713s
 ```
 
-# Top CPU Consumers
+### Top CPU Consumers
 
 ```
 $ go tool pprof -top cpu.out
@@ -274,7 +271,7 @@ Dropped 64 nodes (cum <= 0.02s)
          0     0% 91.90%      3.49s 97.49%  testing.(*B).runN
 ```
 
-# Top Allocation Sites
+### Top Allocation Sites
 
 ```
 $ go tool pprof -top -alloc_space mem.out
@@ -322,7 +319,7 @@ Dropped 27 nodes (cum <= 3.59MB)
          0     0% 99.41%   714.54MB 99.48%  testing.(*B).runN
 ```
 
-# 20 hottest lines by allocated bytes
+### 20 hottest lines by allocated bytes
 
 ```
 $ go tool pprof -alloc_space -lines -nodecount=20 -top mem.out
