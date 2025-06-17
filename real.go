@@ -487,7 +487,7 @@ func decodeMantissa(mBytes []byte) *big.Int {
 //     NaN   → mant=0  , exp=math.MinInt32
 func float64Components(f float64, base int) (mant *big.Int, exp int, err error) {
 	if base != 2 && base != 8 && base != 10 {
-		return nil, 0, mkerr("unsupported base " + itoa(base))
+		return nil, 0, mkerrf("unsupported base ", itoa(base))
 	}
 
 	switch {

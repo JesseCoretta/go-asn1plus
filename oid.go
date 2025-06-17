@@ -154,7 +154,7 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 
 func newObjectIdentifierStr(dot string) (r ObjectIdentifier, err error) {
 	if !isNumericOID(dot) {
-		err = mkerr("Invalid OID cannot be processed " + dot)
+		err = mkerrf("Invalid OID cannot be processed ", dot)
 		return
 	}
 
@@ -654,8 +654,8 @@ func (r *RelativeOID) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
 	}
 
 	if pkt.Len()-int(data[1]) != len(data) {
-		err = mkerr("Length of bytes does not match the indicated length: " +
-			itoa(pkt.Len()-int(data[1])) + "/" + itoa(len(data)))
+		err = mkerrf("Length of bytes does not match the indicated length: ",
+			itoa(pkt.Len()-int(data[1])), "/", itoa(len(data)))
 		return
 	}
 

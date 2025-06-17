@@ -102,7 +102,6 @@ func TestWrapOIDCtor(t *testing.T) {
 		rawInvoked bool
 	)
 
-	// ---- raw constructor stub ------------------------------------
 	raw := func(a ...any) (ObjectIdentifier, error) {
 		rawInvoked = true
 		rawArgs = a
@@ -118,7 +117,6 @@ func TestWrapOIDCtor(t *testing.T) {
 
 	oidConv := wrapOIDCtor[string](raw, func(s string) any { return s })
 
-	// ---- constraint that toggles a flag --------------------------
 	var constraintHit bool
 	cons := testMakeConstraint[ObjectIdentifier](&constraintHit)
 

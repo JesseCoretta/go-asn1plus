@@ -81,7 +81,7 @@ func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err 
 	case string:
 		// Attempt to parse the string in base 10.
 		if _i, ok := newBigInt(0).SetString(value, 10); !ok {
-			err = mkerr("Invalid string value for ASN.1 INTEGER: " + value)
+			err = mkerrf("Invalid string value for ASN.1 INTEGER: ", value)
 		} else if _i.IsInt64() {
 			i = Integer{native: _i.Int64()}
 		} else {

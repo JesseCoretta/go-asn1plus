@@ -36,8 +36,8 @@ func NewVisibleString(x any, constraints ...Constraint[VisibleString]) (VisibleS
 
 	for i := 0; i < len(raw) && err == nil; i++ {
 		if char := rune(raw[i]); isCtrl(char) {
-			err = mkerr("Invalid character for ASN.1 VISIBLE STRING: #" +
-				itoa(int(char)) + " (is control character)")
+			err = mkerrf("Invalid character for ASN.1 VISIBLE STRING: #",
+				itoa(int(char)), " (is control character)")
 		}
 	}
 

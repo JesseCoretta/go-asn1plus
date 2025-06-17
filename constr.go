@@ -68,7 +68,7 @@ func TimeEqualConstraint[T Temporal](ref T) Constraint[T] {
 	return func(val T) error {
 		// Compare underlying time.Time representations.
 		if !val.Cast().Equal(ref.Cast()) {
-			return mkerr("time " + val.String() + " is not equal to " + ref.String())
+			return mkerrf("time ", val.String(), " is not equal to ", ref.String())
 		}
 		return nil
 	}
@@ -78,8 +78,8 @@ func TimePointRangeConstraint[T Temporal](min, max T) Constraint[T] {
 	return func(val T) error {
 		t := val.Cast()
 		if t.Before(min.Cast()) || t.After(max.Cast()) {
-			return mkerr("time " + val.String() + " is not in allowed range [" +
-				min.String() + ", " + max.String() + "]")
+			return mkerrf("time ", val.String(), " is not in allowed range [",
+				min.String(), ", ", max.String(), "]")
 		}
 		return nil
 	}
@@ -91,8 +91,8 @@ func DurationRangeConstraint(min, max Duration) Constraint[Duration] {
 	return func(val Duration) error {
 		// If val is less than min or greater than max, reject.
 		if val.LessThan(min) || max.LessThan(val) {
-			return mkerr("duration " + val.String() + " is not in the allowed range [" +
-				min.String() + ", " + max.String() + "]")
+			return mkerrf("duration ", val.String(), " is not in the allowed range [",
+				min.String(), ", ", max.String(), "]")
 		}
 		return nil
 	}
@@ -115,9 +115,9 @@ func RecurrenceConstraint[T Temporal](period time.Duration, windowStart, windowE
 		// For demonstration, using UnixNano remainder modulo the period.
 		remainder := time.Duration(t.UnixNano()) % period
 		if remainder < windowStart || remainder > windowEnd {
-			return mkerr("time " + val.String() + " (remainder " + remainder.String() +
-				") is not within the recurrence window [" + windowStart.String() + ", " +
-				windowEnd.String() + "]")
+			return mkerrf("time ", val.String(), " (remainder ", remainder.String(),
+				") is not within the recurrence window [", windowStart.String(), ", ",
+				windowEnd.String(), "]")
 		}
 		return nil
 	}
@@ -153,8 +153,8 @@ func SizeConstraint[T Lengthy](min, max Integer) Constraint[T] {
 		var size Integer
 		if size, err = NewInteger(val.Len()); err == nil {
 			if size.Lt(min) || size.Gt(max) {
-				err = mkerr("size " + size.String() + " is out of bounds [" +
-					min.String() + ", " + max.String() + "]")
+				err = mkerrf("size ", size.String(), " is out of bounds [",
+					min.String(), ", "+max.String(), "]")
 			}
 		}
 		return
@@ -237,8 +237,8 @@ func From(allowed string) Constraint[string] {
 	return func(s string) (err error) {
 		for i := 0; i < len(s) && err == nil; i++ {
 			if _, ok := allowedSet[rune(s[i])]; !ok {
-				err = mkerr("character " + string(s[i]) + " at position " +
-					itoa(i) + " is not allowed")
+				err = mkerrf("character ", string(s[i]), " at position ",
+					itoa(i), " is not allowed")
 			}
 		}
 		return
@@ -258,7 +258,7 @@ func Union[T any](constraints ...Constraint[T]) Constraint[T] {
 		}
 
 		if !passed {
-			err = mkerr("union failed all " + itoa(len(constraints)) + " constraints")
+			err = mkerrf("union failed all ", itoa(len(constraints)), " constraints")
 		}
 		return
 	}
@@ -356,10 +356,10 @@ func collectConstraint[T any](names []string) ([]Constraint[T], error) {
 	for _, n := range names {
 		e, ok := constraintReg[lc(n)]
 		if !ok {
-			return nil, mkerr("unknown constraint " + n)
+			return nil, mkerrf("unknown constraint ", n)
 		}
 		if e.typ != want {
-			return nil, mkerr("constraint " + n + " not applicable to " + want.String())
+			return nil, mkerrf("constraint ", n, " not applicable to ", want.String())
 		}
 		out = append(out, e.fn.(Constraint[T]))
 	}

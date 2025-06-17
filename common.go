@@ -34,6 +34,8 @@ var (
 	pfloat     func(string, int) (float64, error)       = strconv.ParseFloat
 	lc         func(string) string                      = strings.ToLower
 	uc         func(string) string                      = strings.ToUpper
+	appInt     func([]byte, int64, int) []byte          = strconv.AppendInt
+	appUint    func([]byte, uint64, int) []byte         = strconv.AppendUint
 	split      func(string, string) []string            = strings.Split
 	join       func([]string, string) string            = strings.Join
 	hexstr     func([]byte) string                      = hex.EncodeToString

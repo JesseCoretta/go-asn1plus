@@ -600,14 +600,14 @@ func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
 	parseNumber := func(str string, suffix byte) (float64, string, error) {
 		idx := stridxb(str, suffix)
 		if idx < 0 {
-			return 0, str, mkerr("expected suffix " + string(suffix) + " not found in " + str)
+			return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
 		}
 		numStr := str[:idx]
 		// Replace comma with dot if necessary.
 		numStr = replace(numStr, ",", ".", 1)
 		num, err := pfloat(numStr, 64)
 		if err != nil {
-			return 0, str, mkerr("error parsing number " + numStr + ": " + err.Error())
+			return 0, str, mkerrf("error parsing number ", numStr, ": ", err.Error())
 		}
 		return num, str[idx+1:], nil
 	}
@@ -1114,7 +1114,7 @@ func formatGeneralizedTime(t time.Time) string {
 	put2(t.Minute())
 	put2(t.Second())
 
-	// optional fractional seconds (µs precision) ---------------------------
+	// optional fractional seconds (µs precision)
 	nsec := t.Nanosecond()
 	if nsec != 0 {
 		frac := nsec / 1_000 // to microseconds (max 6 digits)

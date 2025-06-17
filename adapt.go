@@ -8,8 +8,9 @@ as string, []byte, time.Time, et al., to ASN.1 primitives (and vice versa).
 import (
 	"math/big"
 	"reflect"
-	"sort"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,9 +40,9 @@ Generic parameters
 
 Arguments
 
-  - ctor   A function that constructs a `T` from a `GoT` and an optional list of constraints.  If your existing constructor is variadic `any`, wrap it with `wrapOIDCtor` or similar.
-  - asGo   Converts *T back into GoT.  Only used by Unmarshal.
-  - aliases  One or more keywords.  Use the empty string "" to mark this adapter as the fallback for the Go type.
+  - ctor   A function that constructs a `T` from a `GoT` and an optional list of constraints
+  - asGo   Converts *T back into GoT.  Only used by Unmarshal
+  - aliases  One or more keywords.  Use the empty string "" to mark this adapter as the fallback for the Go type
 
 # Concurrency
 
@@ -62,7 +63,7 @@ Example (untested)
 		   // variables can include Constraint[ObjectIdentifier].
 	           params := make([]any, len(arcs))
 	           for i, v := range arcs {
-	               params[i] = v               // or int64(v) if your ctor prefers
+	               params[i] = v  // or int64(v) if your ctor prefers
 	           }
 	           return asn1plus.NewObjectIdentifier(params...)
 	       },
@@ -91,7 +92,9 @@ func RegisterAdapter[T any, GoT any](
 	asGo func(*T) GoT,
 	aliases ...string,
 ) {
-	// build a *T and treat it as Primitive
+	mu.Lock()
+	defer mu.Unlock()
+
 	newCodec := func() Primitive {
 		var zero T
 		return any(&zero).(Primitive)
@@ -99,47 +102,45 @@ func RegisterAdapter[T any, GoT any](
 
 	ad := adapter{
 		newCodec: newCodec,
-
 		toGo: func(p Primitive) any {
-			return asGo(any(p).(*T)) // p is actually *T
+			return asGo(any(p).(*T))
 		},
-
 		fromGo: func(g any, prim Primitive, opts Options) error {
 			cs, err := collectConstraint[T](opts.Constraints)
-			if err != nil {
-				return err
+			if err == nil {
+				goVal, ok := g.(GoT)
+				if !ok {
+					expected := reflect.TypeOf(*new(GoT)).String()
+					got := reflect.TypeOf(g).String()
+					return mkerrf("adapter: expected ", expected, ", got ", got)
+				}
+				var val T
+				if val, err = ctor(goVal, cs...); err == nil {
+					*(any(prim).(*T)) = val
+				}
 			}
-
-			goVal, ok := g.(GoT)
-			if !ok {
-				expected := reflect.TypeOf(*new(GoT)).String()
-				got := reflect.TypeOf(g).String()
-				return mkerr("adapter: expected " + expected + ", got " + got)
-			}
-			val, err := ctor(goVal, cs...)
-			if err != nil {
-				return err
-			}
-
-			*(any(prim).(*T)) = val
-			return nil
+			return err
 		},
 	}
+
 	goTypeName := reflect.TypeOf((*GoT)(nil)).Elem().String()
 
 	for _, kw := range aliases {
 		kw = lc(kw)
 		if kw == "" {
-			// keep order of registration
 			defaultAdapters[goTypeName] = append(defaultAdapters[goTypeName], ad)
-			continue
+		} else {
+			adapters[[2]string{goTypeName, kw}] = ad
 		}
-		adapters[[2]string{goTypeName, kw}] = ad
 	}
+
+	atomic.AddInt64(&adaptersVer, 1) // <-- cache invalidation
 }
 
-// AdapterInfo is a read-only description of a single mapping that is
-// currently registered in the global adapter registry.
+/*
+AdapterInfo implements a read-only description of a single adapter mapping
+currently registered in the global adapter registry.
+*/
 type AdapterInfo struct {
 	GoType    string // concrete Go value type, e.g. "string", "[]byte", "*big.Int"
 	Keyword   string // identifier that selects this adapter ("" = default)
@@ -162,38 +163,44 @@ The function is safe for concurrent use: it copies the internal maps
 under a read lock and therefore never exposes mutable state.
 */
 func ListAdapters() []AdapterInfo {
+	curVer := atomic.LoadInt64(&adaptersVer)
+
+	// fast path: cache hit
+	listCacheMu.RLock()
+	if curVer == listCacheVer {
+		out := listCacheData
+		listCacheMu.RUnlock()
+		return out
+	}
+	listCacheMu.RUnlock()
+
+	// slow path: rebuild once
 	mu.RLock()
-	defer mu.RUnlock()
-
-	out := make([]AdapterInfo, 0, len(adapters)+len(defaultAdapters))
-
-	// explicit-keyword entries
+	tmp := getAiSlice()
+	defer putAiSlice(tmp)
+	out := tmp
 	for k, ad := range adapters {
 		out = append(out, AdapterInfo{
 			GoType:    k[0],
 			Keyword:   k[1],
-			Primitive: reflect.TypeOf(ad.newCodec()).Elem().Name(),
+			Primitive: reflect.TypeOf(ad.newCodec()).Elem().String(),
 		})
 	}
-
-	// default keywords (""), possibly several per Go type
 	for goType, slice := range defaultAdapters {
 		for _, ad := range slice {
 			out = append(out, AdapterInfo{
 				GoType:    goType,
 				Keyword:   "",
-				Primitive: reflect.TypeOf(ad.newCodec()).Elem().Name(),
+				Primitive: reflect.TypeOf(ad.newCodec()).Elem().String(),
 			})
 		}
 	}
+	mu.RUnlock()
 
-	sort.Slice(out, func(i, j int) bool { // stable, predictable order
-		if out[i].GoType != out[j].GoType {
-			return out[i].GoType < out[j].GoType
-		}
-		return out[i].Keyword < out[j].Keyword
-	})
-
+	listCacheMu.Lock()
+	listCacheVer = curVer
+	listCacheData = out
+	listCacheMu.Unlock()
 	return out
 }
 
@@ -206,10 +213,21 @@ reuses the public ListAdapters helper so we  don’t touch the protected
 maps directly.
 */
 func adapterKeywords() []string {
-	uniq := make(map[string]struct{}, 32)
+	curVer := atomic.LoadInt64(&adaptersVer)
 
-	for _, ai := range ListAdapters() {
-		if ai.Keyword != "" { // skip the “default” adapters
+	// fast path
+	kwCacheMu.RLock()
+	if curVer == kwCacheVer {
+		res := kwCacheData
+		kwCacheMu.RUnlock()
+		return res
+	}
+	kwCacheMu.RUnlock()
+
+	// slow path: rebuild once
+	uniq := make(map[string]struct{}, 32)
+	for _, ai := range ListAdapters() { // ListAdapters now cheap
+		if ai.Keyword != "" {
 			uniq[ai.Keyword] = struct{}{}
 		}
 	}
@@ -218,9 +236,30 @@ func adapterKeywords() []string {
 	for k := range uniq {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	if len(out) > 0 {
+		slices.Sort(out)
+	}
+
+	keywordSetMu.Lock()
+	keywordSet = make(stringSet, len(out))
+	for _, kw := range out {
+		keywordSet.Add(kw) // `out` is already lower-case
+	}
+	keywordSetMu.Unlock()
+
+	kwCacheMu.Lock()
+	kwCacheVer = curVer
+	kwCacheData = out
+	kwCacheMu.Unlock()
 	return out
 }
+
+type stringSet map[string]struct{}
+
+func (s stringSet) Add(v string) { s[v] = struct{}{} }
+
+// Not needed for now
+//func (s stringSet) Has(v string) bool { _, ok := s[v]; return ok }
 
 /*
 adapter is a private type which serves to "bind" Go types
@@ -233,31 +272,91 @@ type adapter struct {
 }
 
 var (
-	mu              sync.RWMutex              // locker for adapters
-	adapters        = map[[2]string]adapter{} // key: {goType, tagKeyword}
-	defaultAdapters = map[string][]adapter{}  // key: goType
+	mu                 sync.RWMutex // locker for adapters
+	sortedAdapters     []AdapterInfo
+	sortedKeywords     []string
+	adapters           = map[[2]string]adapter{} // key: {goType, tagKeyword}
+	defaultAdapters    = map[string][]adapter{}  // key: goType
+	primitiveTypeNames = make(map[Primitive]string)
+	adaptersVer        int64
 )
+
+var (
+	kwFastMu sync.RWMutex
+	kwFastV  int64
+	kwFast   map[string]struct{}
+)
+
+var (
+	keywordSet   stringSet
+	keywordSetMu sync.RWMutex
+)
+
+// cached results + guards for ListAdapters()
+var (
+	listCacheMu   sync.RWMutex
+	listCacheVer  int64
+	listCacheData []AdapterInfo
+)
+
+// cached results + guards for adapterKeywords()
+var (
+	kwCacheMu   sync.RWMutex
+	kwCacheVer  int64
+	kwCacheData []string
+)
+
+var aiPool = sync.Pool{
+	New: func() any { return make([]AdapterInfo, 0, 64) },
+}
+
+func getAiSlice() []AdapterInfo  { return aiPool.Get().([]AdapterInfo)[:0] }
+func putAiSlice(s []AdapterInfo) { aiPool.Put(s[:0]) } // use with defer
+
+func isAdapterKeyword(token string) bool {
+	cur := atomic.LoadInt64(&adaptersVer)
+
+	kwFastMu.RLock()
+	if cur == kwFastV {
+		_, ok := kwFast[token]
+		kwFastMu.RUnlock()
+		return ok
+	}
+	kwFastMu.RUnlock()
+
+	kwFastMu.Lock()
+	if cur != kwFastV { // rebuild once
+		m := make(map[string]struct{}, 64)
+		for _, kw := range adapterKeywords() {
+			m[kw] = struct{}{}
+		}
+		kwFast, kwFastV = m, cur
+	}
+	_, ok := kwFast[token]
+	kwFastMu.Unlock()
+	return ok
+}
 
 /*
 lookupAdapter returns an instance of adapter alongside an error, following
 an attempt to retrieve a particular adapter through a keyword/type pair.
 */
 func lookupAdapter(goType, kw string) (adapter, error) {
-	kw = lc(kw)
+	kw = lc(kw) // Lowercase once
+
 	if kw != "" {
-		if ad, ok := adapters[[2]string{goType, kw}]; ok {
+		mapKey := [2]string{goType, kw} // Precompute the lookup key
+		if ad, exists := adapters[mapKey]; exists {
 			return ad, nil
 		}
-		// If explicit keyword fails, *do not* fall back to defaults.
-		return adapter{}, mkerr("no adapter for " + goType + " with tag " + kw)
+		return adapter{}, mkerrf("no adapter for ", goType, " with tag ", kw)
 	}
 
-	list := defaultAdapters[goType]
-	if len(list) == 0 {
-		return adapter{}, mkerr("no adapter for " + goType)
+	list, exists := defaultAdapters[goType]
+	if !exists || len(list) == 0 {
+		return adapter{}, mkerrf("no adapter for ", goType)
 	}
 
-	// return a “chained” adapter that tries each candidate until one works
 	return chainAdapters(list), nil
 }
 
@@ -287,9 +386,7 @@ combination and the caller should fall back to its old code path.
 func adapterForValue(v reflect.Value, tagKeyword string) (ad adapter, ok bool) {
 	// Strip pointer for convenience; a *string field should behave the same
 	// as a string field for adapter selection.
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
+	v = derefValuePtr(v)
 	goTypeName := v.Type().String() // e.g. "string", "[]uint8", "*big.Int"
 
 	ad, err := lookupAdapter(goTypeName, tagKeyword)

@@ -90,7 +90,7 @@ reader would be expected to devise their own such type.
 	}
 */
 func ExampleSizeConstraint_sequenceOf() {
-	// Define lower and upper bounds for the size constraint using your custom Integer type.
+	// Define lower and upper bounds for the size constraint.
 	lower, _ := NewInteger(1)
 	upper, _ := NewInteger(3)
 

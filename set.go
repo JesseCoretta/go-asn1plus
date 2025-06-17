@@ -62,16 +62,12 @@ func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 
 	var elements [][]byte
 	for i := 0; i < v.Len(); i++ {
-
-		tmpBuf := getBuf()
-		defer putBuf(tmpBuf)
-		tmp := pkt.Type().New((*tmpBuf)...)
-
+		tmp := pkt.Type().New()
 		subOpts := clearChildOpts(opts)
 
 		// DO NOT pass global options to inner SET elements.
 		if err := marshalValue(v.Index(i), tmp, subOpts, depth+1); err != nil {
-			return mkerr("marshalSet: error marshaling element " + itoa(i) + ": " + err.Error())
+			return mkerrf("marshalSet: error marshaling element ", itoa(i), ": ", err.Error())
 		}
 		elements = append(elements, tmp.Data())
 	}
@@ -82,6 +78,7 @@ func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 		})
 	}
 
+	// TODO: retire this
 	bufPtr := getBuf()
 	concatenated := *bufPtr
 	for _, e := range elements {
@@ -89,8 +86,9 @@ func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 	}
 
 	tlv := pkt.Type().newTLV(ClassUniversal, TagSet, len(concatenated), true, concatenated...)
-	encoded := encodeTLV(tlv) // encodeTLV gets its own pool buf
-	putBuf(bufPtr)            // give back big concat slice
+	encoded := encodeTLV(tlv)
+	// TODO: and this.
+	putBuf(bufPtr)
 
 	pkt.Append(encoded...)
 	return nil
@@ -123,8 +121,8 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts ...Options) error {
 				found = true
 				break
 			} else {
-				return mkerr("unmarshalSet: struct field " + field.Name +
-					" is not a slice; got " + f.Kind().String())
+				return mkerrf("unmarshalSet: struct field ", field.Name,
+					" is not a slice; got ", f.Kind().String())
 			}
 		}
 		if !found {
@@ -155,7 +153,7 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts ...Options) error {
 		}
 
 		if err != nil {
-			return mkerr("unmarshalSet: error unmarshaling SET element: " + err.Error())
+			return mkerrf("unmarshalSet: error unmarshaling SET element: ", err.Error())
 		}
 		elements = append(elements, tmp)
 	}

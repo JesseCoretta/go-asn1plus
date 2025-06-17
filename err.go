@@ -5,6 +5,8 @@ err.go contains error constructors and literals used frequently.
 throughout this package.
 */
 
+import "sync"
+
 var (
 	errorAmbiguousChoice       error = mkerr("ambiguous alternative: multiple registered alternatives match the instance")
 	errorNoChoicesAvailable    error = mkerr("no CHOICE alternatives available")
@@ -28,25 +30,25 @@ var (
 )
 
 func errorNoChoiceMatched(name string) (err error) {
-	return mkerr(errorNoChoiceForType.Error() + " " + name)
+	return mkerrf(errorNoChoiceForType.Error() + " " + name)
 }
 
 func errorASN1Expect(a, b any, typ string) (err error) {
 	switch typ {
 	case "Tag":
 		i, j := a.(int), b.(int)
-		err = mkerr("Expect" + typ + ": wrong tag: got " + itoa(j) + " (" +
+		err = mkerrf("Expect" + typ + ": wrong tag: got " + itoa(j) + " (" +
 			TagNames[j] + "), want " + itoa(i) + " (" + TagNames[i] + ")")
 	case "Class":
 		i, j := a.(int), b.(int)
-		err = mkerr("Expect" + typ + ": wrong class: got " + itoa(j) + " (" +
+		err = mkerrf("Expect" + typ + ": wrong class: got " + itoa(j) + " (" +
 			ClassNames[j] + "), want " + itoa(i) + " (" + ClassNames[i] + ")")
 	case "Length":
 		i, j := a.(int), b.(int)
-		err = mkerr("Expect" + typ + ": wrong length: got " + itoa(j) + ", want " + itoa(i))
+		err = mkerrf("Expect" + typ + ": wrong length: got " + itoa(j) + ", want " + itoa(i))
 	case "Compound":
 		i, j := a.(bool), b.(bool)
-		err = mkerr("Expect" + typ + ": wrong compound: got " + bool2str(j) + " (" +
+		err = mkerrf("Expect" + typ + ": wrong compound: got " + bool2str(j) + " (" +
 			CompoundNames[j] + "), want " + bool2str(i) + " (" + CompoundNames[i] + ")")
 	}
 
@@ -55,7 +57,7 @@ func errorASN1Expect(a, b any, typ string) (err error) {
 
 func errorASN1TagInClass(expectClass, expectTag, class, tag int) (err error) {
 	if class != expectClass || tag != expectTag {
-		err = mkerr("expected tag " + TagNames[expectTag] + " in class " +
+		err = mkerrf("expected tag " + TagNames[expectTag] + " in class " +
 			ClassNames[expectClass] + ", got tag " + itoa(tag) +
 			" in class " + itoa(class))
 	}
@@ -64,7 +66,39 @@ func errorASN1TagInClass(expectClass, expectTag, class, tag int) (err error) {
 }
 
 func errorASN1ConstructedTagClass(wantTLV, gotTLV TLV) error {
-	return mkerr("Constructed: expected compound element with class " + itoa(wantTLV.Class) +
+	return mkerrf("Constructed: expected compound element with class " + itoa(wantTLV.Class) +
 		" and tag " + itoa(wantTLV.Tag) + ", got class " + itoa(gotTLV.Class) + " and tag " + itoa(gotTLV.Tag) +
 		", compound:" + bool2str(gotTLV.Compound))
+}
+
+var errCache sync.Map
+
+func mkerrf(parts ...any) error {
+	if len(parts) == 1 {
+		if s, ok := parts[0].(string); ok {
+			if v, hit := errCache.Load(s); hit {
+				return v.(error)
+			}
+		}
+	}
+
+	b := newStrBuilder()
+	for _, p := range parts {
+		switch v := p.(type) {
+		case string:
+			b.WriteString(v)
+		case int:
+			b.WriteString(itoa(v))
+		default:
+			b.WriteString("<not supported>")
+		}
+	}
+	msg := b.String()
+
+	if v, hit := errCache.Load(msg); hit {
+		return v.(error)
+	}
+	e := mkerr(msg)
+	errCache.Store(msg, e)
+	return e
 }

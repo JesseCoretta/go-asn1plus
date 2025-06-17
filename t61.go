@@ -75,7 +75,7 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 	for i := 0; i < len(raw) && err == nil; i++ {
 		char := rune(raw[i])
 		if !isT61Char(char) {
-			err = mkerr("Incompatible character for ASN.1 T.61 STRING: " + string(char))
+			err = mkerrf("Incompatible character for ASN.1 T.61 STRING: ", string(char))
 		}
 	}
 

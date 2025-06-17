@@ -61,6 +61,10 @@ type Packet interface {
 	// at the input integer position.
 	Packet(int) (Packet, error)
 
+	// HasMoreData returns a Boolean value indicative of content
+	// existing past the point of the current offset position.
+	HasMoreData() bool
+
 	// PeekTLV returns an instance of TLV alongside an error following
 	// an attempt to determine the current TLV without advancing the
 	// offset currently set within the underlying buffer.
@@ -97,6 +101,7 @@ func (_ invalidPacket) Class() (int, error)          { return -1, errorInvalidPa
 func (_ invalidPacket) Tag() (int, error)            { return -1, errorInvalidPacket }
 func (_ invalidPacket) Bytes() ([]byte, error)       { return nil, errorInvalidPacket }
 func (_ invalidPacket) FullBytes() ([]byte, error)   { return nil, errorInvalidPacket }
+func (_ invalidPacket) HasMoreData() bool            { return false }
 func (_ invalidPacket) Compound() (bool, error)      { return false, errorInvalidPacket }
 func (_ invalidPacket) Offset() int                  { return 0 }
 func (_ invalidPacket) Packet(_ int) (Packet, error) { return invalidPacket{}, errorInvalidPacket }
@@ -110,16 +115,14 @@ func (_ invalidPacket) WriteTLV(_ TLV) error         { return errorInvalidPacket
 func (_ invalidPacket) TLV() (TLV, error)            { return TLV{}, errorInvalidPacket }
 
 func extractPacket(pkt Packet, L int) (sub Packet, err error) {
+	sub = invalidPacket{}
+
 	if pkt.Offset()+L > pkt.Len() {
 		err = errorASN1Expect(L, pkt.Len()-pkt.Offset(), "Length")
 	} else {
-		tmpBuf := getBuf()
-		defer putBuf(tmpBuf)
-		inner := pkt.Type().New((*tmpBuf)...)
-		inner.Append(pkt.Data()[pkt.Offset() : pkt.Offset()+L]...)
+		inner := pkt.Type().New(pkt.Data()[pkt.Offset() : pkt.Offset()+L]...)
 		pkt.SetOffset(pkt.Offset() + L)
-		sub = pkt.Type().New((*tmpBuf)...)
-		sub.Append(inner.Data()...)
+		sub = pkt.Type().New(inner.Data()...)
 	}
 
 	return sub, err
@@ -258,22 +261,18 @@ func parseTagIdentifier(b []byte) (tag int, idLen int, err error) {
 // • For DER:  indefinite-length encodings are **rejected** per X.690 §10.1.
 // • For BER:  -1 length means “scan until matching EOC (00 00)”.
 func parseBody(b []byte, off int, typ EncodingRule) ([]byte, error) {
-	// ─── Work on the slice that actually starts at `off`
 	sub := b[off:]
 
-	// 1. identifier
 	_, idLen, err := parseTagIdentifier(sub)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. length
 	length, lenLen, err := parseLength(sub[idLen:])
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. body boundaries relative to *original* buffer
 	start := off + idLen + lenLen
 
 	if length >= 0 {
@@ -288,7 +287,7 @@ func parseBody(b []byte, off int, typ EncodingRule) ([]byte, error) {
 	if typ != BER {
 		return nil, errorIndefiniteProhibited
 	}
-	relEnd, err := findEOC(sub[idLen+lenLen:]) // search inside `sub`
+	relEnd, err := findEOC(sub[idLen+lenLen:])
 	if err != nil {
 		return nil, err
 	}
@@ -427,10 +426,7 @@ bufPool implements a sync.Pool for efficient
 slice operations.
 */
 var bufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 8192)
-		return &b
-	},
+	New: func() any { return new([]byte) },
 }
 
 func getBuf() *[]byte  { return bufPool.Get().(*[]byte) }

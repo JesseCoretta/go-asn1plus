@@ -48,8 +48,8 @@ type Primitive interface {
 
 func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte, err error) {
 	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
-		err = mkerr("Invalid explicit " + TagNames[tag] + " header in " +
-			pkt.Type().String() + " packet; received TLV: " + tlv.String())
+		err = mkerrf("Invalid explicit ", TagNames[tag], " header in ",
+			pkt.Type().String(), " packet; received TLV: ", tlv.String())
 		return
 	}
 	if len(pkt.Data()) < 2 {
@@ -60,9 +60,7 @@ func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (dat
 	// When an explicit wrapper is used, we assume its value holds the
 	// complete encoding of the inner TLV. Here we re‑parse that inner TLV
 	// and return its “trimmed” value.
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	innerPkt := pkt.Type().New((*tmpBuf)...)
+	innerPkt := pkt.Type().New(tlv.Value...)
 	innerPkt.Append(tlv.Value...)
 	innerPkt.SetOffset(0)
 
@@ -93,8 +91,8 @@ func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts Options) (dat
 	} else {
 		/* no overlay: expect universal header */
 		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
-			return nil, mkerr("Invalid " + TagNames[tag] + " header in " +
-				pkt.Type().String() + " packet; received TLV: " + tlv.String())
+			return nil, mkerrf("Invalid ", TagNames[tag], " header in ",
+				pkt.Type().String(), " packet; received TLV: ", tlv.String())
 		}
 	}
 
@@ -109,7 +107,7 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte
 	if data, err = primitiveCheckReadOverride(tag, pkt, tlv, opts); err == nil {
 		if len(data) == 0 {
 			if tag != TagNull {
-				err = mkerr("Empty " + TagNames[tag] + " content")
+				err = mkerrf("Empty ", TagNames[tag], " content")
 			}
 		} else {
 			// Chop the indefinite 0x00 0x00 markers IF we're
@@ -127,8 +125,8 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts Options) (data []byte
 	}
 
 	if len(data) == 0 && tag != TagNull {
-		err = mkerr("Empty " + TagNames[tag] + " content in " +
-			pkt.Type().String() + " Packet")
+		err = mkerrf("Empty ", TagNames[tag], " content in ",
+			pkt.Type().String(), " Packet")
 	}
 
 	return
@@ -146,8 +144,8 @@ func primitiveCheckReadOverride(tag int, pkt Packet, tlv TLV, opts Options) (dat
 	} else {
 		// No tagging override: treat as UNIVERSAL.
 		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
-			err = mkerr("Invalid " + TagNames[tag] + " header in " +
-				pkt.Type().String() + " packet; received TLV: " + tlv.String())
+			err = mkerrf("Invalid ", TagNames[tag], " header in ",
+				pkt.Type().String(), " packet; received TLV: ", tlv.String())
 			return
 		}
 

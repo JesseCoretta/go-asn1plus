@@ -118,7 +118,7 @@ func (r *Enumerated) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
 	}
 
 	if class != tlv.Class || tag != tlv.Tag || tlv.Compound {
-		err = mkerr("Invalid ASN.1 ENUMERATED header in " + pkt.Type().String() + " packet")
+		err = mkerrf("Invalid ASN.1 ENUMERATED header in ", pkt.Type().String(), " packet")
 	} else if pkt.Offset()+tlv.Length > pkt.Len() {
 		err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
 	} else {

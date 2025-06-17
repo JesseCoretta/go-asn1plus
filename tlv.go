@@ -131,8 +131,8 @@ func encodeTLV(t TLV, opts ...Options) []byte {
 
 func getTLV(r Packet, opts ...Options) (TLV, error) {
 	if r.Offset() >= r.Len() {
-		return TLV{}, mkerr(r.Type().String() + " Packet.TLV: no data available at offset " +
-			itoa(r.Offset()) + " (len:" + itoa(r.Len()) + ")")
+		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: no data available at offset ",
+			itoa(r.Offset()), " (len:", itoa(r.Len()), ")")
 	}
 
 	d := r.Data()
@@ -147,8 +147,8 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 
 	tag, idLen, err := parseTagIdentifier(sub)
 	if err != nil {
-		return TLV{}, mkerr(r.Type().String() +
-			" Packet.TLV: error reading tag: " + err.Error())
+		return TLV{}, mkerrf(r.Type().String(),
+			" Packet.TLV: error reading tag: ", err.Error())
 	}
 	r.SetOffset(r.Offset() + idLen)
 
@@ -170,8 +170,8 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 
 	length, lenLen, err := parseLength(d[r.Offset():])
 	if err != nil {
-		return TLV{}, mkerr(r.Type().String() +
-			" Packet.TLV: error reading length: " + err.Error())
+		return TLV{}, mkerrf(r.Type().String(),
+			" Packet.TLV: error reading length: ", err.Error())
 	}
 	r.SetOffset(r.Offset() + lenLen)
 
@@ -188,8 +188,8 @@ func getTLV(r Packet, opts ...Options) (TLV, error) {
 
 func writeTLV(r Packet, t TLV, opts ...Options) error {
 	if !(t.Type() == BER || t.Type() == DER) {
-		return mkerr(r.Type().String() + " Packet.WriteTLV: expected " +
-			r.Type().String() + ", got " + t.Type().String())
+		return mkerrf(r.Type().String(), " Packet.WriteTLV: expected ",
+			r.Type().String(), ", got ", t.Type().String())
 	}
 
 	encoded := encodeTLV(t, opts...)

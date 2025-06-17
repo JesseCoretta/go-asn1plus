@@ -26,7 +26,7 @@ func NewOctetString(x any, constraints ...Constraint[OctetString]) (oct OctetStr
 	runes := []rune(str)
 	for i := 0; i < len(runes) && err == nil; i++ {
 		if !(0x0000 <= runes[i] && runes[i] <= 0x00FF) {
-			err = mkerr("Invalid character " + string(runes[i]) + " in string")
+			err = mkerrf("Invalid character ", string(runes[i]), " in string")
 		}
 	}
 

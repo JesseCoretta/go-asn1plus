@@ -304,8 +304,6 @@ func TestNewDuration_invalidInputs(t *testing.T) {
 	}
 }
 
-// constraint failure: > maxDur -------------------------------------------------
-
 func TestNewDuration_constraintViolation(t *testing.T) {
 	tooBig := "P20Y" // 20 years, well above maxDur
 	if _, err := NewDuration(tooBig, DurationRangeConstraint(Duration{}, Duration{Years: 9})); err == nil {

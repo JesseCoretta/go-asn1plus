@@ -82,7 +82,7 @@ func checkIA5String(raw string) (err error) {
 	for i := 0; i < len(runes) && err == nil; i++ {
 		var char rune = runes[i]
 		if !(0x0000 <= char && char <= 0x00FF) {
-			err = mkerr("Invalid IA5 String character: " + string(char))
+			err = mkerrf("Invalid IA5 String character: ", string(char))
 		}
 	}
 

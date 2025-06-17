@@ -7,7 +7,10 @@ to the encoding/decoding process through use of struct
 tags OR manual delivery of an Options instance.
 */
 
-import "reflect"
+import (
+	"reflect"
+	"sync"
+)
 
 /*
 Options implements a simple encapsulator for encoding options. Instances
@@ -35,29 +38,35 @@ type Options struct {
 	unidentified []string // for unidentified or superfluous keywords
 }
 
-// defaultOptions returns default options (e.g., no explicit tagging, context-specific for tagged fields)
-func defaultOptions() Options {
-	// For tagged fields we typically default to context-specific unless overridden.
-	class := ClassContextSpecific
-	return Options{
-		class: &class, // by default, a "tag:x" implies context-specific.
-	}
+// immutable template copied by value.
+var ctxspec = ClassContextSpecific
+var defaultOptionsTemplate = Options{
+	class: &ctxspec, // “tag:x” -> context-specific unless overridden
 }
 
+/*
+defaultOptions returns default options (e.g., no explicit
+tagging, context-specific for tagged fields)
+*/
+func defaultOptions() Options { return defaultOptionsTemplate }
+
+/*
+implicitOptions returns an instance of Options identical to
+that returned by defaultOptions, except with the class replaced
+with ClassUniversal.
+*/
 func implicitOptions() Options {
 	opts := defaultOptions()
 	opts.SetClass(ClassUniversal)
 	return opts
 }
 
-// add appends val to dst if cond is true.
 func addStringConfigValue(dst *[]string, cond bool, val string) {
 	if cond {
 		*dst = append(*dst, val)
 	}
 }
 
-// stringifyDefault converts r.Default into its tag-ready form.
 func stringifyDefault(d any) string {
 	switch v := d.(type) {
 	case nil:
@@ -134,46 +143,81 @@ func NewOptions(tag string) (Options, error) {
 	return opts, err
 }
 
+// parseOptions parses the raw tag string (e.g. `"tag:3,optional"`)
+// and returns a fully-populated Options value.
+//
+// In hot paths we borrow an *Options from optPool, work on it, then copy
+// the final value out so the caller still receives a detached struct.
 func parseOptions(tagStr string) (opts Options, err error) {
-	opts = implicitOptions()
+	po := borrowOptions()   // ← pooled working object
+	*po = implicitOptions() // start from defaults
+
 	tagStr = trim(tagStr, `"`)
 	tokens := split(tagStr, ",")
 
-	for _, token := range tokens {
-		token = trimS(token)
+	for _, raw := range tokens {
+		token := trimS(raw)
+
 		switch {
 		case hasPfx(token, "tag:"):
 			numStr := trimPfx(token, "tag:")
-			var tag int
-			if tag, err = atoi(numStr); err != nil || tag < 0 {
-				err = mkerr("invalid tag number " + numStr)
-				return opts, err
+			n, convErr := atoi(numStr)
+			if convErr != nil || n < 0 {
+				err = mkerrf("invalid tag number ", numStr)
+				goto Done
 			}
-			opts.SetTag(tag)
-			// If a tag is provided and no class keyword is present,
-			// use context-specific instead of universal. This may be
-			// overridden.
-			opts.SetClass(ClassContextSpecific)
-		case strInSlice(token, []string{"explicit", "optional", "automatic", "set", "omitempty", "indefinite"}):
-			opts.setBool(token)
+			po.SetTag(n)
+			po.SetClass(ClassContextSpecific)
+
+		case isBoolKeyword(token):
+			po.setBool(token)
+
 		case hasPfx(token, "constraint:"):
-			opts.Constraints = append(opts.Constraints, trimPfx(token, "constraint:"))
+			po.Constraints = append(po.Constraints,
+				trimPfx(token, "constraint:"))
+
 		case hasPfx(token, "choices:"):
-			opts.Choices = trimPfx(token, "choices:")
+			po.Choices = trimPfx(token, "choices:")
+
 		case hasPfx(token, "default:"):
-			opts.parseOptionDefault(token)
+			po.parseOptionDefault(token)
+
+		case isClassKeyword(token):
+			po.writeClassToken(token)
+
 		default:
-			if isClass := opts.writeClassToken(token); !isClass {
-				opts.parseOptionKeyword(token)
-			}
+			po.parseOptionKeyword(token)
 		}
 	}
 
-	if len(opts.unidentified) > 0 {
-		err = mkerr("Unidentified or superfluous keywords found: " + join(opts.unidentified, ` `))
+	if len(po.unidentified) > 0 {
+		err = mkerrf("Unidentified or superfluous keywords found: ",
+			join(po.unidentified, ` `))
 	}
 
-	return opts, err
+Done:
+	opts = *po         // detach result from pooled object
+	releaseOptions(po) // ALWAYS return to pool
+	return
+}
+
+func isBoolKeyword(tok string) bool  { _, ok := boolKeywords[tok]; return ok }
+func isClassKeyword(tok string) bool { _, ok := classKeywords[tok]; return ok }
+
+var boolKeywords = map[string]struct{}{
+	"explicit":   {},
+	"optional":   {},
+	"automatic":  {},
+	"set":        {},
+	"omitempty":  {},
+	"indefinite": {},
+}
+
+var classKeywords = map[string]struct{}{
+	"application":      {},
+	"context-specific": {},
+	"context specific": {},
+	"private":          {},
 }
 
 func (r *Options) setBool(name string) {
@@ -236,7 +280,7 @@ func (r *Options) parseOptionDefault(token string) {
 func (r *Options) parseOptionKeyword(token string) {
 	// Assume unidentified tag value is a string encoding label,
 	// but only set it once.
-	if strInSlice(token, adapterKeywords()) {
+	if isAdapterKeyword(token) {
 		if r.Identifier == "" {
 			r.Identifier = swapAlias(token)
 		} else {
@@ -262,8 +306,8 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 	if tagStr, ok := field.Tag.Lookup("asn1"); ok {
 		var parsedOpts Options
 		if parsedOpts, err = parseOptions(tagStr); err != nil {
-			err = mkerr("Marshal: error parsing tag for field " + field.Name +
-				"(" + itoa(fieldNum) + "): " + err.Error())
+			err = mkerrf("Marshal: error parsing tag for field ", field.Name,
+				"(", itoa(fieldNum), "): ", err.Error())
 		} else {
 			opts = parsedOpts
 		}
@@ -334,4 +378,14 @@ func clearChildOpts(o *Options) (c *Options) {
 	}
 
 	return
+}
+
+var optPool = sync.Pool{
+	New: func() any { return &Options{} }, // zero-value Options
+}
+
+func borrowOptions() *Options { return optPool.Get().(*Options) }
+func releaseOptions(o *Options) {
+	*o = Options{} // zero all fields
+	optPool.Put(o)
 }

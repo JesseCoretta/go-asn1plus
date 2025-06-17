@@ -133,7 +133,7 @@ func (r *Choices) Register(instance any, opts ...string) error {
 	}
 
 	if _, dup := r.tagIx[options.Tag]; dup {
-		return mkerr("duplicate CHOICE tag " + itoa(options.Tag))
+		return mkerrf("duplicate CHOICE tag ", itoa(options.Tag))
 	}
 	r.tagIx[options.Tag] = len(r.alts)
 	r.alts = append(r.alts, choiceAlternative{
@@ -352,7 +352,7 @@ func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts Options
 	if !ok {
 		// FALLBACK: Lookup the candidate alternative using opts.Tag
 		if alt, ok = choices.byTag(opts.Tag()); !ok {
-			return nil, mkerr("unknown choice tag: " + itoa(opts.Tag()))
+			return nil, mkerrf("unknown choice tag: ", itoa(opts.Tag()))
 		}
 	}
 

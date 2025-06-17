@@ -53,7 +53,7 @@ func NewNumericString(x any, constraints ...Constraint[NumericString]) (ns Numer
 		// Validate that raw contains only digits and space.
 		for _, c := range raw {
 			if !(c == ' ' || (c >= '0' && c <= '9')) {
-				err = mkerr("Illegal character for ASN.1 NUMERICSTRING: " + string(c))
+				err = mkerrf("Illegal character for ASN.1 NUMERICSTRING: ", string(c))
 				break
 			}
 		}

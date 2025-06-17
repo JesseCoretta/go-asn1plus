@@ -78,7 +78,7 @@ unsupported options statements just prior to the marshaling process.
 func checkBadMarshalOptions(rule EncodingRule, o *Options) (err error) {
 	if o != nil {
 		if rule != BER && o.Indefinite {
-			err = mkerr("Use of INDEFINITE-LENGTH is incompatible with encoding rule " + rule.String())
+			err = mkerrf("Use of INDEFINITE-LENGTH is incompatible with encoding rule ", rule.String())
 		}
 	}
 
@@ -103,9 +103,7 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 			return mkerr("choice tag undefined")
 		}
 
-		tmpBuf := getBuf()
-		defer putBuf(tmpBuf)
-		tmp := pkt.Type().New((*tmpBuf)...)
+		tmp := pkt.Type().New()
 
 		if err := marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err != nil {
 			return err
@@ -137,7 +135,7 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 	case reflect.Struct:
 		err = marshalSequence(v, pkt, opts, depth+1)
 	default:
-		err = mkerr("marshalValue: unsupported type " + v.Kind().String())
+		err = mkerrf("marshalValue: unsupported type ", v.Kind().String())
 	}
 	pkt.SetOffset(0)
 	return err
@@ -189,10 +187,7 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 }
 
 func wrapMarshalExplicit(pkt Packet, prim Primitive, opts *Options) (err error) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	tmp := pkt.Type().New((*tmpBuf)...)
-
+	tmp := pkt.Type().New()
 	innerOpts := *opts
 	innerOpts.Explicit = false
 	innerOpts.tag = nil
@@ -293,7 +288,7 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 
 		goVal := reflect.ValueOf(ad.toGo(codec))
 		if !goVal.Type().AssignableTo(v.Type()) {
-			err = mkerr("type mismatch decoding " + kw)
+			err = mkerrf("type mismatch decoding ", kw)
 			return
 		}
 		v.Set(goVal)
@@ -303,7 +298,7 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 	if val := v.Interface(); isPrimitive(val) {
 		var tlv TLV
 		if tlv, err = pkt.TLV(); err != nil {
-			err = mkerr("unmarshalValue: failed reading tag/length for primitive: " + err.Error())
+			err = mkerrf("unmarshalValue: failed reading tag/length for primitive: ", err.Error())
 			return
 		}
 		startOffset := pkt.Offset()
@@ -319,7 +314,7 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 	case reflect.Struct:
 		err = unmarshalSequence(v, pkt, opts)
 	default:
-		err = mkerr("unmarshalValue: unsupported type " + v.Kind().String())
+		err = mkerrf("unmarshalValue: unsupported type ", v.Kind().String())
 	}
 
 	return
@@ -328,14 +323,11 @@ func unmarshalValue(pkt Packet, v reflect.Value, options ...Options) (err error)
 func unmarshalHandleTag(kw string, pkt Packet, tlv TLV, opts Options) (err error) {
 	if opts.HasTag() {
 		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
-			err = mkerr("identifier mismatch decoding " + kw)
+			err = mkerrf("identifier mismatch decoding ", kw)
 		} else if opts.Explicit {
-			tmpBuf := getBuf()
-			defer putBuf(tmpBuf)
-			inner := pkt.Type().New((*tmpBuf)...)
-			inner.Append(tlv.Value...)
+			inner := pkt.Type().New()
+			inner.Append(tlv.Value...) // TODO: determine why this is necessary (else, breaks "TestSequence_FieldsExplicit" via New(data...))
 			if tlv, err = inner.TLV(); err == nil {
-				//pkt = inner
 				opts.Explicit = false
 				opts.tag = nil
 				opts.class = nil

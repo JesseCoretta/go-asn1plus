@@ -409,13 +409,13 @@ func verifyBitStringDigitSet(base int, digits []byte) (err error) {
 		c := digits[i]
 		if base == 2 {
 			if c != '0' && c != '1' {
-				err = mkerr("non-binary character in ASN.1 BITSTRING: " + string(c))
+				err = mkerrf("non-binary character in ASN.1 BITSTRING: ", string(c))
 			}
 		} else { // base == 16
 			if !((c >= '0' && c <= '9') ||
 				(c >= 'a' && c <= 'f') ||
 				(c >= 'A' && c <= 'F')) {
-				err = mkerr("non-hex character in ASN.1 BITSTRING: " + string(c))
+				err = mkerrf("non-hex character in ASN.1 BITSTRING: ", string(c))
 			}
 		}
 	}
@@ -465,12 +465,12 @@ func (r *BitString) readBER(pkt Packet, tlv TLV, opts Options) (err error) {
 			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
 		} else {
 			if len(data) < 1 {
-				err = mkerr(pkt.Type().String() + " BIT STRING is missing the unused bits byte")
+				err = mkerrf(pkt.Type().String(), " BIT STRING is missing the unused bits byte")
 				return
 			}
 			unused := int(data[0])
 			if unused < 0 || unused > 7 {
-				return mkerr("Invalid unused bits count: " + itoa(unused))
+				return mkerrf("Invalid unused bits count: ", itoa(unused))
 			}
 			r.Bytes = data[1:] // The remaining bytes are the actual bit content.
 

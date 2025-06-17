@@ -79,7 +79,7 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 	for i := 0; i < len(raw) && err == nil; i++ {
 		char := rune(raw[i])
 		if !isPrintableStringChar(char) {
-			err = mkerr("Invalid printable string character: " + string(char))
+			err = mkerrf("Invalid printable string character: ", string(char))
 		}
 	}
 

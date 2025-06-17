@@ -47,7 +47,7 @@ func NewVideotexString(x any, constraints ...Constraint[VideotexString]) (Videot
 	runes := []rune(raw)
 	for i := 0; i < len(runes) && err == nil; i++ {
 		if char := runes[i]; !isVideotex(char) {
-			err = mkerr("Invalid ASN.1 VIDEOTEX STRING character: " + itoa(int(char)))
+			err = mkerrf("Invalid ASN.1 VIDEOTEX STRING character: ", itoa(int(char)))
 		}
 	}
 

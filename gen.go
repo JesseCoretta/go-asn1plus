@@ -47,7 +47,7 @@ func NewGeneralString(x any, constraints ...Constraint[GeneralString]) (gen Gene
 func scanGeneralStringChars(x string) (gs string, err error) {
 	for _, ch := range x {
 		if !isGeneralStringChar(ch) {
-			err = mkerr("Invalid character for ASN.1 GENERAL STRING: " + string(ch))
+			err = mkerrf("Invalid character for ASN.1 GENERAL STRING: ", string(ch))
 		}
 	}
 

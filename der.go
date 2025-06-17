@@ -4,6 +4,8 @@ package asn1plus
 der.go contains DER-focused components. See also ber.go.
 */
 
+import "sync"
+
 /*
 DERPacket encapsulates an [ITU-T Rec. X.690] DER-encoded byte
 slice and an offset. It extends from [BERPacket].
@@ -98,9 +100,26 @@ func (r *DERPacket) Data() []byte { return r.data }
 Append appends data to the receiver instance.
 */
 func (r *DERPacket) Append(data ...byte) {
-	if r != nil {
-		r.data = append(r.data, data...)
+	if r == nil || len(data) == 0 {
+		return
 	}
+	need := len(r.data) + len(data)
+
+	if cap(r.data) < need {
+		bufPtr := bufPool.Get().(*[]byte)
+		if cap(*bufPtr) < need {
+			*bufPtr = make([]byte, 0, need*2)
+		}
+		newBuf := append((*bufPtr)[:0], r.data...)
+
+		if cap(r.data) != 0 {
+			old := r.data[:0]
+			bufPool.Put(&old)
+		}
+		r.data = newBuf
+	}
+
+	r.data = append(r.data, data...)
 }
 
 /*
@@ -132,6 +151,7 @@ func (r *DERPacket) Free() {
 		bufPool.Put(&buf)
 	}
 	*r = DERPacket{}
+	derPktPool.Put(r)
 }
 
 /*
@@ -139,10 +159,7 @@ PeekTLV returns [TLV] alongside an error. This method is similar to the standard
 [Packet.TLV] method, except this method does not advance the offset.
 */
 func (r *DERPacket) PeekTLV() (TLV, error) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	sub := r.Type().New((*tmpBuf)...)
-	sub.Append(r.Data()...)
+	sub := r.Type().New(r.Data()...)
 	sub.SetOffset(r.Offset())
 	return getTLV(sub)
 }
@@ -186,4 +203,12 @@ func encodeDERLengthInto(dst *[]byte, n int) {
 	}
 	*dst = append(*dst, byte(0x80|len(tmp)-i))
 	*dst = append(*dst, tmp[i:]...)
+}
+
+var derPktPool = sync.Pool{New: func() any { return &DERPacket{} }}
+
+func getDERPacket() *DERPacket { return derPktPool.Get().(*DERPacket) }
+func putDERPacket(p *DERPacket) {
+	*p = DERPacket{}
+	derPktPool.Put(p)
 }

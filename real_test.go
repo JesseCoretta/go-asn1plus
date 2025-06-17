@@ -251,11 +251,9 @@ func reconstruct(mant *big.Int, base int, exp int) float64 {
 		return x
 	}
 
-	// ----------------------------------------------------------------
 	// Choose a precision high enough for *every* float64:
 	//   – never less than 64 bits
 	//   – plus extra to accommodate the scaling factor
-	// ----------------------------------------------------------------
 	bitLen := mant.BitLen()
 	scaler := map[int]int{2: 1, 8: 3, 10: 4}[base]
 	prec := uint(bitLen + abs(exp)*scaler + 4)

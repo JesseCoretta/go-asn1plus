@@ -55,7 +55,7 @@ func (r *Null) read(pkt Packet, tlv TLV, opts Options) (err error) {
 			if pkt.Offset()+tlv.Length > pkt.Len() {
 				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
 			} else if tlv.Length != 0 {
-				err = mkerr("Invalid NULL length: expected 0, got " + itoa(tlv.Length))
+				err = mkerrf("Invalid NULL length: expected 0, got ", itoa(tlv.Length))
 			} else {
 				pkt.SetOffset(pkt.Offset() + tlv.Length)
 			}

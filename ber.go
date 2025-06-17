@@ -4,6 +4,8 @@ package asn1plus
 ber.go contains BER-focused components. See also der.go.
 */
 
+import "sync"
+
 /*
 BERPacket implements a data encapsulation and transport type to store
 [ITU-T Rec. X.690] [BER]-encoded content. It qualifies the [Packet]
@@ -105,9 +107,26 @@ func (r BERPacket) Data() []byte { return r.data }
 Append appends data to the receiver instance.
 */
 func (r *BERPacket) Append(data ...byte) {
-	if r != nil {
-		r.data = append(r.data, data...)
+	if r == nil || len(data) == 0 {
+		return
 	}
+	need := len(r.data) + len(data)
+
+	if cap(r.data) < need {
+		bufPtr := bufPool.Get().(*[]byte)
+		if cap(*bufPtr) < need {
+			*bufPtr = make([]byte, 0, need*2)
+		}
+		newBuf := append((*bufPtr)[:0], r.data...)
+
+		if cap(r.data) != 0 {
+			old := r.data[:0]
+			bufPool.Put(&old)
+		}
+		r.data = newBuf
+	}
+
+	r.data = append(r.data, data...)
 }
 
 /*
@@ -139,6 +158,7 @@ func (r *BERPacket) Free() {
 		bufPool.Put(&buf)
 	}
 	*r = BERPacket{}
+	berPktPool.Put(r)
 }
 
 /*
@@ -146,10 +166,7 @@ PeekTLV returns [TLV] alongside an error. This method is similar to the standard
 [Packet.TLV] method, except this method does not advance the offset.
 */
 func (r *BERPacket) PeekTLV() (TLV, error) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	sub := r.Type().New((*tmpBuf)...)
-	sub.Append(r.Data()...)
+	sub := r.Type().New(r.Data()...)
 	sub.SetOffset(r.Offset())
 	return getTLV(sub)
 }
@@ -193,4 +210,12 @@ func encodeBERLengthInto(dst *[]byte, n int) {
 		return
 	}
 	encodeDERLengthInto(dst, n)
+}
+
+var berPktPool = sync.Pool{New: func() any { return &BERPacket{} }}
+
+func getBERPacket() *BERPacket { return berPktPool.Get().(*BERPacket) }
+func putBERPacket(p *BERPacket) {
+	*p = BERPacket{}
+	berPktPool.Put(p)
 }

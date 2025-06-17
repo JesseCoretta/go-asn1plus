@@ -29,23 +29,48 @@ appropriate for the receiver in use. If provided, the offset will be set to
 the final byte. If none are provided, an empty (but initialized) [Packet]
 is returned as-is.
 */
-func (r EncodingRule) New(data ...byte) Packet {
-	var pkt Packet = invalidPacket{}
-
+func (r EncodingRule) New(src ...byte) Packet {
+	var pkt Packet
 	switch r {
 	case BER:
-		b := &BERPacket{}
-		b.data = data
+		b := berPktPool.Get().(*BERPacket)
+
+		if cap(b.data) < len(src) {
+			bufPtr := bufPool.Get().(*[]byte)
+			if cap(*bufPtr) < len(src) {
+				*bufPtr = make([]byte, 0, roundup(len(src)))
+			}
+			b.data = *bufPtr
+		}
+
+		b.data = append(b.data[:0], src...)
 		pkt = b
 
 	case DER:
-		d := &DERPacket{}
-		d.data = data
+		d := derPktPool.Get().(*DERPacket)
+		if cap(d.data) < len(src) {
+			bufPtr := bufPool.Get().(*[]byte)
+			if cap(*bufPtr) < len(src) {
+				*bufPtr = make([]byte, 0, roundup(len(src)))
+			}
+			d.data = *bufPtr
+		}
+		d.data = append(d.data[:0], src...)
 		pkt = d
+
+	default:
+		pkt = invalidPacket{}
 	}
 
 	pkt.SetOffset(-1)
 	return pkt
+}
+
+func roundup(n int) int { // tiny power-of-two grow helper
+	for n&(n-1) != 0 {
+		n &= n - 1
+	}
+	return n << 1
 }
 
 func (r EncodingRule) newTLV(class, tag, length int, compound bool, value ...byte) (tlv TLV) {
@@ -55,7 +80,7 @@ func (r EncodingRule) newTLV(class, tag, length int, compound bool, value ...byt
 
 	switch r {
 	case BER, DER:
-		tlv = TLV{typ: r, Class: class, Tag: tag, Length: length, Compound: compound, Value: []byte(value)}
+		tlv = TLV{typ: r, Class: class, Tag: tag, Length: length, Compound: compound, Value: append([]byte{}, value...)}
 	}
 
 	return

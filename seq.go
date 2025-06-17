@@ -32,9 +32,7 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 	auto := globalOpts != nil && globalOpts.Automatic
 
 	// Create a temporary sub-packet for encoding this sequence’s fields.
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	sub := pkt.Type().New((*tmpBuf)...)
+	sub := pkt.Type().New()
 
 	typ := v.Type()
 
@@ -56,14 +54,14 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 		// If the field is of type Choice, do our explicit CHOICE handling.
 		if ch, ok := fv.Interface().(Choice); ok {
 			if err = marshalSequenceChoiceField(fieldOpts, ch, pkt, sub, depth); err != nil {
-				err = mkerr("marshalValue failed for CHOICE field " + field.Name + ": " + err.Error())
+				err = mkerrf("marshalValue failed for CHOICE field ", field.Name, ": ", err.Error())
 				return
 			}
 		} else {
 			// For all non-CHOICE fields, encode using fieldOpts.
 			if err = marshalValue(fv, sub, &fieldOpts, depth+1); err != nil {
 				if !fieldOpts.Optional {
-					err = mkerr("marshalValue failed for field " + field.Name + ": " + err.Error())
+					err = mkerrf("marshalValue failed for field ", field.Name, ": ", err.Error())
 					return
 				}
 			}
@@ -108,7 +106,13 @@ func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth 
 			inner := sub.Data()[sub.Offset():] // bytes we just wrote
 			// rebuild the sub-packet to insert the wrapper
 			wrapped := pkt.Type().New()
-			id := byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
+			
+			var id byte
+			if ch.Tag != nil {
+				id  = byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
+			} else {
+				id  = byte(ClassContextSpecific<<6) | 0x20
+			}
 			wrapped.Append(id)
 			wrapped.Append(encodeLength(pkt.Type(), len(inner))...)
 			wrapped.Append(inner...)
@@ -149,7 +153,7 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
-		err = mkerr("unmarshalValue: reading SEQUENCE TL header failed: " + err.Error())
+		err = mkerrf("unmarshalValue: reading SEQUENCE TL header failed: ", err.Error())
 		return
 	}
 
@@ -162,10 +166,7 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 
 	seqContent := pkt.Data()[start:end]
 	pkt.SetOffset(end)
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	sub := pkt.Type().New((*tmpBuf)...)
-	sub.Append(seqContent...)
+	sub := pkt.Type().New(seqContent...)
 	sub.SetOffset(0)
 
 	// Whether automatic tagging is enabled.
@@ -202,7 +203,7 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options ...Options) (err err
 		default:
 			if err = unmarshalValue(sub, fv, opts); err != nil {
 				if !opts.Optional {
-					err = mkerr("unmarshalValue: failed for field " + field.Name + ": " + err.Error())
+					err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
 				} else {
 					// TODO: change this so that this is
 					// ignored ONLY if there was NO error
