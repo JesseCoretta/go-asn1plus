@@ -106,12 +106,12 @@ func marshalSequenceChoiceField(opts Options, ch Choice, pkt, sub Packet, depth 
 			inner := sub.Data()[sub.Offset():] // bytes we just wrote
 			// rebuild the sub-packet to insert the wrapper
 			wrapped := pkt.Type().New()
-			
+
 			var id byte
 			if ch.Tag != nil {
-				id  = byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
+				id = byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
 			} else {
-				id  = byte(ClassContextSpecific<<6) | 0x20
+				id = byte(ClassContextSpecific<<6) | 0x20
 			}
 			wrapped.Append(id)
 			wrapped.Append(encodeLength(pkt.Type(), len(inner))...)

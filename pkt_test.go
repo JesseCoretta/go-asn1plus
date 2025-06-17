@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"sync"
 	"testing"
 )
@@ -816,4 +815,3 @@ func putTestPacket(p *testPacket) {
 	testPktPool.Put(p)
 }
 
-func init() { debug.SetGCPercent(300) } // 3× headroom during tests
