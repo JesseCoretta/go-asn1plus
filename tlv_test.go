@@ -138,10 +138,7 @@ func testWantSub(t *testing.T, err error, sub string) {
 }
 
 func TestGetTLV_NoDataAtOffset(t *testing.T) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	pkt := BER.New((*tmpBuf)...)
-	pkt.Append(0x02, 0x01, 0x00)
+	pkt := BER.New(0x02, 0x01, 0x00)
 	pkt.SetOffset(pkt.Len())
 
 	_, err := getTLV(pkt)
@@ -157,10 +154,7 @@ func TestGetTLV_BadTagIdentifier(t *testing.T) {
 }
 
 func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	pkt := BER.New((*tmpBuf)...)
-	pkt.Append(0x02, 0x01, 0x09)
+	pkt := BER.New(0x02, 0x01, 0x09)
 
 	opts := Options{Explicit: true}
 	opts.SetTag(3)
@@ -171,10 +165,7 @@ func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
 }
 
 func TestGetTLV_BadLengthHeader(t *testing.T) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	pkt := BER.New((*tmpBuf)...)
-	pkt.Append(0x02, 0x82)
+	pkt := BER.New(0x02, 0x82)
 
 	_, err := getTLV(pkt)
 	testWantSub(t, err, "error reading length:")

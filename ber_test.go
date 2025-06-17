@@ -65,7 +65,7 @@ func ExamplePacket_indefiniteLengthBERByStructFieldTag() {
 }
 
 func TestBER_codecov(_ *testing.T) {
-	pkt := &BERPacket{}
+	pkt := BER.New()
 	pkt.HasMoreData()
 	pkt.WriteTLV(TLV{Tag: 3, Class: 1})
 	bts := make([]byte, 4)
@@ -74,10 +74,7 @@ func TestBER_codecov(_ *testing.T) {
 }
 
 func TestBERPacket_OutOfBoundsGuards(t *testing.T) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	pkt := BER.New((*tmpBuf)...)
-	pkt.Append(0x02, 0x01, 0x00)
+	pkt := BER.New(0x02, 0x01, 0x00)
 	pkt.SetOffset(pkt.Len())
 
 	if _, err := pkt.Class(); err != errorOutOfBounds {

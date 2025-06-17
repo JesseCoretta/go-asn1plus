@@ -148,6 +148,9 @@ func TestSequence_choiceAutomaticTagging(t *testing.T) {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	//t.Logf("%s\n", mine2.Field2.Value.(ObjectIdentifier))
+
+	// coverage
+	marshalSequenceChoiceField(Options{}, Choice{Value:OctetString("hi"), Explicit:true}, pkt, pkt, 1)
 }
 
 func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {

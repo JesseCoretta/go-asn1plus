@@ -228,6 +228,9 @@ func TestReal_codecov(_ *testing.T) {
 	realBaseSwitch(0x2)
 	realBaseSwitch(0x3)
 	realBaseSwitch(0x4)
+
+	_, _, _ = float64ToRealParts(float64(0), 2)
+	_, _, _ = bigFloatToRealParts(big.NewFloat(0), 2)
 }
 
 func reconstruct(mant *big.Int, base int, exp int) float64 {

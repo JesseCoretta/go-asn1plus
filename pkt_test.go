@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"runtime/debug"
+	"sync"
 	"testing"
 )
 
@@ -38,9 +40,26 @@ func (r *testPacket) FullBytes() ([]byte, error) {
 }
 
 func (r *testPacket) Append(data ...byte) {
-	if r != nil {
-		r.data = append(r.data, data...)
+	if r == nil || len(data) == 0 {
+		return
 	}
+	need := len(r.data) + len(data)
+
+	if cap(r.data) < need {
+		bufPtr := bufPool.Get().(*[]byte)
+		if cap(*bufPtr) < need {
+			*bufPtr = make([]byte, 0, need*2)
+		}
+		newBuf := append((*bufPtr)[:0], r.data...)
+
+		if cap(r.data) != 0 {
+			old := r.data[:0]
+			bufPool.Put(&old)
+		}
+		r.data = newBuf
+	}
+
+	r.data = append(r.data, data...)
 }
 
 func (r *testPacket) Free() {
@@ -49,13 +68,11 @@ func (r *testPacket) Free() {
 		bufPool.Put(&buf)
 	}
 	*r = testPacket{}
+	testPktPool.Put(r)
 }
 
 func (r *testPacket) PeekTLV() (TLV, error) {
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	sub := r.Type().New((*tmpBuf)...)
-	sub.Append(r.Data()...)
+	sub := r.Type().New(r.Data()...)
 	sub.SetOffset(r.Offset())
 	return getTLV(sub)
 }
@@ -452,7 +469,7 @@ func TestExtractPacketTooShort(t *testing.T) {
 	}
 	sub, err := extractPacket(mp, 5) // ask for 5 bytes – impossible
 
-	if sub != nil {
+	if sub.Type() != invalidEncodingRule {
 		t.Errorf("expected nil sub-packet, got %#v", sub)
 	}
 	if err == nil || err.Error() != errorASN1Expect(5, 1, "Length").Error() {
@@ -790,3 +807,13 @@ func BenchmarkDecodeDirectoryString(b *testing.B) {
 		_ = Unmarshal(pkt, &out)
 	}
 }
+
+var testPktPool = sync.Pool{New: func() any { return &testPacket{} }}
+
+func getTestPacket() *testPacket { return testPktPool.Get().(*testPacket) }
+func putTestPacket(p *testPacket) {
+	*p = testPacket{}
+	testPktPool.Put(p)
+}
+
+func init() { debug.SetGCPercent(300) } // 3× headroom during tests

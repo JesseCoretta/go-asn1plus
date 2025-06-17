@@ -15,4 +15,7 @@ func TestExpectError(t *testing.T) {
 		TLV{Class: 2, Tag: 1, Compound: true, Length: 15},
 		TLV{Class: 2, Tag: 1, Compound: false, Length: 15},
 	)
+
+	_ = mkerrf("Hello ", 5)
+	_ = mkerrf("Hello ", struct{}{})
 }
