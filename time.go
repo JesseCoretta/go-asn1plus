@@ -1288,9 +1288,6 @@ func uTCHandler(raw, sec, diff, format string) (utc UTCTime, err error) {
 	return
 }
 
-type TimeEncode[T Temporal] func(T) ([]byte, error) // produce wire bytes
-type TimeDecode[T Temporal] func([]byte) (T, error) // parse wire bytes
-
 type temporalCodec[T Temporal] struct {
 	val T
 	tag int
