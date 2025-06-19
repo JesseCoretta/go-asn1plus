@@ -24,7 +24,7 @@ between the two representations whenever:
   - the Go value’s dynamic type is `GoT`, **and**
   - the caller supplied the keyword via
   - a struct tag:       `asn1:"<keyword>"`
-  - WithOptions(...Identifier: "<keyword>").
+  - With(Options{Identifier: "<keyword>"}).
   - or the keyword is the empty string "" *and* no identifier was provided (default adapter for that Go type).
 
 Typical use-cases
