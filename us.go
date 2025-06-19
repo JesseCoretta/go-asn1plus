@@ -28,6 +28,10 @@ Len returns the integer length of the receiver instance.
 */
 func (r UniversalString) Len() int { return len(r) }
 
+/*
+NewUniversalString returns an instance of [UniversalString] alongside an
+error following an attempt to marshal x.
+*/
 func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (UniversalString, error) {
 	var (
 		us  UniversalString
@@ -37,7 +41,7 @@ func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (Univ
 
 	switch tv := x.(type) {
 	case UniversalString:
-		raw = string(tv)
+		raw = tv.String()
 	case []byte:
 		raw = string(tv)
 	case string:
@@ -47,88 +51,110 @@ func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (Univ
 		return us, err
 	}
 
-	if !utf8OK(raw) {
-		err = mkerr("Invalid ASN.1 UNIVERSAL STRING: failed UTF8 checks")
-	}
-
-	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[UniversalString] = constraints
-		err = group.Validate(UniversalString(raw))
-	}
-
+	_us := UniversalString(raw)
+	group := append(
+		ConstraintGroup[UniversalString]{UniversalSpec}, // built-in
+		constraints...)
+	err = group.Validate(_us)
 	if err == nil {
-		us = UniversalString(raw)
+		us = _us
 	}
 
 	return us, err
 }
 
 /*
+UniversalSpec implements the formal [Constraint] specification for [UniversalString].
+
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var UniversalSpec Constraint[UniversalString]
+
+func universalStringDecoderVerify(b []byte) (err error) {
+	if len(b)%4 != 0 {
+		err = mkerr("UNIVERSAL STRING: byte length not multiple of 4")
+		return
+	}
+	for i := 0; i < len(b); i += 4 {
+		code := binary.BigEndian.Uint32(b[i:])
+		if code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) {
+			err = mkerrf("UNIVERSAL STRING: invalid code point: ", itoa(int(code)))
+			break
+		}
+	}
+
+	return
+}
+
+// UTF-32BE -> Go string
+func decodeUniversalString(b []byte) (UniversalString, error) {
+	var runes []rune
+	for i := 0; i < len(b); i += 4 {
+		runes = append(runes, rune(binary.BigEndian.Uint32(b[i:i+4])))
+	}
+
+	return UniversalString(string(runes)), nil
+}
+
+// Go string -> UTF-32BE
+func encodeUniversalString(u UniversalString) (content []byte, err error) {
+	runes := []rune(u)
+	content = make([]byte, 4*len(runes))
+	for i, r := range runes {
+		if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
+			err = mkerr("UNIVERSAL STRING: invalid rune")
+			break
+		}
+		binary.BigEndian.PutUint32(content[i*4:], uint32(r))
+	}
+	return content, err
+}
+
+/*
 String returns the string representation of the receiver instance.
 */
-func (r UniversalString) String() string { return string(r) }
+func (r UniversalString) String() string {
+	// Fast-path: if the length isn’t a multiple of
+	// 4 we *know* it can’t be UTF-32BE, so we'll
+	// just cast as-is.
+	if len(r)%4 != 0 {
+		return string(r)
+	}
+
+	// Attempt to interpret as UTF-32BE.  If we hit an
+	// invalid sequence we fall back to the raw bytes.
+	runes := make([]rune, 0, len(r)/4)
+	for i := 0; i+4 <= len(r); i += 4 {
+		code := binary.BigEndian.Uint32([]byte(r[i:])) // has to be []byte
+		if code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) {
+			// Not valid UTF-32BE; bail out to raw bytes.
+			return string(r)
+		}
+		runes = append(runes, rune(code))
+	}
+	return string(runes)
+}
 
 /*
 IsZero returns a Boolean value indicative of a nil receiver state.
 */
 func (r UniversalString) IsZero() bool { return len(r) == 0 }
 
-func (r UniversalString) write(pkt Packet, opts *Options) (n int, err error) {
-	runes := []rune(r)
-	content := make([]byte, 4*len(runes))
-	for i, ru := range runes {
-		binary.BigEndian.PutUint32(content[i*4:(i+1)*4], uint32(ru))
-	}
-
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(content), false, content...), opts); err == nil {
-			n = pkt.Offset() - off
+func init() {
+	RegisterTextAlias[UniversalString](TagUniversalString, universalStringDecoderVerify, decodeUniversalString, encodeUniversalString, UniversalSpec)
+	UniversalSpec = func(us UniversalString) error {
+		// Reject byte sequences that are not valid UTF-8.
+		if !utf8OK(string(us)) {
+			return mkerr("UniversalString: input is not valid UTF-8")
 		}
-	}
-	return
-}
 
-func (r *UniversalString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for UNIVERSAL STRING decoding")
-	}
-
-	return
-}
-
-func (r *UniversalString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
-
-			// The content must be a multiple of 4 bytes (each rune is 4 bytes in UCS-4).
-			if len(data)%4 != 0 {
-				err = mkerr("invalid UNIVERSAL STRING length: not a multiple of 4 bytes")
-				return
+		// Reject surrogates and code points beyond Unicode max.
+		for _, r := range us {
+			if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
+				return mkerrf("UniversalString: invalid code point: ", itoa(int(r)))
 			}
-
-			var runes []rune
-			for i := 0; i < len(data); i += 4 {
-				rVal := binary.BigEndian.Uint32(data[i : i+4])
-				runes = append(runes, rune(rVal))
-			}
-
-			*r = UniversalString(string(runes))
 		}
+		return nil
 	}
-
-	return
 }

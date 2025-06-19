@@ -58,10 +58,6 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 
 	switch tv := x.(type) {
 	case string:
-		if len(tv) == 0 {
-			err = mkerr("ASN.1 T.61 STRING is zero length")
-			return t61, err
-		}
 		raw = tv
 	case []byte:
 		raw = string(tv)
@@ -72,70 +68,57 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 		return t61, err
 	}
 
-	for i := 0; i < len(raw) && err == nil; i++ {
-		char := rune(raw[i])
-		if !isT61Char(char) {
-			err = mkerrf("Incompatible character for ASN.1 T.61 STRING: ", string(char))
-		}
-	}
-
+	_t61 := T61String(raw)
+	err = T61Spec(_t61)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[T61String] = constraints
-		err = group.Validate(T61String(raw))
+		err = group.Validate(_t61)
 	}
 
 	if err == nil {
-		t61 = T61String(raw)
+		t61 = _t61
 	}
 
 	return t61, err
 }
 
-func (r T61String) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
+/*
+T61Spec implements the formal [Constraint] specification for [T61String].
 
-func (r *T61String) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				*r = T61String(data)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-	}
-
-	return
-}
-
-func isT61Char(ch rune) bool {
-	if ch < 0 || ch > 0xFFFF {
-		return false
-	}
-	word := ch >> 6
-	bit := ch & 63
-	return (t61Bitmap[word]>>bit)&1 != 0
-}
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var T61Spec Constraint[T61String]
 
 var t61Bitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
+	RegisterTextAlias[T61String](TagT61String, nil, nil, nil, T61Spec)
+	T61Spec = func(o T61String) (err error) {
+		if len(o) == 0 {
+			err = mkerr("ASN.1 T.61 STRING is zero length")
+			return
+		}
+
+		isT61Char := func(ch rune) bool {
+			if ch < 0 || ch > 0xFFFF {
+				return false
+			}
+			word := ch >> 6
+			bit := ch & 63
+			return (t61Bitmap[word]>>bit)&1 != 0
+		}
+
+		for _, r := range []rune(o.String()) {
+			if !isT61Char(r) {
+				err = mkerrf("Invalid character '", itoa(int(r)), "' in T61 STRING")
+				break
+			}
+		}
+
+		return
+	}
+
 	set := func(lo, hi rune) {
 		for r := lo; r <= hi; r++ {
 			t61Bitmap[r>>6] |= 1 << (r & 63)

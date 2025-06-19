@@ -92,8 +92,6 @@ func TestNumericString_String(t *testing.T) {
 func TestNumericString_codecov(_ *testing.T) {
 	var ns NumericString
 	ns.Tag()
-	ns.read(nil, TLV{typ: DER, Class: 1, Tag: 22}, &Options{})
-	ns.read(&DERPacket{}, TLV{typ: DER, Class: 0, Tag: ns.Tag(), Length: 222}, &Options{})
 }
 
 func ExampleNumericString_dER() {
@@ -106,7 +104,7 @@ func ExampleNumericString_dER() {
 
 	// DER encode NumericString instance
 	var pkt Packet
-	if pkt, err = Marshal(ns, WithEncoding(DER)); err != nil {
+	if pkt, err = Marshal(ns, With(DER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -144,7 +142,7 @@ func TestNumericString_encodingRules(t *testing.T) {
 
 			// encode our NumericString instance
 			var pkt Packet
-			if pkt, err = Marshal(od, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 			}
 			t.Logf("%T.%s hex::%s\n", od, rule, pkt.Hex())

@@ -375,10 +375,16 @@ func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts *Option
 			class |= 0x20
 		}
 		subTLV := pkt.Type().newTLV(class, tag, tlv.Length, tlv.Compound, candidateContent...)
-		if reader, ok := candidateInst.(asn1Reader); ok {
-			err = reader.read(sub, subTLV, opts)
+		if c, ok := candidateInst.(codecRW); ok {
+			err = c.read(sub, subTLV, opts)
+		} else if bx, ok := createCodecForPrimitive(candidateInst); ok {
+			if err = bx.read(sub, subTLV, opts); err == nil {
+				reflect.ValueOf(candidateInst).Elem().
+					Set(reflect.ValueOf(bx.getVal()))
+			}
+
 		} else {
-			err = mkerr("Primitive has no read method")
+			err = mkerr("Primitive has no codec")
 		}
 	} else {
 		sub := pkt.Type().New(pkt.Data()...)

@@ -5,6 +5,8 @@ null.go contains all types and methods pertaining to the ASN.1
 NULL type.
 */
 
+import "reflect"
+
 /*
 Null implements the ASN.1 NULL type (tag 5).
 
@@ -23,7 +25,8 @@ Len always returns zero (0).
 func (_ Null) Len() int { return 0 }
 
 /*
-Null returns the string representation of the receiver instance.
+Null returns the string representation of the receiver instance,
+which is a single Null Terminating Byte Sequence ("NTBS").
 */
 func (_ Null) String() string { return string(rune(0)) }
 
@@ -34,32 +37,122 @@ qualified instances from other interfaces of a similar design.
 */
 func (_ Null) IsPrimitive() bool { return true }
 
-func (r Null) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, 0, false), opts); err == nil {
-			pkt.SetOffset(0)
-		}
-	}
-	return
+type nullCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
 }
 
-func (r *Null) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
+func (c *nullCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
 	}
-	switch pkt.Type() {
-	case BER, DER:
-		if _, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else if tlv.Length != 0 {
-				err = mkerrf("Invalid NULL length: expected 0, got ", itoa(tlv.Length))
-			} else {
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
+
+	if err = c.cg.Constrain(c.val); err == nil {
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		}
+
+		if err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+			err = writeTLV(pkt, pkt.Type().newTLV(cls, tag, len(wire), false), o)
+			if err == nil {
+				off = pkt.Offset() - start
 			}
 		}
 	}
+
 	return
+}
+
+func (c *nullCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				if tlv.Length != 0 {
+					err = mkerrf("NULL: content length must be 0, got ", itoa(tlv.Length))
+				}
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func (c *nullCodec[T]) Tag() int          { return c.tag }
+func (c *nullCodec[T]) IsPrimitive() bool { return true }
+func (c *nullCodec[T]) String() string    { return "nullCodec" }
+func (c *nullCodec[T]) getVal() any       { return c.val }
+func (c *nullCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func RegisterNullAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+) {
+	all := append(ConstraintGroup[T]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &nullCodec[T]{
+				tag: tag, cg: all,
+				decodeVerify: verList,
+				encodeHook:   encoder,
+				decodeHook:   decoder}
+		},
+		newWith: func(v any) box {
+			return &nullCodec[T]{val: valueOf[T](v),
+				tag: tag, cg: all,
+				decodeVerify: verList,
+				encodeHook:   encoder,
+				decodeHook:   decoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterNullAlias[Null](TagNull, nil, nil, nil, nil)
 }

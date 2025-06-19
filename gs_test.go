@@ -53,8 +53,6 @@ func TestGraphicString_codecov(_ *testing.T) {
 	_, _ = NewGraphicString(nil)
 	_, _ = NewGraphicString(string(rune(2)))
 	_, _ = NewGraphicString(struct{}{})
-	od.read(nil, TLV{}, &Options{})
-	scanGeneralStringChars(string(rune(0)))
 }
 
 func TestGraphicString_encodingRules(t *testing.T) {
@@ -76,7 +74,7 @@ func TestGraphicString_encodingRules(t *testing.T) {
 
 			// encode our GraphicString instance
 			var pkt Packet
-			if pkt, err = Marshal(od, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 

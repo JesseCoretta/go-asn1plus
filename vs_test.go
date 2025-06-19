@@ -26,7 +26,7 @@ func ExampleVisibleString_bER() {
 
 	// DER encode VisibleString into Packet instance
 	var pkt Packet
-	if pkt, err = Marshal(vs, WithEncoding(BER)); err != nil {
+	if pkt, err = Marshal(vs, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -55,7 +55,7 @@ func ExampleVisibleString_dER() {
 
 	// DER encode VisibleString into Packet instance
 	var pkt Packet
-	if pkt, err = Marshal(vs, WithEncoding(DER)); err != nil {
+	if pkt, err = Marshal(vs, With(DER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -93,7 +93,7 @@ func TestVisibleString_codecov(t *testing.T) {
 			_ = vs.String()
 
 			var pkt Packet
-			if pkt, err = Marshal(vs, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(vs, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v",
 					t.Name(), idx, rule, err)
 			}
@@ -113,7 +113,4 @@ func TestVisibleString_codecov(t *testing.T) {
 	}
 	NewVisibleString([]byte{0x7F, 0x7F, 0x08})
 	_, _ = NewVisibleString(struct{}{})
-	var vs VisibleString
-	vs.read(nil, TLV{}, &Options{})
-	vs.read(&DERPacket{}, TLV{}, &Options{})
 }

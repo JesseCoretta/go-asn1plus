@@ -120,6 +120,4 @@ func TestVideotexString_codecov(_ *testing.T) {
 	vts.Tag()
 	vts.IsZero()
 	vts.IsPrimitive()
-	vts.read(nil, TLV{}, &Options{})
-	vts.read(&BERPacket{}, TLV{}, &Options{})
 }

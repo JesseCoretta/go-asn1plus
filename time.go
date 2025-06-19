@@ -6,6 +6,7 @@ those for Generalized Time and the (deprecated) UTC Time.
 */
 
 import (
+	"reflect"
 	"time"
 	"unsafe"
 )
@@ -95,7 +96,7 @@ func NewDate(x any, constraints ...Constraint[Temporal]) (Date, error) {
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Temporal] = constraints
-		err = group.Validate(Date(t))
+		err = group.Constrain(Date(t))
 	}
 
 	var d Date
@@ -146,6 +147,15 @@ func formatDate(t time.Time) string {
 	return string(b[:])
 }
 
+func decDate(b []byte) (Date, error) {
+	t, err := parseDate(string(b))
+	return Date(t), err
+}
+
+func encDate(d Date) ([]byte, error) {
+	return []byte(formatDate(time.Time(d))), nil
+}
+
 /*
 String returns the string representation of the receiver instance.
 */
@@ -175,52 +185,6 @@ func (r Date) IsPrimitive() bool { return true }
 Cast returns the receiver instance cast as an instance of [time.Time].
 */
 func (r Date) Cast() time.Time { return time.Time(r) }
-
-func (r Date) write(pkt Packet, opts *Options) (n int, err error) {
-	str := r.String()
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
-
-func (r *Date) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for DATE decoding")
-	}
-
-	return
-}
-
-func (r *Date) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			var t time.Time
-			if t, err = parseDate(string(data)); err == nil {
-				*r = Date(t)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-	}
-
-	return
-}
 
 /*
 DateTime implements the ASN.1 DATE-TIME type (tag 33), which extends from [Time].
@@ -255,7 +219,7 @@ func NewDateTime(x any, constraints ...Constraint[Temporal]) (DateTime, error) {
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Temporal] = constraints
-		err = group.Validate(DateTime(t))
+		err = group.Constrain(DateTime(t))
 	}
 
 	var d DateTime
@@ -322,50 +286,13 @@ func formatDateTime(t time.Time) string {
 	return string(b[:]) // one unavoidable copy; still zero allocs on parse path
 }
 
-func (r DateTime) write(pkt Packet, opts *Options) (n int, err error) {
-	str := r.String()
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
+func decDateTime(b []byte) (DateTime, error) {
+	t, err := parseDateTime(string(b))
+	return DateTime(t), err
 }
 
-func (r *DateTime) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for DATE-TIME decoding")
-	}
-
-	return
-}
-
-func (r *DateTime) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			var t time.Time
-			if t, err = parseDateTime(string(data)); err == nil {
-				*r = DateTime(t)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-	}
-
-	return
+func encDateTime(d DateTime) ([]byte, error) {
+	return []byte(formatDateTime(time.Time(d))), nil
 }
 
 /*
@@ -417,7 +344,7 @@ func NewTimeOfDay(x any, constraints ...Constraint[Temporal]) (TimeOfDay, error)
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Temporal] = constraints
-		err = group.Validate(TimeOfDay(t))
+		err = group.Constrain(TimeOfDay(t))
 	}
 
 	var d TimeOfDay
@@ -462,6 +389,15 @@ func formatTimeOfDay(t time.Time) string {
 	return string(b[:])
 }
 
+func decTimeOfDay(b []byte) (TimeOfDay, error) {
+	t, err := parseTimeOfDay(string(b))
+	return TimeOfDay(t), err
+}
+
+func encTimeOfDay(d TimeOfDay) ([]byte, error) {
+	return []byte(formatTimeOfDay(time.Time(d))), nil
+}
+
 /*
 String returns the string representation of the receiver instance.
 */
@@ -487,52 +423,6 @@ func (r TimeOfDay) IsPrimitive() bool { return true }
 Cast returns the receiver instance cast as an instance of [time.Time].
 */
 func (r TimeOfDay) Cast() time.Time { return time.Time(r) }
-
-func (r TimeOfDay) write(pkt Packet, opts *Options) (n int, err error) {
-	str := r.String()
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
-
-func (r *TimeOfDay) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for TIME-OF-DAY decoding")
-	}
-
-	return
-}
-
-func (r *TimeOfDay) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			var t time.Time
-			if t, err = parseTimeOfDay(string(data)); err == nil {
-				*r = TimeOfDay(t)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-	}
-
-	return
-}
 
 /*
 TimeOfDay implements the ASN.1 DURATION type (tag 34).
@@ -596,31 +486,35 @@ func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
 		datePart = s
 	}
 
-	// Helper to parse a numeric value ending with a given suffix.
-	parseNumber := func(str string, suffix byte) (float64, string, error) {
-		idx := stridxb(str, suffix)
-		if idx < 0 {
-			return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
-		}
-		numStr := str[:idx]
-		// Replace comma with dot if necessary.
-		numStr = replace(numStr, ",", ".", 1)
-		num, err := pfloat(numStr, 64)
-		if err != nil {
-			return 0, str, mkerrf("error parsing number ", numStr, ": ", err.Error())
-		}
-		return num, str[idx+1:], nil
+	if err = _r.parseDuration(datePart, timePart); err != nil {
+		return Duration{}, err
 	}
 
-	// Parse the date portion for Years, Months, Days.
-	if err = _r.marshalYMD(datePart, parseNumber); err == nil {
-		err = _r.marshalHMS(timePart, parseNumber)
-	}
+	// Helper to parse a numeric value ending with a given suffix.
+	//parseNumber := func(str string, suffix byte) (float64, string, error) {
+	//	idx := stridxb(str, suffix)
+	//	if idx < 0 {
+	//		return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
+	//	}
+	//	numStr := str[:idx]
+	//	// Replace comma with dot if necessary.
+	//	numStr = replace(numStr, ",", ".", 1)
+	//	num, err := pfloat(numStr, 64)
+	//	if err != nil {
+	//		return 0, str, mkerrf("error parsing number ", numStr, ": ", err.Error())
+	//	}
+	//	return num, str[idx+1:], nil
+	//}
+
+	//// Parse the date portion for Years, Months, Days.
+	//if err = _r.marshalYMD(datePart, parseNumber); err == nil {
+	//	err = _r.marshalHMS(timePart, parseNumber)
+	//}
 
 	err = checkDurationEmpty(_r, err)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Duration] = constraints
-		err = group.Validate(_r)
+		err = group.Constrain(_r)
 	}
 
 	var r Duration
@@ -664,6 +558,30 @@ func (r Duration) Duration() time.Duration {
 		time.Duration(r.Seconds*float64(time.Second))
 
 	return dur
+}
+
+func (r *Duration) parseDuration(datePart, timePart string) (err error) {
+	// Helper to parse a numeric value ending with a given suffix.
+	parseNumber := func(str string, suffix byte) (float64, string, error) {
+		idx := stridxb(str, suffix)
+		if idx < 0 {
+			return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
+		}
+		numStr := str[:idx]
+		// Replace comma with dot if necessary.
+		numStr = replace(numStr, ",", ".", 1)
+		num, err := pfloat(numStr, 64)
+		if err != nil {
+			return 0, str, mkerrf("error parsing number ", numStr, ": ", err.Error())
+		}
+		return num, str[idx+1:], nil
+	}
+
+	if err = r.marshalYMD(datePart, parseNumber); err == nil {
+		err = r.marshalHMS(timePart, parseNumber)
+	}
+
+	return
 }
 
 // parseTimeDuration decomposes a time.Duration back into an
@@ -849,52 +767,6 @@ func (r Duration) String() string {
 	return bld.String()
 }
 
-func (r Duration) write(pkt Packet, opts *Options) (n int, err error) {
-	str := r.String()
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
-
-func (r *Duration) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for Duration decoding")
-	}
-
-	return
-}
-
-func (r *Duration) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			var dur Duration
-			if dur, err = NewDuration(string(data)); err == nil {
-				*r = dur
-			}
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
-		}
-	}
-
-	return
-}
-
 /*
 GeneralizedTime aliases an instance of [Time] to implement ASN.1 GENERALIZED
 TIME (tag 24).
@@ -944,7 +816,7 @@ func NewGeneralizedTime(x any, constraints ...Constraint[Temporal]) (gt Generali
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Temporal] = constraints
-		err = group.Validate(GeneralizedTime(t))
+		err = group.Constrain(GeneralizedTime(t))
 	}
 
 	return GeneralizedTime(t), err
@@ -1138,6 +1010,15 @@ func formatGeneralizedTime(t time.Time) string {
 	return string(buf[:i])
 }
 
+func decGeneralizedTime(b []byte) (GeneralizedTime, error) {
+	t, err := parseGeneralizedTime(string(b))
+	return GeneralizedTime(t), err
+}
+
+func encGeneralizedTime(d GeneralizedTime) ([]byte, error) {
+	return []byte(formatGeneralizedTime(time.Time(d))), nil
+}
+
 /*
 String returns the string representation of the receiver instance.
 */
@@ -1157,52 +1038,6 @@ Cast unwraps and returns the underlying instance of [time.Time].
 */
 func (r GeneralizedTime) Cast() time.Time {
 	return time.Time(r)
-}
-
-func (r GeneralizedTime) write(pkt Packet, opts *Options) (n int, err error) {
-	str := r.String()
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
-
-func (r *GeneralizedTime) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for GENERALIZED TIME decoding")
-	}
-
-	return
-}
-
-func (r *GeneralizedTime) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			var gt time.Time
-			// TODO - adjust for UTC offset potential
-			if gt, err = parseGeneralizedTime(string(data)); err == nil {
-				*r = GeneralizedTime(gt)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-	}
-
-	return
 }
 
 /*
@@ -1282,7 +1117,7 @@ func NewUTCTime(x any, constraints ...Constraint[Temporal]) (utc UTCTime, err er
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Temporal] = constraints
-		err = group.Validate(UTCTime(_utc))
+		err = group.Constrain(UTCTime(_utc))
 	}
 
 	if err == nil {
@@ -1407,6 +1242,15 @@ func formatUTCTime(t time.Time) string {
 	return string(b[:])
 }
 
+func decUTCTime(b []byte) (UTCTime, error) {
+	t, err := parseUTCTime(string(b))
+	return UTCTime(t), err
+}
+
+func encUTCTime(d UTCTime) ([]byte, error) {
+	return []byte(formatUTCTime(time.Time(d))), nil
+}
+
 func chopZulu(raw string) string {
 	if zulu := raw[len(raw)-1] == 'Z'; zulu {
 		raw = raw[:len(raw)-1]
@@ -1444,47 +1288,376 @@ func uTCHandler(raw, sec, diff, format string) (utc UTCTime, err error) {
 	return
 }
 
-func (r UTCTime) write(pkt Packet, opts *Options) (n int, err error) {
-	str := r.String()
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(str), false, []byte(str)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
+type TimeEncode[T Temporal] func(T) ([]byte, error) // produce wire bytes
+type TimeDecode[T Temporal] func([]byte) (T, error) // parse wire bytes
+
+type temporalCodec[T Temporal] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[Temporal]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
 }
 
-func (r *UTCTime) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
+func (c *temporalCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
 	}
 
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for UTCTime decoding")
-	}
-
-	return
-}
-
-func (r *UTCTime) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			var gt time.Time
-			if gt, err = parseUTCTime(string(data)); err == nil {
-				*r = UTCTime(gt)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
+	if err = c.cg.Constrain(c.val); err == nil {
+		var wire []byte
+		if wire, err = c.encodeHook(c.val); err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			if err = writeTLV(pkt, tlv, o); err == nil {
+				off = pkt.Offset() - start
 			}
 		}
 	}
 
 	return
+}
+
+func (c *temporalCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if out, err = c.decodeHook(wire); err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func (c *temporalCodec[T]) Tag() int          { return c.tag }
+func (c *temporalCodec[T]) IsPrimitive() bool { return true }
+func (c *temporalCodec[T]) String() string    { return "temporalCodec" }
+func (c *temporalCodec[T]) getVal() any       { return c.val }
+func (c *temporalCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+/*
+RegisterTemporalAlias registers a custom alias of a [Temporal] qualifier
+type for use in codec operations.
+
+	// Create a custom type called Deadline.
+	type Deadline GeneralizedTime
+
+	// Be sure to implement the Primitive interface by
+	// creating the three methods shown below: Tag,
+	// String and IsPrimitive.
+
+	func (r Deadline) Tag() int { return whateverTag }
+	func (r Deadline) String string { return theStringRepresentation }
+	func (r Deadline) IsPrimitive() bool { return true }
+	// other methods if desired ...
+
+	RegisterTemporalAlias[Deadline](whateverTag, nil, nil, nil, nil) // use default codec
+
+	var dead Deadline
+	// populate Deadline timestamp as desired
+
+	pkt, err := Marshal(lease, With(DER))
+	if err != nil {
+	   fmt.Println(err)
+	   return
+	}
+
+	// ... etc ...
+*/
+func RegisterTemporalAlias[T Temporal](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[Temporal],
+	user ...Constraint[Temporal],
+) {
+	all := append(ConstraintGroup[Temporal]{spec}, user...)
+
+	encoder, decoder = fillTemporalHooks[T](encoder, decoder)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &temporalCodec[T]{
+				tag:          tag,
+				cg:           all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder,
+			}
+		},
+		newWith: func(v any) box {
+			return &temporalCodec[T]{
+				val:          valueOf[T](v),
+				tag:          tag,
+				cg:           all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder,
+			}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func attachDefaults[Canon any, T Temporal](
+	rt reflect.Type,
+	enc *EncodeOverride[T],
+	dec *DecodeOverride[T],
+	canonEnc EncodeOverride[Canon],
+	canonDec DecodeOverride[Canon],
+) bool {
+	canonRT := reflect.TypeOf((*Canon)(nil)).Elem()
+
+	// match ONLY the identical canonical type
+	if rt != canonRT {
+		return false
+	}
+
+	// wrap encoder if the caller left it nil
+	if *enc == nil {
+		*enc = func(v T) ([]byte, error) {
+			return canonEnc(any(v).(Canon))
+		}
+	}
+	// wrap decoder if the caller left it nil
+	if *dec == nil {
+		*dec = func(b []byte) (T, error) {
+			cVal, err := canonDec(b)
+			if err != nil {
+				var zero T
+				return zero, err
+			}
+			return any(cVal).(T), nil
+		}
+	}
+	return true
+}
+
+func fillTemporalHooks[T Temporal](
+	enc EncodeOverride[T],
+	dec DecodeOverride[T],
+) (EncodeOverride[T], DecodeOverride[T]) {
+
+	if enc != nil && dec != nil {
+		return enc, dec
+	}
+
+	rt := derefTypePtr(reflect.TypeOf((*T)(nil)).Elem())
+
+	switch {
+	case attachDefaults[TimeOfDay](rt, &enc, &dec, encTimeOfDay, decTimeOfDay):
+	case attachDefaults[GeneralizedTime](rt, &enc, &dec, encGeneralizedTime, decGeneralizedTime):
+	case attachDefaults[UTCTime](rt, &enc, &dec, encUTCTime, decUTCTime):
+	case attachDefaults[DateTime](rt, &enc, &dec, encDateTime, decDateTime):
+	case attachDefaults[Date](rt, &enc, &dec, encDate, decDate):
+	default:
+		panic("RegisterTemporalAlias: please provide encode/decode hooks for custom temporal type")
+	}
+
+	return enc, dec
+}
+
+type durationCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
+}
+
+func (c *durationCodec[T]) Tag() int          { return c.tag }
+func (c *durationCodec[T]) IsPrimitive() bool { return true }
+func (c *durationCodec[T]) String() string    { return "durationCodec" }
+func (c *durationCodec[T]) getVal() any       { return c.val }
+func (c *durationCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func toDuration[T any](v T) Duration   { return *(*Duration)(unsafe.Pointer(&v)) }
+func fromDuration[T any](d Duration) T { return *(*T)(unsafe.Pointer(&d)) }
+
+func (c *durationCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	if err = c.cg.Constrain(c.val); err == nil {
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		} else {
+			wire = []byte(toDuration(c.val).String())
+		}
+
+		if err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			if err = writeTLV(pkt, tlv, o); err == nil {
+				off = pkt.Offset() - start
+			}
+		}
+	}
+
+	return
+}
+
+func (c *durationCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				var datePart, timePart string
+				if idx := idxr(string(wire), 'T'); idx != -1 {
+					datePart = string(wire)[:idx]
+					timePart = string(wire)[idx+1:]
+				} else {
+					datePart = string(wire)
+				}
+
+				var dur Duration
+				if err = dur.parseDuration(datePart, timePart); err == nil {
+					out = fromDuration[T](dur)
+				}
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+/*
+RegisterDurationAlias registers a custom alias of [Duration] for use in
+codec operations.
+
+	// Create a custom type called Lease.
+	type Lease Duration
+
+	// Be sure to implement the Primitive interface by
+	// creating the three methods shown below: Tag,
+	// String and IsPrimitive.
+
+	func (r Lease) Tag() int { return whateverTag }
+	func (r Lease) String string { return theStringRepresentation }
+	func (r Lease) IsPrimitive() bool { return true }
+	// other methods if desired ...
+
+	RegisterDurationAlias[Lease](whateverTag, nil, nil, nil, nil) // use default codec
+
+	var lease Duration
+	// populate Duration struct as needed
+
+	pkt, err := Marshal(lease, With(DER))
+	if err != nil {
+	   fmt.Println(err)
+	   return
+	}
+
+	// ... etc ...
+*/
+func RegisterDurationAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+) {
+	all := append(ConstraintGroup[T]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &durationCodec[T]{
+				tag:          tag,
+				cg:           all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder,
+			}
+		},
+		newWith: func(v any) box {
+			return &durationCodec[T]{
+				val:          valueOf[T](v),
+				tag:          tag,
+				cg:           all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder,
+			}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterTemporalAlias[Date](TagDate, nil, nil, nil, nil)
+	RegisterTemporalAlias[DateTime](TagDateTime, nil, nil, nil, nil)
+	RegisterTemporalAlias[TimeOfDay](TagTimeOfDay, nil, nil, nil, nil)
+	RegisterTemporalAlias[GeneralizedTime](TagGeneralizedTime, nil, nil, nil, nil)
+	RegisterTemporalAlias[UTCTime](TagUTCTime, nil, nil, nil, nil)
+	RegisterDurationAlias[Duration](TagDuration, nil, nil, nil, nil)
 }

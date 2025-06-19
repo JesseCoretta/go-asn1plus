@@ -44,16 +44,26 @@ are added (and, thus, evaluated) in the order in which they are provided.
 type ConstraintGroup[T any] []Constraint[T]
 
 /*
-Validate returns an error following the execution of all [Constraint] instances
+Constrain returns an error following the execution of all [Constraint] instances
 against x which reside within the receiver isntance.
 */
-func (r ConstraintGroup[T]) Validate(x T) (err error) {
+func (r ConstraintGroup[T]) Constrain(x T) (err error) {
 	for i := 0; i < len(r) && err == nil; i++ {
-		err = r[i](x)
+		if r[i] != nil {
+			err = r[i](x)
+		}
 	}
 
 	return
 }
+
+/*
+Deprecated: Validate returns an error following the execution of all [Constraint]
+instances against x which reside within the receiver isntance.
+
+Use [ConstraintGroup.Constrain] instead.
+*/
+func (r ConstraintGroup[T]) Validate(x T) error { return r.Constrain(x) }
 
 /*
 LiftConstraint adapts (or "converts") a [Constraint] for type U to type T.

@@ -5,6 +5,64 @@ import (
 	"testing"
 )
 
+func TestObjectIdentifier_customType(t *testing.T) {
+	type CustomOID ObjectIdentifier
+	RegisterOIDAlias[CustomOID](TagOID, nil, nil, nil, nil)
+
+	// We cheat here rather than writing a separate
+	// constructor merely for testing.
+	orig, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
+	cust := CustomOID(orig)
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var out CustomOID
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	// We cheat again, since we didn't write a
+	// custom OID method for this simple test.
+	cast1 := ObjectIdentifier(orig)
+	cast2 := ObjectIdentifier(cust)
+	if !cast1.Eq(cast2) {
+		t.Fatalf("%s failed [BER OID cmp.]:\n\twant: %s\n\tgot:  %s",
+			t.Name(), cast1, cast2)
+	}
+}
+
+func TestRelativeOID_customType(t *testing.T) {
+	type CustomRelOID RelativeOID
+	RegisterOIDAlias[CustomRelOID](TagOID, nil, nil, nil, nil)
+
+	// We cheat here rather than writing a separate
+	// constructor merely for testing.
+	orig, _ := NewRelativeOID(1, 4, 1, 56521)
+	cust := CustomRelOID(orig)
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var out CustomRelOID
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	// We cheat again, since we didn't write a
+	// custom OID method for this simple test.
+	cast1 := RelativeOID(orig).String()
+	cast2 := RelativeOID(cust).String()
+	if cast1 != cast2 {
+		t.Fatalf("%s failed [BER Relative OID cmp.]:\n\twant: %s\n\tgot:  %s",
+			t.Name(), cast1, cast2)
+	}
+}
+
 /*
 This example demonstrates the following:
 
@@ -24,7 +82,7 @@ func ExampleObjectIdentifier_roundTripBER() {
 
 	// BER Encode ObjectIdentifier into Packet
 	var pkt Packet
-	if pkt, err = Marshal(oid, WithEncoding(BER)); err != nil {
+	if pkt, err = Marshal(oid, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -50,7 +108,7 @@ func TestObjectIdentifier_InStruct(t *testing.T) {
 	my := MySequence{OID: oid}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(my, WithEncoding(rule))
+		pkt, err := Marshal(my, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v\n", t.Name(), rule, err)
 		}
@@ -81,7 +139,7 @@ func ExampleObjectIdentifier_roundTripDER() {
 
 	// DER Encode ObjectIdentifier into Packet
 	var pkt Packet
-	if pkt, err = Marshal(oid, WithEncoding(DER)); err != nil {
+	if pkt, err = Marshal(oid, With(DER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -107,7 +165,6 @@ func TestObjectIdentifier_codecov(_ *testing.T) {
 	o.IntSlice()
 	o.IsPrimitive()
 	o.Uint64Slice()
-	o.write(nil, &Options{})
 
 	_, _ = NewObjectIdentifier(`JERRY. HELLO.`)
 	_, _ = NewObjectIdentifier(struct{}{})
@@ -131,13 +188,8 @@ func TestObjectIdentifier_codecov(_ *testing.T) {
 	o.IntSlice()
 	o.Uint64Slice()
 	o.Index(1)
-	der, _ := Marshal(o)
-	_ = Unmarshal(der, &o)
-	o.read(nil, TLV{}, &Options{})
-	o.read(&DERPacket{}, TLV{}, &Options{})
-	o.read(&DERPacket{data: []byte{0x05, 0x01, 0x01}}, TLV{}, &Options{})
-	o.read(&DERPacket{data: []byte{0x05, 0x1f, 0x01}}, TLV{}, &Options{})
-	o.write(der, &Options{})
+	pkt, _ := Marshal(o)
+	_ = Unmarshal(pkt, &o)
 
 	isNumericOID(`-4`)
 	isNumericOID(`4`)
@@ -160,7 +212,7 @@ func TestRelativeOID_roundTripBER(t *testing.T) {
 	}
 
 	var pkt Packet
-	if pkt, err = Marshal(rel, WithEncoding(BER)); err != nil {
+	if pkt, err = Marshal(rel, With(BER)); err != nil {
 		t.Errorf("%s failed [DER encode]: %v", t.Name(), err)
 		return
 	}
@@ -190,7 +242,7 @@ func TestRelativeOID_roundTripDER(t *testing.T) {
 	}
 
 	var pkt Packet
-	if pkt, err = Marshal(rel, WithEncoding(DER)); err != nil {
+	if pkt, err = Marshal(rel, With(DER)); err != nil {
 		t.Errorf("%s failed [DER encode]: %v", t.Name(), err)
 		return
 	}
@@ -264,9 +316,7 @@ func ExampleNewObjectIdentifier_withConstraint() {
 func ExampleObjectIdentifier_viaGoString() {
 	opts := Options{Identifier: "oid"}
 	pkt, err := Marshal("1.3.6.1.4.1.56521",
-		WithEncoding(BER),
-		WithOptions(opts),
-	)
+		With(BER, opts))
 
 	if err != nil {
 		fmt.Println(err)
@@ -276,7 +326,7 @@ func ExampleObjectIdentifier_viaGoString() {
 	fmt.Printf("Jesse's encoded OID: %s\n", pkt.Hex())
 
 	var oid string
-	if err = Unmarshal(pkt, &oid, WithOptions(opts)); err != nil {
+	if err = Unmarshal(pkt, &oid, With(opts)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -295,7 +345,7 @@ func ExampleObjectIdentifier_sequenceWithStringOID() {
 
 	mine := MySequence{"Jesse Coretta", "1.3.6.1.4.1.56521"}
 
-	pkt, err := Marshal(mine, WithEncoding(BER))
+	pkt, err := Marshal(mine, With(BER))
 	if err != nil {
 		fmt.Println(err)
 		return

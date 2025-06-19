@@ -12,11 +12,9 @@ import (
 // used by chainAdapters’ callers.
 type stubPrimitive struct{}
 
-func (p stubPrimitive) String() string                           { return `` }
-func (p stubPrimitive) Tag() int                                 { return 999 }
-func (p stubPrimitive) IsPrimitive() bool                        { return true }
-func (p *stubPrimitive) write(_ Packet, _ *Options) (int, error) { return 0, nil }
-func (p *stubPrimitive) read(_ Packet, _ TLV, _ *Options) error  { return nil }
+func (p stubPrimitive) String() string    { return `` }
+func (p stubPrimitive) Tag() int          { return 999 }
+func (p stubPrimitive) IsPrimitive() bool { return true }
 
 // helper that returns an adapter whose fromGo either fails or succeeds.
 func testMakeAdapter(shouldSucceed bool) adapter {
@@ -81,7 +79,7 @@ func ExampleListAdapters() {
 	}
 
 	// Output:
-	// string → asn1plus.UTF8String  (keyword "example")
+	// string → asn1plus.binCodec[github.com/JesseCoretta/go-asn1plus.UTF8String]  (keyword "example")
 }
 
 func testMust[T any](v T, err error) T {

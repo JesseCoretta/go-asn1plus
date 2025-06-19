@@ -2,67 +2,8 @@ package asn1plus
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 )
-
-func ExamplePacket_indefiniteLengthBERByOptions() {
-
-	var oct OctetString = OctetString(`A really long value ...`)
-
-	pkt, err := Marshal(oct,
-		WithEncoding(BER),
-		WithOptions(Options{
-			Indefinite: true,
-		}))
-
-	if err != nil {
-		fmt.Printf("Failed [BER encoding]: %v", err)
-		return
-	}
-
-	fmt.Printf("%s\n", pkt.Hex())
-
-	var oct2 OctetString
-	if err = Unmarshal(pkt, &oct2); err != nil {
-		fmt.Printf("Failed [BER decoding]: %v", err)
-		return
-	}
-
-	fmt.Printf("Decoded %q\n", oct2)
-
-	// Output: 04 80 41207265616C6C79206C6F6E672076616C7565202E2E2E0000
-	// Decoded "A really long value ..."
-}
-
-func ExamplePacket_indefiniteLengthBERByStructFieldTag() {
-
-	type MySequence struct {
-		Value OctetString `asn1:"indefinite"`
-	}
-
-	mine := MySequence{OctetString(`A really long value ...`)}
-
-	pkt, err := Marshal(mine, WithEncoding(BER))
-	if err != nil {
-		fmt.Printf("Failed [BER encoding]: %v", err)
-		return
-	}
-
-	fmt.Printf("%s\n", pkt.Hex())
-
-	var mine2 MySequence
-	if err = Unmarshal(pkt, &mine2); err != nil {
-		fmt.Printf("Failed [BER decoding]: %v", err)
-		return
-	}
-
-	fmt.Printf("Decoded: %s\n", mine2.Value)
-
-	// Output:
-	// 30 1B 048041207265616C6C79206C6F6E672076616C7565202E2E2E0000
-	// Decoded: A really long value ...
-}
 
 func TestBER_codecov(_ *testing.T) {
 	pkt := BER.New()

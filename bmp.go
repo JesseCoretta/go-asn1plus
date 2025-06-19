@@ -28,68 +28,72 @@ an attempt to marshal x.
 */
 func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, err error) {
 	var e string
+
 	switch tv := x.(type) {
 	case []uint8:
 		e = string(tv)
+
 	case BMPString:
-		if len(tv) == 0 {
-			break // will fall through to produce a zero-length BMPString.
-		} else if len(tv) == 2 {
-			if tv[0] != 0x1E || tv[1] != 0x0 {
-				err = mkerr("Invalid ASN.1 tag or length octet for empty string")
-			} else {
-				bmp = BMPString{0x1E, 0x0}
-			}
+		if err = BMPSpec(tv); err != nil {
 			return
-		} else {
-			if tv[0] != 0x1E {
-				err = mkerr("Invalid ASN.1 tag")
-				return
-			} else if int(tv[1])*2 != len(tv[2:]) {
-				err = mkerr("input string encoded length does not match length octet")
-				return
-			}
-			// **Decode the existing BMPString into a Go string**
-			e = tv.String()
 		}
+		e = tv.String()
+
 	case string:
 		e = tv
+
 	default:
 		err = mkerr("Invalid type for ASN.1 BMPSTRING")
 		return
 	}
 
 	if len(e) == 0 {
-		// Zero length values are OK
-		bmp = BMPString{0x1E, 0x0}
+		bpm := BMPString{0x1E, 0x0}
+		bmp = bpm
 		return
 	}
 
 	var result []byte
-	result = append(result, byte(TagBMPString))
-
-	encoded := utf16Enc([]rune(e))
-	length := len(encoded)
-	if uint16(length) > uint16(255) {
-		err = mkerr("input string too long for BMPString encoding")
+	if result, err = buildBMP(e); err != nil {
 		return
 	}
-	result = append(result, byte(length))
 
-	for _, char := range encoded {
-		result = append(result, byte(char>>8), byte(char&0xFF))
+	_bmp := BMPString(result)
+
+	var group ConstraintGroup[BMPString] = append(ConstraintGroup[BMPString]{BMPSpec}, constraints...)
+
+	if err = group.Validate(_bmp); err == nil {
+		bmp = _bmp
 	}
-
-	if len(constraints) > 0 {
-		var group ConstraintGroup[BMPString] = constraints
-		err = group.Validate(BMPString(result))
-	}
-
-	if err == nil {
-		bmp = BMPString(result)
-	}
-
 	return
+}
+
+/*
+BMPSpec implements the formal [Constraint] specification for [BMPString].
+
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var BMPSpec Constraint[BMPString]
+
+func buildBMP(e string) ([]byte, error) {
+	out := []byte{byte(TagBMPString)}
+
+	// empty string → tag, length 0
+	if len(e) == 0 {
+		return append(out, 0), nil
+	}
+
+	encoded := utf16Enc([]rune(e))
+	if len(encoded) > 255 {
+		return nil, mkerr("input string too long for BMPString encoding")
+	}
+
+	out = append(out, byte(len(encoded)))
+	for _, ch := range encoded {
+		out = append(out, byte(ch>>8), byte(ch&0xFF))
+	}
+	return out, nil
 }
 
 /*
@@ -140,38 +144,23 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 */
 func (r BMPString) IsZero() bool { return r == nil }
 
-func (r BMPString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-
-	return
-}
-
-func (r *BMPString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			var lt int = tlv.Length
-			if pkt.Offset()+lt > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+lt, pkt.Len(), "Length")
-			} else {
-				*r = BMPString(data)
-				pkt.SetOffset(pkt.Offset() + lt)
+func init() {
+	RegisterTextAlias[BMPString](TagBMPString, nil, nil, nil, BMPSpec)
+	BMPSpec = func(o BMPString) (err error) {
+		if len(o) == 0 {
+			return
+		} else if len(o) == 2 {
+			if o[0] != 0x1E || o[1] != 0x0 {
+				err = mkerr("Invalid ASN.1 tag or length octet for empty string")
+			}
+		} else {
+			if o[0] != 0x1E {
+				err = mkerr("Invalid ASN.1 tag")
+			} else if int(o[1])*2 != len(o[2:]) {
+				err = mkerr("input string encoded length does not match length octet")
 			}
 		}
-	}
 
-	return
+		return
+	}
 }

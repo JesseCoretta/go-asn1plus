@@ -30,17 +30,6 @@ Len returns the integer length of the receiver instance.
 func (r UTF8String) Len() int { return len(r) }
 
 /*
-defaultUTF8Constraint is the default validator that checks basic
-UTF-8 validity via use of [utf8.ValidString].
-*/
-func defaultUTF8Constraint(s string) (err error) {
-	if !utf8OK(s) {
-		err = mkerr("invalid UTF8 in ASN.1 UTF8 STRING")
-	}
-	return
-}
-
-/*
 NewUTF8String returns an instance of [UTF8String] alongside an error following an
 attempt to marshal x.
 
@@ -70,19 +59,27 @@ func NewUTF8String(x any, constraints ...Constraint[UTF8String]) (u8 UTF8String,
 		return
 	}
 
-	if err = defaultUTF8Constraint(raw); err == nil {
-		if len(constraints) > 0 {
-			var group ConstraintGroup[UTF8String] = constraints
-			err = group.Validate(UTF8String(raw))
-		}
+	_u8 := UTF8String(raw)
+	err = UTF8Spec(_u8)
+	if len(constraints) > 0 && err == nil {
+		var group ConstraintGroup[UTF8String] = constraints
+		err = group.Validate(_u8)
+	}
 
-		if err == nil {
-			u8 = UTF8String(raw)
-		}
+	if err == nil {
+		u8 = _u8
 	}
 
 	return
 }
+
+/*
+UTF8Spec implements the formal [Constraint] specification for [UTF8String].
+
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var UTF8Spec Constraint[UTF8String]
 
 /*
 String returns the string representation of the receiver instance.
@@ -94,38 +91,13 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 */
 func (r UTF8String) IsZero() bool { return len(r) == 0 }
 
-func (r *UTF8String) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
+func init() {
+	RegisterTextAlias[UTF8String](TagUTF8String, nil, nil, nil, UTF8Spec)
+	UTF8Spec = func(o UTF8String) (err error) {
+		if !utf8OK(o.String()) {
+			err = mkerr("invalid UTF8 character(s) in ASN.1 UTF8 STRING")
+		}
+
 		return
 	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				*r = UTF8String(data)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-
-	default:
-		err = mkerr("Unsupported packet type for UTF8String decoding")
-	}
-	return
-}
-
-func (r UTF8String) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
 }

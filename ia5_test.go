@@ -141,7 +141,7 @@ func TestIA5String_encodingRules(t *testing.T) {
 
 			// encode our IA5String instance
 			var pkt Packet
-			if pkt, err = Marshal(ia5, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(ia5, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
@@ -161,12 +161,8 @@ func TestIA5String_encodingRules(t *testing.T) {
 }
 
 func TestIA5String_codecov(_ *testing.T) {
-
 	var ia5 IA5String
 	ia5.Tag()
-	ia5.read(&DERPacket{}, TLV{typ: BER, Class: 4, Tag: 2}, &Options{})
-	ia5.read(&DERPacket{}, TLV{typ: BER, Class: 0, Tag: ia5.Tag(), Length: 100}, &Options{})
-
 }
 
 func ExampleIA5String_withConstraints() {

@@ -54,6 +54,14 @@ func implicitOptions() *Options {
 	return &Options{class: &c}
 }
 
+func deferImplicit(o *Options) *Options {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	return o
+}
+
 func addStringConfigValue(dst *[]string, cond bool, val string) {
 	if cond {
 		*dst = append(*dst, val)

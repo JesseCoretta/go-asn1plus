@@ -25,7 +25,7 @@ func TestNewBoolean(t *testing.T) {
 
 			for _, rule := range encodingRules {
 				var pkt Packet
-				if pkt, err = Marshal(B, WithEncoding(rule)); err != nil {
+				if pkt, err = Marshal(B, With(rule)); err != nil {
 					t.Errorf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 					continue
 				}
@@ -51,10 +51,7 @@ func TestNewBoolean(t *testing.T) {
 }
 
 func TestBoolean_codecov(t *testing.T) {
-	b, _ := NewBoolean(struct{}{})
-	b.read(nil, TLV{typ: DER, Tag: 6}, &Options{})
-	b.read(&DERPacket{offset: 55}, TLV{typ: DER, Tag: TagBoolean, Length: 6}, &Options{})
-	b.read(&DERPacket{offset: 55}, TLV{typ: DER, Tag: TagBoolean, Length: 1}, &Options{})
+	_, _ = NewBoolean(struct{}{})
 }
 
 func ExampleNewBoolean() {

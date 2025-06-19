@@ -7,7 +7,7 @@ import (
 
 func ExampleEnumerated_roundTripBER() {
 	var e Enumerated = 3
-	pkt, err := Marshal(e, WithEncoding(BER))
+	pkt, err := Marshal(e, With(BER))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -29,7 +29,7 @@ func ExampleEnumerated_roundTripBER() {
 
 func ExampleEnumerated_roundTripDER() {
 	var e Enumerated = 3
-	pkt, err := Marshal(e, WithEncoding(DER))
+	pkt, err := Marshal(e, With(DER))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -53,18 +53,15 @@ func TestEnumerated_codecov(t *testing.T) {
 	_, _ = NewEnumerated(struct{}{})
 	_, _ = NewEnumerated(Enumerated(3))
 	e, _ := NewEnumerated(3)
-	e.write(&DERPacket{data: []byte{0x00}}, &Options{})
 	e.Tag()
-	e.Int()
 	e.IsPrimitive()
 	opts := &Options{}
 	opts.SetTag(4)
-	e.readBER(&BERPacket{data: []byte{0x00}}, TLV{}, opts)
 
 	for _, rule := range encodingRules {
 		var pkt Packet
 		var err error
-		if pkt, err = Marshal(e, WithEncoding(rule)); err != nil {
+		if pkt, err = Marshal(e, With(rule)); err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
 

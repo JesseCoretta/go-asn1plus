@@ -59,67 +59,44 @@ func NewIA5String(x any, constraints ...Constraint[IA5String]) (ia5 IA5String, e
 		return
 	}
 
-	err = checkIA5String(raw)
+	_ia5 := IA5String(raw)
+	err = IA5Spec(_ia5)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[IA5String] = constraints
-		err = group.Validate(IA5String(raw))
+		err = group.Validate(_ia5)
 	}
 
 	if err == nil {
-		ia5 = IA5String(raw)
+		ia5 = _ia5
 	}
 
 	return
 }
 
-func checkIA5String(raw string) (err error) {
-	if len(raw) == 0 {
-		err = mkerr("Invalid IA5 String (zero)")
-		return
-	}
+/*
+IA5Spec implements the formal [Constraint] specification for [IA5String].
 
-	runes := []rune(raw)
-	for i := 0; i < len(runes) && err == nil; i++ {
-		var char rune = runes[i]
-		if !(0x0000 <= char && char <= 0x00FF) {
-			err = mkerrf("Invalid IA5 String character: ", string(char))
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var IA5Spec Constraint[IA5String]
+
+func init() {
+	RegisterTextAlias[IA5String](TagIA5String, nil, nil, nil, IA5Spec)
+	IA5Spec = func(o IA5String) (err error) {
+		if len(o) == 0 {
+			err = mkerr("Invalid IA5 String (zero)")
+			return
 		}
-	}
 
-	return
-}
-
-func (r *IA5String) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				*r = IA5String(data)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
+		runes := []rune(o.String())
+		for i := 0; i < len(runes) && err == nil; i++ {
+			var char rune = runes[i]
+			if !(0x0000 <= char && char <= 0x00FF) {
+				err = mkerrf("Invalid IA5 String character: ", string(char))
 			}
 		}
+
+		return
 	}
-
-	return
-}
-
-func (r IA5String) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-
-	return
 }

@@ -5,6 +5,11 @@ bs.go contains types and methods pertaining to the ASN.1 BIT
 STRING type.
 */
 
+import (
+	"reflect"
+	"unsafe"
+)
+
 /*
 BitString implements the ASN.1 BIT STRING type (tag 3).
 */
@@ -40,7 +45,7 @@ func NewBitString(x any, constraints ...Constraint[BitString]) (bs BitString, er
 
 	_bs := BitString{Bytes: bytesOut, BitLength: bitLen}
 	if len(constraints) > 0 && err == nil {
-		err = (ConstraintGroup[BitString](constraints)).Validate(_bs)
+		err = (ConstraintGroup[BitString](constraints)).Constrain(_bs)
 	}
 
 	if err == nil {
@@ -423,68 +428,169 @@ func verifyBitStringDigitSet(base int, digits []byte) (err error) {
 	return
 }
 
-func (r BitString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		remainder := r.BitLength % 8 // For 7 bits, remainder = 7.
+type bitStringCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
+}
+
+func (c *bitStringCodec[T]) Tag() int          { return c.tag }
+func (c *bitStringCodec[T]) IsPrimitive() bool { return true }
+func (c *bitStringCodec[T]) String() string    { return "bitStringCodec" }
+func (c *bitStringCodec[T]) getVal() any       { return c.val }
+func (c *bitStringCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func toBitString[T any](v T) BitString   { return *(*BitString)(unsafe.Pointer(&v)) }
+func fromBitString[T any](i BitString) T { return *(*T)(unsafe.Pointer(&i)) }
+
+func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	if err = c.cg.Constrain(c.val); err == nil {
+		bsVal := toBitString(c.val)
+		remainder := bsVal.BitLength % 8
 		unused := 0
 		if remainder != 0 {
-			unused = 8 - remainder // unused = 1
+			unused = 8 - remainder
 		}
-		bts := make([]byte, 1+len(r.Bytes))
-		bts[0] = byte(unused)
-		copy(bts[1:], r.Bytes)
 
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(bts), false, bts...), opts); err == nil {
-			poff := pkt.Offset()
-			n = pkt.Offset() - poff + 1
-		}
-	}
-	return
-}
-
-func (r *BitString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	}
-
-	return
-}
-
-func (r *BitString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
 		} else {
-			if len(data) < 1 {
-				err = mkerrf(pkt.Type().String(), " BIT STRING is missing the unused bits byte")
-				return
-			}
-			unused := int(data[0])
-			if unused < 0 || unused > 7 {
-				return mkerrf("Invalid unused bits count: ", itoa(unused))
-			}
-			r.Bytes = data[1:] // The remaining bytes are the actual bit content.
+			wire = make([]byte, 1+len(bsVal.Bytes))
+			wire[0] = byte(unused)
+			copy(wire[1:], bsVal.Bytes)
+		}
 
-			// Verify that the padding bits in the last byte are zero.
-			if len(r.Bytes) > 0 && unused > 0 {
-				lastByte := r.Bytes[len(r.Bytes)-1]
-				if lastByte&((1<<unused)-1) != 0 {
-					return mkerr("Non-zero padding bits in DER BIT STRING")
+		tag, cls := effectiveTag(c.tag, 0, o)
+		start := pkt.Offset()
+		if err == nil {
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			err = writeTLV(pkt, tlv, o)
+			off = pkt.Offset() - start
+		}
+	}
+
+	return
+}
+
+func (c *bitStringCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	// Reject primitives encoded with indefinite length
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+		if len(wire) < 1 {
+			err = mkerr("BIT STRING missing unused-bits byte")
+			return err
+		}
+
+		unused := int(wire[0])
+		if unused < 0 || unused > 7 {
+			err = mkerr("BIT STRING: unused bits outside 0-7")
+			return err
+		}
+
+		bits := wire[1:]
+		if len(bits) == 0 && unused != 0 {
+			err = mkerr("BIT STRING: unused bits > length")
+			return err
+		}
+
+		// DER: padding bits MUST be zero
+		if err = bitStringCheckDERPadding(pkt.Type(), bits, unused); err != nil {
+			return err
+		}
+
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
 				}
 			}
-			r.BitLength = len(r.Bytes)*8 - unused
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				out = fromBitString[T](BitString{
+					Bytes:     append([]byte(nil), bits...),
+					BitLength: len(bits)*8 - unused,
+				})
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func bitStringCheckDERPadding(rule EncodingRule, bits []byte, unused int) (err error) {
+	if rule == DER && len(bits) > 0 && unused > 0 {
+		last := bits[len(bits)-1]
+		if last&((1<<unused)-1) != 0 {
+			err = mkerr("DER BIT STRING: non-zero padding")
 		}
 	}
 
 	return
+}
+
+func RegisterBitStringAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+) {
+	all := append(ConstraintGroup[T]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &bitStringCodec[T]{tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+		newWith: func(v any) box {
+			return &bitStringCodec[T]{
+				val: valueOf[T](v), tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterBitStringAlias[BitString](TagBitString, nil, nil, nil, nil)
 }

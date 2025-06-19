@@ -26,7 +26,7 @@ func ExampleGeneralString_dER() {
 
 	// DER encode GeneralString into Packet instance
 	var der Packet
-	if der, err = Marshal(vs, WithEncoding(DER)); err != nil {
+	if der, err = Marshal(vs, With(DER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -75,7 +75,7 @@ func TestGeneralString_encodingRules(t *testing.T) {
 
 			// encode our GeneralString instance
 			var pkt Packet
-			if pkt, err = Marshal(od, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 

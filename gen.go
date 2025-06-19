@@ -27,36 +27,31 @@ func NewGeneralString(x any, constraints ...Constraint[GeneralString]) (gen Gene
 	case GeneralString:
 		s = tv.String()
 	default:
-		err = mkerr("Invalid type for ASN.1 GRAPHIC STRING")
+		err = mkerr("Invalid type for ASN.1 GENERAL STRING")
 		return
 	}
 
-	_, err = scanGeneralStringChars(s)
+	_gen := GeneralString(s)
+	err = GeneralSpec(_gen)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[GeneralString] = constraints
-		err = group.Validate(GeneralString(s))
+		err = group.Validate(_gen)
 	}
 
 	if err == nil {
-		gen = GeneralString(s)
+		gen = _gen
 	}
 
 	return
 }
 
-func scanGeneralStringChars(x string) (gs string, err error) {
-	for _, ch := range x {
-		if !isGeneralStringChar(ch) {
-			err = mkerrf("Invalid character for ASN.1 GENERAL STRING: ", string(ch))
-		}
-	}
+/*
+GeneralSpec implements the formal [Constraint] specification for [GeneralString].
 
-	if err == nil {
-		gs = x
-	}
-
-	return
-}
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var GeneralSpec Constraint[GeneralString]
 
 /*
 Len returns the integer byte length of the receiver instance.
@@ -84,56 +79,29 @@ a known ASN.1 primitive.
 */
 func (r GeneralString) IsPrimitive() bool { return true }
 
-func (r GeneralString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
-
-func (r *GeneralString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	}
-	return
-}
-
-func (r *GeneralString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		var gen string
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else if gen, err = scanGeneralStringChars(string(data)); err == nil {
-			*r = GeneralString(gen)
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
-		}
-	}
-
-	return
-}
-
-func isGeneralStringChar(ch rune) bool {
-	if ch < 0 || ch > 0x00FF {
-		return false
-	}
-	word := ch >> 6
-	bit := ch & 63
-	return (generalStringBitmap[word]>>bit)&1 != 0
-}
-
 var generalStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
+	RegisterTextAlias[GeneralString](TagGeneralString, nil, nil, nil, GeneralSpec)
+	GeneralSpec = func(o GeneralString) (err error) {
+		for _, r := range []rune(o.String()) {
+			if r < 0 || r > 0x00FF {
+				err = mkerrf("Invalid character '", string(r), "' (>0xFFFF) in GENERAL STRING")
+				break
+			}
+
+			word := r >> 6
+			bit := r & 63
+
+			if (generalStringBitmap[word]>>bit)&1 == 0 {
+				err = mkerrf("Invalid character '", string(word), "' in GENERAL STRING")
+				break
+			}
+		}
+
+		return
+	}
+
 	set := func(lo, hi rune) {
 		for r := lo; r <= hi; r++ {
 			generalStringBitmap[r>>6] |= 1 << (r & 63)

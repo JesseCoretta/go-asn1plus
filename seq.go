@@ -101,7 +101,15 @@ func marshalSequenceChoiceField(opts *Options, ch Choice, pkt, sub Packet, depth
 	}
 
 	if isPrimitive(ch.Value) {
-		_, err = toPtr(reflect.ValueOf(ch.Value)).Interface().(Primitive).write(sub, opts)
+		if c, ok := toPtr(reflect.ValueOf(ch.Value)).Interface().(codecRW); ok {
+			_, err = c.write(sub, opts)
+		} else if bx, ok := createCodecForPrimitive(ch.Value); ok {
+			_, err = bx.write(sub, opts)
+		} else {
+			err = mkerr("no codec for CHOICE primitive")
+			return
+		}
+
 		if err == nil && ch.Explicit {
 			inner := sub.Data()[sub.Offset():] // bytes we just wrote
 			// rebuild the sub-packet to insert the wrapper

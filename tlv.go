@@ -164,11 +164,11 @@ func getTLV(r Packet, opts *Options) (TLV, error) {
 		}
 	}
 
-	length, lenLen, err := parseLength(d[r.Offset():])
-	if err != nil {
-		return TLV{}, mkerrf(r.Type().String(),
-			" Packet.TLV: error reading length: ", err.Error())
+	var length, lenLen int
+	if length, lenLen, err = tlvVerifyLengthState(r, d); err != nil {
+		return TLV{}, err
 	}
+
 	r.SetOffset(r.Offset() + lenLen)
 
 	var tlv TLV
@@ -182,20 +182,45 @@ func getTLV(r Packet, opts *Options) (TLV, error) {
 	return tlv, nil
 }
 
-func writeTLV(r Packet, t TLV, opts *Options) error {
-	if !(t.Type() == BER || t.Type() == DER) {
-		return mkerrf(r.Type().String(), " Packet.WriteTLV: expected ",
-			r.Type().String(), ", got ", t.Type().String())
+func tlvVerifyLengthState(r Packet, d []byte) (length, lenLen int, err error) {
+	if length, lenLen, err = parseLength(d[r.Offset():]); err != nil {
+		err = mkerrf(r.Type().String(),
+			" Packet.TLV: error reading length: ", err.Error())
+	} else if r.Type() == DER {
+		// DER canonical-form checks
+		if length < 0 {
+			err = mkerr("DER forbids indefinite length")
+			return
+		}
+		if lenLen > 1 && length < 0x80 {
+			err = mkerr("DER: non-minimal length encoding")
+			return
+		}
+		if lenLen > 2 && d[r.Offset()+1] == 0x00 {
+			err = mkerr("DER: leading zero in length")
+			return
+		}
+	}
+
+	return
+}
+
+func writeTLV(pkt Packet, t TLV, opts *Options) error {
+	if pkt.Type() == DER && opts != nil && opts.Indefinite {
+		return mkerr("DER forbids indefinite length")
+	} else if !(t.Type() == BER || t.Type() == DER) {
+		return mkerrf(pkt.Type().String(), " Packet.WriteTLV: expected ",
+			pkt.Type().String(), ", got ", t.Type().String())
 	}
 
 	encoded := encodeTLV(t, opts)
-	r.Append(encoded...)
+	pkt.Append(encoded...)
 
 	// Add end-of-contents for BER-indefinite.
 	if t.Type() == BER && opts != nil && opts.Indefinite {
-		r.Append(0x00, 0x00)
+		pkt.Append(0x00, 0x00)
 	}
-	r.SetOffset(r.Len())
+	pkt.SetOffset(pkt.Len())
 	return nil
 }
 

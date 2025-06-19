@@ -32,26 +32,30 @@ func NewVisibleString(x any, constraints ...Constraint[VisibleString]) (VisibleS
 		raw = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 VISIBLE STRING")
+		return vs, err
 	}
 
-	for i := 0; i < len(raw) && err == nil; i++ {
-		if char := rune(raw[i]); isCtrl(char) {
-			err = mkerrf("Invalid character for ASN.1 VISIBLE STRING: #",
-				itoa(int(char)), " (is control character)")
-		}
-	}
-
+	_vs := VisibleString(raw)
+	err = VisibleSpec(_vs)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[VisibleString] = constraints
-		err = group.Validate(VisibleString(raw))
+		err = group.Validate(_vs)
 	}
 
 	if err == nil {
-		vs = VisibleString(raw)
+		vs = _vs
 	}
 
 	return vs, err
 }
+
+/*
+VisibleSpec implements the formal [Constraint] specification for [VisibleString].
+
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var VisibleSpec Constraint[VisibleString]
 
 /*
 Len returns the integer length of the receiver instance.
@@ -79,37 +83,19 @@ ASN.1 primitive.
 */
 func (r VisibleString) IsPrimitive() bool { return true }
 
-func (r VisibleString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-
-	return
-}
-
-func (r *VisibleString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				*r = VisibleString(data)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
+func init() {
+	RegisterTextAlias[VisibleString](TagVisibleString, nil, nil, nil, VisibleSpec)
+	VisibleSpec = func(o VisibleString) (err error) {
+		for _, r := range []rune(o.String()) {
+			if r < 128 {
+				if r < 32 || r > 126 || !isPrint(r) || isCtrl(r) {
+					err = mkerrf("Invalid character for ASN.1 VISIBLE STRING: #",
+						itoa(int(r)), " (is control character)")
+					break
+				}
 			}
 		}
-	}
 
-	return
+		return
+	}
 }

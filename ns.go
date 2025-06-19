@@ -51,24 +51,25 @@ func NewNumericString(x any, constraints ...Constraint[NumericString]) (ns Numer
 	var raw string
 	if raw, err = convertToNumericString(x); err == nil {
 		// Validate that raw contains only digits and space.
-		for _, c := range raw {
-			if !(c == ' ' || (c >= '0' && c <= '9')) {
-				err = mkerrf("Illegal character for ASN.1 NUMERICSTRING: ", string(c))
-				break
-			}
-		}
 
+		_ns := NumericString(raw)
+		err = NumericSpec(_ns)
 		if len(constraints) > 0 && err == nil {
 			var group ConstraintGroup[NumericString] = constraints
-			err = group.Validate(NumericString(raw))
+			err = group.Validate(_ns)
 		}
 
 		if err == nil {
-			ns = NumericString(raw)
+			ns = _ns
 		}
 	}
 	return
 }
+
+/*
+NumericSpec implements the formal [Constraint] specification for [NumericString].
+*/
+var NumericSpec Constraint[NumericString]
 
 func convertToNumericString(x any) (str string, err error) {
 	// Do an explicit check for string first.
@@ -107,36 +108,17 @@ func convertToNumericString(x any) (str string, err error) {
 	return
 }
 
-func (r NumericString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
+func init() {
+	RegisterTextAlias[NumericString](TagNumericString, nil, nil, nil, NumericSpec)
 
-	return
-}
-
-func (r *NumericString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				*r = NumericString(data)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
+	NumericSpec = func(o NumericString) (err error) {
+		for _, c := range []rune(o.String()) {
+			if !(c == ' ' || (c >= '0' && c <= '9')) {
+				err = mkerrf("Illegal character for ASN.1 NUMERICSTRING: ", string(c))
+				break
 			}
 		}
-	}
 
-	return
+		return
+	}
 }

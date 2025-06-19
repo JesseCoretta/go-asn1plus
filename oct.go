@@ -21,26 +21,30 @@ func NewOctetString(x any, constraints ...Constraint[OctetString]) (oct OctetStr
 		str = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 OCTET STRING")
+		return
 	}
 
-	runes := []rune(str)
-	for i := 0; i < len(runes) && err == nil; i++ {
-		if !(0x0000 <= runes[i] && runes[i] <= 0x00FF) {
-			err = mkerrf("Invalid character ", string(runes[i]), " in string")
-		}
-	}
-
+	_oct := OctetString(str)
+	err = OctetSpec(_oct)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[OctetString] = constraints
-		err = group.Validate(OctetString(str))
+		err = group.Validate(_oct)
 	}
 
 	if err == nil {
-		oct = OctetString(str)
+		oct = _oct
 	}
 
 	return
 }
+
+/*
+OctetSpec implements the formal [Constraint] specification for [OctetString].
+
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var OctetSpec Constraint[OctetString]
 
 /*
 OctetString implements the ASN.1 OCTET STRING type (tag 4).
@@ -79,38 +83,15 @@ func (r OctetString) Len() int {
 	return l
 }
 
-func (r OctetString) write(pkt Packet, opts *Options) (n int, err error) {
-
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-
-	return
-}
-
-func (r *OctetString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			var lt int = tlv.Length
-			if pkt.Offset()+lt > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+lt, pkt.Len(), "Length")
-			} else {
-				*r = OctetString(data)
-				pkt.SetOffset(pkt.Offset() + lt)
+func init() {
+	RegisterTextAlias[OctetString](TagOctetString, nil, nil, nil, OctetSpec)
+	OctetSpec = func(o OctetString) (err error) {
+		for _, r := range []rune(o.String()) {
+			if r > 0x00FF {
+				err = mkerrf("Invalid character '", string(r), "' (>0x00FF) in OCTET STRING")
+				break
 			}
 		}
+		return
 	}
-
-	return
 }

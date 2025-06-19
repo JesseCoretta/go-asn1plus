@@ -38,6 +38,7 @@ var (
 	appUint    func([]byte, uint64, int) []byte         = strconv.AppendUint
 	split      func(string, string) []string            = strings.Split
 	join       func([]string, string) string            = strings.Join
+	idxr       func(string, rune) int                   = strings.IndexRune
 	hexstr     func([]byte) string                      = hex.EncodeToString
 	stridxb    func(string, byte) int                   = strings.IndexByte
 	replace    func(string, string, string, int) string = strings.Replace
@@ -97,13 +98,6 @@ func sizeOfInt(i int) int {
 	}
 
 	return (bn(i) + 7) / 8
-}
-
-/*
-asn1Reader is qualified through any type which bears the "read(Packet, TagAndLength) error" method.
-*/
-type asn1Reader interface {
-	read(Packet, TLV, *Options) error
 }
 
 func newStrBuilder() strings.Builder { return strings.Builder{} }

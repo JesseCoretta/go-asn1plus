@@ -8,6 +8,8 @@ INTEGER type.
 import (
 	"math"
 	"math/big"
+	"reflect"
+	"unsafe"
 )
 
 /*
@@ -95,7 +97,7 @@ func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err 
 
 	if len(constraints) > 0 {
 		var group ConstraintGroup[Integer] = constraints
-		err = group.Validate(i)
+		err = group.Constrain(i)
 	}
 
 	return
@@ -158,74 +160,14 @@ func (r Integer) Le(x Integer) bool {
 	return r.Big().Cmp(x.Big()) <= 0
 }
 
-func (r *Integer) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	// Helper to decode a DER‐encoded integer into a *big.Int.
-	// This applies the DER sign rule: if the first byte’s MSB is set,
-	// the number is considered negative.
-	decodeIntValue := func(encoded []byte) *big.Int {
-		val := new(big.Int)
-		val.SetBytes(encoded)
-		if len(encoded) > 0 && encoded[0]&0x80 != 0 {
-			// Compute 2^(len(encoded)*8) and subtract it.
-			bitLen := uint(len(encoded) * 8)
-			twoPow := new(big.Int).Lsh(newBigInt(1), bitLen)
-			val.Sub(val, twoPow)
-		}
-		return val
-	}
-
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts, decodeIntValue)
-	default:
-		err = mkerr("Encoding rule not support for INTEGER")
-	}
-
-	return
-}
-
-func (r *Integer) readBER(pkt Packet, tlv TLV, opts *Options, decoder func([]byte) *big.Int) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		// len(data) was tlv.Length
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
-
-			val := decoder(data)
-			if val.IsInt64() {
-				*r = Integer{big: false, native: val.Int64(), bigInt: nil}
-			} else {
-				*r = Integer{big: true, native: 0, bigInt: val}
-			}
-		}
-	}
-	return
-}
-
-func (r Integer) write(pkt Packet, opts *Options) (n int, err error) {
-	var i *big.Int
-	if !r.big {
-		i = newBigInt(r.native)
-	} else {
-		i = r.bigInt
-	}
-
-	// Compute the DER minimal encoding for i.
-	content := encodeIntegerContent(i)
-
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(content), false, content...), opts); err == nil {
-			poff := pkt.Offset()
-			n = pkt.Offset() - poff + 1
-		}
+func decodeIntegerContent(encoded []byte) (val *big.Int) {
+	val = newBigInt(0)
+	val.SetBytes(encoded)
+	if len(encoded) > 0 && encoded[0]&0x80 != 0 {
+		// Compute 2^(len(encoded)*8) and subtract it.
+		bitLen := uint(len(encoded) * 8)
+		twoPow := new(big.Int).Lsh(newBigInt(1), bitLen)
+		val.Sub(val, twoPow)
 	}
 
 	return
@@ -343,4 +285,142 @@ func decodeNativeInt(data []byte) (int, error) {
 	}
 
 	return int(value), nil
+}
+
+type integerCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[Integer]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[Integer]
+	decodeHook   DecodeOverride[Integer]
+}
+
+func toInt[T any](v T) Integer   { return *(*Integer)(unsafe.Pointer(&v)) }
+func fromInt[T any](i Integer) T { return *(*T)(unsafe.Pointer(&i)) }
+
+func (c *integerCodec[T]) Tag() int          { return c.tag }
+func (c *integerCodec[T]) IsPrimitive() bool { return true }
+func (c *integerCodec[T]) String() string    { return "IntCodec" }
+func (c *integerCodec[T]) getVal() any       { return c.val }
+func (c *integerCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+// NOTE: called for both Integer and Enumerated
+func (c *integerCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	intVal := toInt(c.val)
+	if err = c.cg.Constrain(intVal); err == nil {
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(intVal)
+		} else {
+			var bi *big.Int
+			if intVal.big {
+				bi = intVal.bigInt
+			} else {
+				bi = newBigInt(intVal.native)
+			}
+			wire = encodeIntegerContent(bi)
+		}
+
+		if err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+			err = writeTLV(pkt, pkt.Type().newTLV(cls, tag, len(wire), false, wire...), o)
+			if err == nil {
+				off = pkt.Offset() - start
+			}
+		}
+	}
+
+	return
+}
+
+// NOTE: called for both Integer and Enumerated
+func (c *integerCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out Integer
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				bi := decodeIntegerContent(wire)
+				if bi.IsInt64() {
+					out = Integer{native: bi.Int64()}
+				} else {
+					out = Integer{big: true, bigInt: bi}
+				}
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = fromInt[T](out)
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func RegisterIntegerAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[Integer],
+	decoder DecodeOverride[Integer],
+	spec Constraint[Integer],
+	user ...Constraint[Integer],
+) {
+	all := append(ConstraintGroup[Integer]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &integerCodec[T]{
+				tag: tag, cg: all,
+				decodeVerify: verList,
+				encodeHook:   encoder,
+				decodeHook:   decoder}
+		},
+		newWith: func(v any) box {
+			return &integerCodec[T]{val: valueOf[T](v),
+				tag: tag, cg: all,
+				decodeVerify: verList,
+				encodeHook:   encoder,
+				decodeHook:   decoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterIntegerAlias[Integer](TagInteger, nil, nil, nil, nil)
 }

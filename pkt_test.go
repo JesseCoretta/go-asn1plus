@@ -160,7 +160,7 @@ func TestPacket_PeekTLV(t *testing.T) {
 	mine := MySequence{OctetString(`Hello`), PrintableString(`World`)}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		} else if _, err = pkt.PeekTLV(); err != nil {
@@ -178,7 +178,7 @@ func TestPacket_Packet(t *testing.T) {
 	mine := MySequence{OctetString(`Hello`), PrintableString(`World`)}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
@@ -204,7 +204,7 @@ func TestPacket_RawValueCompatSequence(t *testing.T) {
 	mine := MySequence{OctetString(`Hello`), PrintableString(`World`)}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
@@ -267,7 +267,7 @@ func TestPacket_codecov(_ *testing.T) {
 	opts := Options{}
 	opts.SetClass(3)
 	opts.SetTag(26)
-	Unmarshal(&BERPacket{}, &struct{}{}, WithOptions(opts))
+	Unmarshal(&BERPacket{}, &struct{}{}, With(opts))
 	var value *EmbeddedPDV
 	unmarshalValue(&BERPacket{}, reflect.ValueOf(value), nil)
 
@@ -418,7 +418,7 @@ func TestFindEOCCornerCases(t *testing.T) {
 	// Outer SEQUENCE (0x30, indefinite)
 	//   Inner SET (0x31, indefinite)
 	//     INTEGER (0x02,1,0)
-	//   … *missing* both inner & outer 00 00
+	//   ... *missing* both inner & outer 00 00
 	stream := []byte{0x30, 0x80, 0x31, 0x80, 0x02, 0x01, 0x00}
 
 	if _, err := findEOC(stream); !errorsEqual(err, errorTruncatedContent) {
@@ -640,10 +640,7 @@ func ExamplePacket_sequenceWithGoStringAndInteger() {
 
 	mine := MySequence{"Jesse", 48}
 
-	pkt, err := Marshal(mine,
-		WithEncoding(DER),
-		WithOptions(opts),
-	)
+	pkt, err := Marshal(mine, With(DER, opts))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -678,7 +675,7 @@ func TestSequence_FieldsExplicit(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [explicit, encoding]: %v", t.Name(), err)
 		}
@@ -710,7 +707,7 @@ func TestSequence_FieldsImplicit(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [implicit, encoding]: %v", t.Name(), err)
 		}
@@ -742,7 +739,7 @@ func TestSequence_PrimitiveFieldsExplicit(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [explicit, encoding]: %v", t.Name(), err)
 		}
@@ -774,7 +771,7 @@ func TestSequence_PrimitiveFieldsImplicit(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, WithEncoding(rule))
+		pkt, err := Marshal(mine, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [implicit, encoding]: %v", t.Name(), err)
 		}

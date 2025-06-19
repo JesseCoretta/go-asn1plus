@@ -137,14 +137,14 @@ func TestSequence_choiceAutomaticTagging(t *testing.T) {
 		Field2: choice,
 	}
 
-	pkt, err := Marshal(mine, WithEncoding(BER))
+	pkt, err := Marshal(mine, With(BER))
 	if err != nil {
 		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 	t.Logf("Encoded packet: %s\n", pkt.Hex())
 
 	var mine2 MySequence
-	if err = Unmarshal(pkt, &mine2, WithOptions(opts)); err != nil {
+	if err = Unmarshal(pkt, &mine2, With(opts)); err != nil {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	//t.Logf("%s\n", mine2.Field2.Value.(ObjectIdentifier))
@@ -173,7 +173,7 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(pdv, WithEncoding(rule))
+		pkt, err := Marshal(pdv, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
 		}
@@ -232,7 +232,7 @@ func TestExternal_encodingRulesChoiceSyntaxes(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(pdv, WithEncoding(rule))
+		pkt, err := Marshal(pdv, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
 		}
@@ -284,7 +284,7 @@ func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(pdv, WithEncoding(rule))
+		pkt, err := Marshal(pdv, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
 		}
@@ -344,7 +344,7 @@ func TestChoice_AutomaticTagsUniqueAndExplicit(t *testing.T) {
 	oid, _ := NewObjectIdentifier(1, 3, 6)
 	ch, _ := auto.Choose(oid, "choice:tag:1")
 	ch.Explicit = true
-	pkt, err := Marshal(ch, WithEncoding(DER)) // marshal the CHOICE itself
+	pkt, err := Marshal(ch, With(DER)) // marshal the CHOICE itself
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestChoice_NegativeTagLeak(t *testing.T) {
 	oid, _ := NewObjectIdentifier(1, 2, 3)
 	ch := Choice{Value: oid}
 
-	pkt, err := Marshal(ch, WithEncoding(DER))
+	pkt, err := Marshal(ch, With(DER))
 	if err != nil {
 		t.Fatalf("marshal failed unexpectedly: %v", err)
 	}

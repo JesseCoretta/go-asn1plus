@@ -8,6 +8,8 @@ REAL type.
 import (
 	"math"
 	"math/big"
+	"reflect"
+	"unsafe"
 )
 
 /*
@@ -89,7 +91,7 @@ func NewReal(mantissa any, base, exponent int, constraints ...Constraint[Real]) 
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Real] = constraints
-		err = group.Validate(_r)
+		err = group.Constrain(_r)
 	}
 
 	if err == nil {
@@ -198,218 +200,6 @@ ASN.1 primitive.
 */
 func (r Real) IsPrimitive() bool { return true }
 
-func (r Real) write(pkt Packet, opts *Options) (n int, err error) {
-	switch pkt.Type() {
-	case BER, DER:
-		n, err = r.writeBER(pkt, opts)
-
-	default:
-		err = mkerr("Unsupported packet type for REAL encoding")
-	}
-
-	return
-}
-
-func (r *Real) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-
-	default:
-		err = mkerr("Unsupported packet type for REAL decoding")
-	}
-
-	return
-}
-
-func (r *Real) writeBER(pkt Packet, opts *Options) (n int, err error) {
-	// Handle special REAL values first.
-	if r.Special != RealNormal {
-		if r.Special == RealPlusInfinity {
-			pkt.Append([]byte{byte(r.Tag()), 1, 0x40}...)
-			pkt.SetOffset(pkt.Len())
-			return pkt.Len(), nil
-		} else if r.Special == RealMinusInfinity {
-			pkt.Append([]byte{byte(r.Tag()), 1, 0x41}...)
-			pkt.SetOffset(pkt.Len())
-			return pkt.Len(), nil
-		}
-	}
-
-	// ZERO is encoded with zero content length.
-	if r.Mantissa.Big().Sign() == 0 {
-		pkt.Append([]byte{byte(r.Tag()), 0}...)
-		pkt.SetOffset(2)
-		return 2, nil
-	}
-
-	// Determine sign.
-	var signFlag byte = 0
-	if r.Mantissa.Big().Sign() < 0 {
-		signFlag = 0x20
-	}
-
-	// Set the base indicator:
-	// For our purposes, use base 2 if r.Base is not 10 or 16.
-	// TODO: revisit this.
-	var baseIndicator byte
-	switch r.Base {
-	case 10:
-		baseIndicator = 0xC0 // bits 7-6 = 11 => base 10
-	case 16:
-		baseIndicator = 0x80 // bits 7-6 = 10 => base 16
-	default:
-		baseIndicator = 0x00 // base 2 (bits 7-6 = 00)
-	}
-
-	// Use scaling factor 0.
-	var scale byte = 0
-
-	// Encode the exponent.
-	expBytes := encodeRealExponent(r.Exponent)
-	expLen := len(expBytes)
-	if expLen > 15 {
-		return 0, mkerr("Exponent too long")
-	}
-	// Build the header octet:
-	// Bit 8 is set (0x80), then OR with baseIndicator, signFlag,
-	//(scale<<4) and exponent length (lower 4 bits).
-	header := byte(0x80) | baseIndicator | signFlag | (scale << 4) | byte(expLen)
-
-	// Encode the mantissa.
-	// Use absolute value for mantissa encoding.
-	mantissaBytes := encodeMantissa(r.Mantissa.Big().Abs(r.Mantissa.Big()))
-	content := append([]byte{header}, expBytes...)
-	content = append(content, mantissaBytes...)
-	if len(content) >= 128 {
-		return 0, mkerr("REAL content too long")
-	}
-
-	off := pkt.Offset()
-	tag, class := effectiveTag(r.Tag(), 0, opts)
-	if err = writeTLV(pkt, pkt.Type().newTLV(class, tag, len(content), false, content...), opts); err == nil {
-		n = pkt.Offset() - off
-	}
-
-	return
-}
-
-func (r *Real) readBER(pkt Packet, tlv TLV, opts *Options) error {
-	var data []byte
-	var err error
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err != nil {
-		return err
-	}
-	if pkt.Offset()+tlv.Length > pkt.Len() {
-		return errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-	}
-	pkt.SetOffset(pkt.Offset() + tlv.Length)
-
-	// Handle special cases.
-	if len(data) == 0 {
-		zeroInt, _ := NewInteger(0)
-		*r = Real{Special: RealNormal, Mantissa: zeroInt, Base: 2, Exponent: 0}
-		return nil
-	}
-	if len(data) == 1 {
-		if data[0] == 0x40 {
-			*r = NewRealPlusInfinity()
-			return nil
-		} else if data[0] == 0x41 {
-			*r = NewRealMinusInfinity()
-			return nil
-		}
-	}
-
-	// The writer encoded REAL content as:
-	// Byte0: header, where:
-	//   Bits 7-6: base indicator
-	//   Bits 5-4: scaling factor
-	//   Bit 5 (0x20) is also used as the sign flag (1 if negative)
-	//   Bits 3-0: exponent length (L)
-	// Bytes1..L: exponent bytes (in two's complement, big-endian)
-	// Remaining bytes: mantissa bytes
-	header := data[0]
-	expLen := int(header & 0x0F)          // lower 4 bits: exponent length
-	scale := int((header & 0x30) >> 4)    // bits 5-4: scaling factor
-	sign := int((header & 0x20) >> 5)     // bit 5: sign flag (1 => negative)
-	baseCode := int((header & 0xC0) >> 6) // bits 7-6: base indicator
-
-	if len(data) < 1+expLen {
-		return mkerr("Insufficient data for REAL exponent")
-	}
-	expBytes := data[1 : 1+expLen]
-	exponent := 0
-	for _, b := range expBytes {
-		exponent = (exponent << 8) | int(b)
-	}
-	if expLen > 0 && expBytes[0]&0x80 != 0 {
-		exponent -= 1 << (8 * expLen)
-	}
-	// Adjust exponent by subtracting the scaling factor.
-	exponent -= scale
-
-	if len(data) < 1+expLen+1 {
-		return mkerr("Missing mantissa bytes")
-	}
-	mantissaBytes := data[1+expLen:]
-	mantissaBig := decodeMantissa(mantissaBytes)
-	if sign != 0 {
-		mantissaBig.Neg(mantissaBig)
-	}
-	intVal, _ := NewInteger(mantissaBig)
-
-	// Determine base from baseCode.
-	// TODO: revisit this.
-	var realBase int
-	switch baseCode {
-	case 3:
-		realBase = 10
-	case 2:
-		realBase = 16
-	default:
-		realBase = 2
-	}
-
-	*r = Real{
-		Special:  RealNormal,
-		Mantissa: intVal,
-		Base:     realBase,
-		Exponent: exponent,
-	}
-	return nil
-}
-
-func realBaseSwitch(baseCode byte) (base int, err error) {
-	switch baseCode {
-	case 0:
-		base = 2
-	case 1:
-		base = 8
-	case 2:
-		base = 16
-	case 3:
-		base = 10
-	default:
-		err = mkerr("Unsupported base encoding in REAL")
-	}
-
-	return
-}
-
-func encodeMantissa(b *big.Int) []byte {
-	bBytes := b.Bytes()
-	if len(bBytes) == 0 {
-		return []byte{0}
-	}
-	return bBytes
-}
-
 /*
 encodeRealExponent returns an instance of []byte, containing the
 encoding of an exponent (int) using the minimal two's complement
@@ -475,6 +265,18 @@ func decodeMantissa(mBytes []byte) *big.Int {
 	return newBigInt(0).SetBytes(mBytes)
 }
 
+func encodeMantissa(b *big.Int) []byte {
+	bBytes := b.Bytes()
+	if len(bBytes) == 0 {
+		return []byte{0}
+	}
+	return bBytes
+}
+
+func validRealBase(base int) bool {
+	return base == 2 || base == 8 || base == 10 || base == 16
+}
+
 // float64Components decomposes f into mantissa × base^exp.
 // base must be 2, 8 or 10.
 //
@@ -486,7 +288,7 @@ func decodeMantissa(mBytes []byte) *big.Int {
 //     0   → mant=0  , exp=0
 //     NaN   → mant=0  , exp=math.MinInt32
 func float64Components(f float64, base int) (mant *big.Int, exp int, err error) {
-	if base != 2 && base != 8 && base != 10 {
+	if !validRealBase(base) {
 		return nil, 0, mkerrf("unsupported base ", itoa(base))
 	}
 
@@ -529,11 +331,32 @@ func float64Components(f float64, base int) (mant *big.Int, exp int, err error) 
 		mant = newBigInt(0)
 		mant, _ = mant.SetString(mantStr, 10)
 		exp = exp10
+	case 16:
+		// reuse the base-2 extractor.
+		m2, e2 := float64Base2or8Components(f, 2)
+
+		// 16^k == 2^(4k).  Split the binary exponent into a
+		// multiple-of-4 part (goes into exp16) and a remainder
+		// 0..3 bits (folded into the mantissa).
+		exp16 := e2 / 4
+		rem := e2 % 4
+		if rem < 0 {
+			rem += 4 // make remainder positive
+			exp16--  // and compensate exponent
+		}
+
+		// Shift mantissa left by the remaining 0…3 bits.
+		if rem != 0 {
+			m2 = new(big.Int).Lsh(m2, uint(rem))
+		}
+
+		mant, exp = m2, exp16
 	}
 
 	if neg {
 		mant.Neg(mant)
 	}
+
 	return mant, exp, nil
 }
 
@@ -586,4 +409,218 @@ func bigFloatToRealParts(bf *big.Float, base int) (any, int, error) {
 	f64, _ := bf.Float64()
 	mant, exp, err := float64Components(f64, base)
 	return mant, exp, err
+}
+
+func toReal[T any](v T) Real   { return *(*Real)(unsafe.Pointer(&v)) }
+func fromReal[T any](r Real) T { return *(*T)(unsafe.Pointer(&r)) }
+
+type realCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
+}
+
+func (c *realCodec[T]) Tag() int          { return c.tag }
+func (c *realCodec[T]) IsPrimitive() bool { return true }
+func (c *realCodec[T]) String() string    { return "realCodec" }
+func (c *realCodec[T]) getVal() any       { return c.val }
+func (c *realCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func (c *realCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
+	}
+	if err := c.cg.Constrain(c.val); err == nil {
+		r := toReal(c.val)
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		} else {
+			// special cases
+			switch r.Special {
+			case RealPlusInfinity:
+				wire = []byte{0x40}
+			case RealMinusInfinity:
+				wire = []byte{0x41}
+			default:
+				if r.Mantissa.Big().Sign() == 0 {
+					// zero: empty content
+					wire = nil
+				} else {
+					// normal number
+					signFlag := byte(0)
+					if r.Mantissa.Big().Sign() < 0 {
+						signFlag = 0x20
+					}
+
+					baseIndicator := realBaseToHeader(r.Base)
+					expBytes := encodeRealExponent(r.Exponent)
+					if len(expBytes) > 15 {
+						return 0, mkerr("Exponent too long")
+					}
+					header := 0x80 | baseIndicator | signFlag | byte(len(expBytes))
+					mantissaBytes := encodeMantissa(r.Mantissa.Big().Abs(r.Mantissa.Big()))
+
+					wire = append([]byte{header}, expBytes...)
+					wire = append(wire, mantissaBytes...)
+				}
+			}
+		}
+
+		tag, cls := effectiveTag(c.tag, 0, o)
+		start := pkt.Offset()
+		if err == nil {
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			if err = writeTLV(pkt, tlv, o); err == nil {
+				off = pkt.Offset() - start
+			}
+		}
+	}
+
+	return
+}
+
+func (c *realCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
+
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				var r Real
+				switch len(wire) {
+				case 0: // zero
+					zero, _ := NewInteger(0)
+					r = Real{Mantissa: zero, Base: 2, Exponent: 0}
+				case 1: // ±∞
+					switch wire[0] {
+					case 0x40:
+						r = NewRealPlusInfinity()
+					case 0x41:
+						r = NewRealMinusInfinity()
+					default:
+						return mkerr("REAL: invalid special value")
+					}
+				default:
+					header := wire[0]
+					expLen := int(header & 0x0F)
+					if 1+expLen >= len(wire) {
+						return mkerr("REAL: insufficient data for exponent")
+					}
+
+					exp := decodeRealExponent(wire[1 : 1+expLen])
+					mantissa := decodeMantissa(wire[1+expLen:])
+
+					if header&0x20 != 0 {
+						mantissa.Neg(mantissa)
+					}
+
+					intMant, _ := NewInteger(mantissa)
+					r = Real{
+						Mantissa: intMant,
+						Base:     realHeaderToBase(header), // 2, 8, 10 or 16
+						Exponent: exp,
+					}
+				}
+
+				out = fromReal[T](r)
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func realHeaderToBase(header byte) (base int) {
+	switch (header & 0xC0) >> 6 {
+	case 3:
+		base = 10
+	case 2:
+		base = 16
+	case 1:
+		base = 8
+	default:
+		base = 2
+	}
+
+	return
+}
+
+func realBaseToHeader(base int) (header byte) {
+	switch base {
+	case 10:
+		header = 0xC0
+	case 16:
+		header = 0x80
+	case 8:
+		header = 0x40
+	default:
+		header = 0x00 // 2
+	}
+
+	return
+}
+
+func RegisterRealAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+) {
+	all := append(ConstraintGroup[T]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &realCodec[T]{tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+		newWith: func(v any) box {
+			return &realCodec[T]{
+				val: valueOf[T](v), tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterRealAlias[Real](TagReal, nil, nil, nil, nil)
 }

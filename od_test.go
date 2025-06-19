@@ -53,7 +53,6 @@ func TestObjectDescriptor_codecov(_ *testing.T) {
 	_, _ = NewObjectDescriptor(nil)
 	_, _ = NewObjectDescriptor(string(rune(2)))
 	_, _ = NewObjectDescriptor(struct{}{})
-	od.read(nil, TLV{}, nil)
 }
 
 func TestObjectDescriptor_encodingRules(t *testing.T) {
@@ -76,7 +75,7 @@ func TestObjectDescriptor_encodingRules(t *testing.T) {
 
 			// encode our ObjectDescriptor instance
 			var pkt Packet
-			if pkt, err = Marshal(od, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 

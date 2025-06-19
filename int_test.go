@@ -6,6 +6,31 @@ import (
 	"testing"
 )
 
+func TestInteger_customType(t *testing.T) {
+	type CustomNumber Integer
+	RegisterIntegerAlias[CustomNumber](TagInteger, nil, nil, nil, nil)
+
+	// We cheat here rather than writing a separate
+	// constructor merely for testing.
+	orig, _ := NewInteger(65)
+	cust := CustomNumber(orig)
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var out CustomNumber
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	if out.native != int64(65) {
+		t.Fatalf("%s failed [BER integer cmp.]:\n\twant: 56\n\tgot:  %d",
+			t.Name(), out.native)
+	}
+}
+
 // Table of test cases.
 var integerConstraintTests = []struct {
 	name          string
@@ -82,7 +107,7 @@ func TestInteger_codecov(_ *testing.T) {
 			i.Gt(i)
 			i.Ge(i)
 			i.Ne(i)
-			der, _ := Marshal(i, WithEncoding(rule))
+			der, _ := Marshal(i, With(rule))
 			var i2 Integer
 			_ = Unmarshal(der, &i2)
 		}
@@ -96,8 +121,6 @@ func TestInteger_codecov(_ *testing.T) {
 	i.IsPrimitive()
 	i.Tag()
 	_ = i.String()
-	i.read(nil, TLV{}, &Options{})
-	i.read(invalidPacket{}, TLV{}, &Options{})
 	encodeNativeInt(3)
 	decodeNativeInt([]byte{})
 	bts := encodeNativeInt(-3)

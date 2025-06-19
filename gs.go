@@ -33,37 +33,27 @@ func NewGraphicString(x any, constraints ...Constraint[GraphicString]) (gs Graph
 		return
 	}
 
-	_, err = scanGraphicStringChars(s)
+	_gs := GraphicString(s)
+	err = GraphicSpec(_gs)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[GraphicString] = constraints
-		err = group.Validate(GraphicString(s))
+		err = group.Validate(_gs)
 	}
 
 	if err == nil {
-		gs = GraphicString(s)
+		gs = _gs
 	}
 
 	return
 }
 
-func scanGraphicStringChars(x string) (gs string, err error) {
-	for _, ch := range x {
-		if ch < 128 {
-			// For ASCII, only characters 33 through 126 are allowed.
-			// For non-ASCII, allow only if printable and not control.
-			if ch < 32 || ch > 126 || !isPrint(ch) || isCtrl(ch) {
-				err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
-				break
-			}
-		}
-	}
+/*
+GraphicSpec implements the formal [Constraint] specification for [GraphicString].
 
-	if err == nil {
-		gs = x
-	}
-
-	return
-}
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var GraphicSpec Constraint[GraphicString]
 
 /*
 Len returns the integer byte length of the receiver instance.
@@ -91,50 +81,25 @@ known ASN.1 primitive.
 */
 func (r GraphicString) IsPrimitive() bool { return true }
 
-func (r GraphicString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-	return
-}
-
-func (r *GraphicString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	}
-	return
-}
-
-func (r *GraphicString) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-		if pkt.Offset()+tlv.Length > pkt.Len() {
-			err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-		} else {
-			// Validate each rune against the allowed graphic characters.
-			for _, ch := range string(data) {
-				if ch < 128 {
-					// Only characters 33..126 allowed in ASCII.
-					if ch < 33 || ch > 126 {
-						return mkerr("Invalid ASN.1 GRAPHIC STRING character")
-					}
-				} else if !unicode.IsPrint(ch) || unicode.IsControl(ch) {
-					return mkerr("Invalid ASN.1 GRAPHIC STRING character")
-				}
+func graphicStringDecoderVerify(b []byte) (err error) {
+	for _, ch := range string(b) {
+		if ch < 128 {
+			// Only characters 32..126 allowed in ASCII.
+			if ch < 32 || ch > 126 {
+				err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
+				break
 			}
-			*r = GraphicString(data)
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
+		} else if !unicode.IsPrint(ch) || unicode.IsControl(ch) {
+			err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
+			break
 		}
 	}
-
 	return
+}
+
+func init() {
+	RegisterTextAlias[GraphicString](TagGraphicString, graphicStringDecoderVerify, nil, nil, GraphicSpec)
+	GraphicSpec = func(o GraphicString) error {
+		return graphicStringDecoderVerify([]byte(o))
+	}
 }

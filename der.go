@@ -189,19 +189,20 @@ Note that successful use of this method shall advance the offset to the end of t
 func (r *DERPacket) Packet(L int) (Packet, error) { return extractPacket(r, L) }
 
 func encodeDERLengthInto(dst *[]byte, n int) {
-	if n < 128 {
+	if n < 128 { // short form
 		*dst = append(*dst, byte(n))
 		return
 	}
-	// long form
-	var tmp [5]byte
+
+	// long form – emit the *minimal* number of octets
+	var tmp [8]byte // handles 64-bit length
 	i := len(tmp)
 	for n > 0 {
 		i--
-		tmp[i] = byte(n & 0xFF)
+		tmp[i] = byte(n)
 		n >>= 8
 	}
-	*dst = append(*dst, byte(0x80|len(tmp)-i))
+	*dst = append(*dst, 0x80|byte(len(tmp)-i))
 	*dst = append(*dst, tmp[i:]...)
 }
 

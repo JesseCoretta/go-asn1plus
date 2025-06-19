@@ -36,14 +36,24 @@ Primitive encompasses all ASN.1 primitive types:
   - [UniversalString]
   - [VideotexString]
   - [VisibleString]
+
+Custom types defined against any of the above types MUST implement this
+interface.
+
+For instance:
+
+	type MyString BMPString
+	func (r MyString) Tag() int { return theAppropriateTag }
+	func (r MyString) String() string { return stringRepresentation }
+	func (r MyString) IsPrimitive() bool { return true } // always return true
+
+Additionally, they must be registered with the appropriate alias registration
+function prior to use with any codec.
 */
 type Primitive interface {
 	Tag() int
 	String() string
 	IsPrimitive() bool
-
-	write(Packet, *Options) (int, error)
-	read(Packet, TLV, *Options) error
 }
 
 func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
@@ -104,6 +114,10 @@ func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (da
 }
 
 func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
+	if tlv.Length < 0 || (opts != nil && opts.Indefinite) {
+		return nil, mkerr("prohibited: indefinite length on primitive")
+	}
+
 	if data, err = primitiveCheckReadOverride(tag, pkt, tlv, opts); err == nil {
 		if len(data) == 0 {
 			if tag != TagNull {
@@ -189,4 +203,24 @@ func isPrimitive(target any) (primitive bool) {
 	}
 
 	return
+}
+
+func createCodecForPrimitive(val any) (box, bool) {
+	// Already a codec?
+	if c, ok := val.(box); ok {
+		return c, true
+	}
+
+	rt := reflect.TypeOf(val)
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem() // factories keyed by non-pointer concrete type
+	}
+
+	// Does the generic factory know this primitive?
+	if f, ok := master[rt]; ok {
+		c := f.newEmpty().(box)
+		c.setVal(val)
+		return c, true
+	}
+	return nil, false
 }

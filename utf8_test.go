@@ -28,7 +28,7 @@ func ExampleUTF8String_dER() {
 
 	// DER encode UTF8String instance into Packet
 	var pkt Packet
-	if pkt, err = Marshal(u8, WithEncoding(DER)); err != nil {
+	if pkt, err = Marshal(u8, With(DER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -56,7 +56,7 @@ func ExampleUTF8String_bER() {
 
 	// DER encode UTF8String instance into Packet
 	var pkt Packet
-	if pkt, err = Marshal(u8, WithEncoding(BER)); err != nil {
+	if pkt, err = Marshal(u8, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -223,10 +223,4 @@ func TestUTF8String_codecov(_ *testing.T) {
 	u.IsPrimitive()
 	u.IsZero()
 	u.Tag()
-	pkt, _ := Marshal(u)
-	u.read(nil, TLV{typ: pkt.Type(), Class: 2, Tag: 55}, &Options{})
-	u.read(pkt, TLV{typ: pkt.Type(), Class: 2, Tag: 55}, &Options{})
-	u.read(pkt, TLV{typ: pkt.Type(), Class: 0, Tag: 55}, &Options{})
-	u.read(pkt, TLV{typ: pkt.Type(), Class: 0, Tag: u.Tag(), Length: 1000}, &Options{})
-
 }

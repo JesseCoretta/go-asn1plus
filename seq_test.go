@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestMarshal_SequenceEncodingRulesWithOptions(t *testing.T) {
+func TestMarshal_SequenceEncodingRulesWith(t *testing.T) {
 	type MySequence struct {
 		Field1 OctetString
 		Field2 PrintableString
@@ -23,8 +23,7 @@ func TestMarshal_SequenceEncodingRulesWithOptions(t *testing.T) {
 
 	for _, rule := range encodingRules {
 		pkt, err := Marshal(my,
-			WithEncoding(rule),
-			WithOptions(opts))
+			With(rule, opts))
 
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
@@ -49,7 +48,7 @@ func TestMarshal_SequenceEncodingRules(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(my, WithEncoding(rule))
+		pkt, err := Marshal(my, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
@@ -85,7 +84,7 @@ func TestMarshal_SequenceNested(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(my, WithEncoding(rule))
+		pkt, err := Marshal(my, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
@@ -110,9 +109,7 @@ func ExamplePacket_automaticTaggingBER() {
 	mine := MySequence{A: 42, B: "Hi"}
 	opts := Options{Automatic: true}
 
-	pkt, err := Marshal(mine,
-		WithEncoding(BER),
-		WithOptions(opts))
+	pkt, err := Marshal(mine, With(BER, opts))
 
 	if err != nil {
 		fmt.Println(err)
@@ -122,7 +119,7 @@ func ExamplePacket_automaticTaggingBER() {
 	fmt.Printf("BER packet hex: %s\n", pkt.Hex())
 
 	var mine2 MySequence
-	if err = Unmarshal(pkt, &mine2, WithOptions(opts)); err != nil {
+	if err = Unmarshal(pkt, &mine2, With(opts)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -149,9 +146,7 @@ func TestSequence_AutomaticTagging(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(in,
-			WithEncoding(rule),
-			WithOptions(opts))
+		pkt, err := Marshal(in, With(rule, opts))
 
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v'", t.Name(), rule, err)
@@ -164,7 +159,7 @@ func TestSequence_AutomaticTagging(t *testing.T) {
 		}
 
 		var out MySequence
-		if err = Unmarshal(pkt, &out, WithOptions(opts)); err != nil {
+		if err = Unmarshal(pkt, &out, With(opts)); err != nil {
 			t.Fatalf("%s failed [%s decoding]: %v'", t.Name(), rule, err)
 		}
 

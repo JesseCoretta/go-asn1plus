@@ -8,8 +8,8 @@ import (
 func TestOctetString_codecov(_ *testing.T) {
 	o, _ := NewOctetString(`test`)
 	o.Tag()
-	pkt, _ := Marshal(o)
-	o.read(pkt, TLV{typ: DER, Class: 0, Tag: o.Tag(), Length: 1000}, nil)
+	_, _ = Marshal(o)
+	//o.read(pkt, TLV{typ: DER, Class: 0, Tag: o.Tag(), Length: 1000}, nil)
 	_, _ = NewOctetString(nil)
 	_, _ = NewOctetString(struct{}{})
 	NewOctetString(string(rune(0xFFFFF)))
@@ -35,7 +35,7 @@ func TestOctetString_encodingRules(t *testing.T) {
 
 			// encode our OctetString instance
 			var pkt Packet
-			if pkt, err = Marshal(od, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
@@ -131,9 +131,7 @@ func ExampleOctetString_viaGoStringWithTaggedConstraint() {
 	}
 
 	pkt, err := Marshal(`test48`,
-		WithEncoding(DER),
-		WithOptions(options),
-	)
+		With(DER, options))
 
 	// We violated to the "no digits" policy.
 	if err != nil {
@@ -142,9 +140,7 @@ func ExampleOctetString_viaGoStringWithTaggedConstraint() {
 
 	// Lets try again
 	pkt, err = Marshal(`test`,
-		WithEncoding(DER),
-		WithOptions(options),
-	)
+		With(DER, options))
 
 	// We passed the "no digits" policy, but violated
 	// the "no lower case" policy.
@@ -153,9 +149,7 @@ func ExampleOctetString_viaGoStringWithTaggedConstraint() {
 	}
 
 	pkt, err = Marshal(`TEST`,
-		WithEncoding(DER),
-		WithOptions(options),
-	)
+		With(DER, options))
 
 	// Third time's a charm?
 	if err != nil {
@@ -168,7 +162,7 @@ func ExampleOctetString_viaGoStringWithTaggedConstraint() {
 	fmt.Printf("Encoded value: %s\n", pkt.Hex())
 
 	var out string
-	if err = Unmarshal(pkt, &out, WithOptions(options)); err != nil {
+	if err = Unmarshal(pkt, &out, With(options)); err != nil {
 		fmt.Println(err)
 		return
 	}

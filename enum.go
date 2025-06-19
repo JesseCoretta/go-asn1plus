@@ -5,6 +5,8 @@ enum.go contains all types and methods pertaining to the ASN.1
 ENUMERATED type.
 */
 
+import "reflect"
+
 /*
 Enumeration implements a map of [Enumerated] string values. This
 is not a standard type and is implemented merely for convenience.
@@ -71,64 +73,95 @@ func NewEnumerated(x any, constraints ...Constraint[Enumerated]) (enum Enumerate
 	return
 }
 
-/*
-Int returns the integer representation of the receiver instance.
-*/
-func (e Enumerated) Int() int {
-	return int(e)
+type enumeratedCodec[T ~int] struct {
+	val  T
+	base *integerCodec[Integer]
 }
 
-func (r Enumerated) write(pkt Packet, opts *Options) (n int, err error) {
-	data := encodeNativeInt(int(r))
-	tag, class := effectiveTag(r.Tag(), 0, opts)
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		l := encodeLength(t, sizeOfInt(int(r)))
-		ct := byte(class + tag)
-		head := append([]byte{ct}, l...)
-		pkt.Append(append(head, data...)...)
-		n = len(data)
+/* box-interface plumbing */
+func (c *enumeratedCodec[T]) Tag() int          { return c.base.tag }
+func (c *enumeratedCodec[T]) IsPrimitive() bool { return true }
+func (c *enumeratedCodec[T]) getVal() any       { return c.val }
+func (c *enumeratedCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+func (c *enumeratedCodec[T]) String() string    { return "enumeratedCodec" }
+
+func (c *enumeratedCodec[T]) write(pkt Packet, o *Options) (int, error) {
+	c.base.val = Integer{native: int64(c.val)}
+	return c.base.write(pkt, o)
+}
+
+func (c *enumeratedCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	if err = c.base.read(pkt, tlv, o); err == nil {
+		c.val = T(c.base.val.native)
 	}
 	return
 }
 
-func (r *Enumerated) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
+func RegisterEnumeratedAlias[T ~int](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T]) {
+
+	allCS := ConstraintGroup[Integer]{}
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
 	}
 
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for ASN.1 ENUMERATED decoding")
+	if spec != nil {
+		allCS = append(allCS, func(i Integer) error {
+			return spec(T(i.native))
+		})
+	}
+	for _, u := range user {
+		fn := u
+		allCS = append(allCS, func(i Integer) error {
+			return fn(T(i.native))
+		})
 	}
 
-	return
-}
-
-func (r *Enumerated) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	class, tag := ClassUniversal, r.Tag()
-	if validClass(opts.Class()) {
-		class = opts.Class()
-	}
-
-	if opts.Tag() >= 0 {
-		tag = opts.Tag()
-	}
-
-	if class != tlv.Class || tag != tlv.Tag || tlv.Compound {
-		err = mkerrf("Invalid ASN.1 ENUMERATED header in ", pkt.Type().String(), " packet")
-	} else if pkt.Offset()+tlv.Length > pkt.Len() {
-		err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-	} else {
-		content := pkt.Data()[pkt.Offset() : pkt.Offset()+tlv.Length]
-		pkt.SetOffset(pkt.Offset() + tlv.Length)
-		var dec int
-		if dec, err = decodeNativeInt(content); err == nil {
-			*r = Enumerated(dec)
+	var eHook EncodeOverride[Integer]
+	if encoder != nil {
+		eHook = func(i Integer) ([]byte, error) {
+			return encoder(T(i.native))
 		}
 	}
 
-	return
+	var dHook DecodeOverride[Integer]
+	if decoder != nil {
+		dHook = func(b []byte) (eVal Integer, err error) {
+			var tmp T
+			if tmp, err = decoder(b); err == nil {
+				eVal = Integer{native: int64(tmp)}
+			}
+			return
+		}
+	}
+
+	base := &integerCodec[Integer]{
+		tag:          tag,
+		cg:           allCS,
+		decodeVerify: verList,
+		encodeHook:   eHook,
+		decodeHook:   dHook,
+	}
+
+	f := factories{
+		newEmpty: func() box { return &enumeratedCodec[T]{base: base} },
+		newWith: func(v any) box {
+			return &enumeratedCodec[T]{val: valueOf[T](v), base: base}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterEnumeratedAlias[Enumerated](TagEnum, nil, nil, nil, nil)
 }

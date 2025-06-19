@@ -35,18 +35,27 @@ func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (Ob
 		return od, err
 	}
 
-	_, err = scanGraphicStringChars(str)
+	_od := ObjectDescriptor(str)
+	err = ObjectDescriptorSpec(_od)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[ObjectDescriptor] = constraints
-		err = group.Validate(ObjectDescriptor(str))
+		err = group.Validate(_od)
 	}
 
 	if err == nil {
-		od = ObjectDescriptor(str)
+		od = _od
 	}
 
 	return od, err
 }
+
+/*
+ObjectDescriptorSpec implements the formal [Constraint] specification for [ObjectDescriptor].
+
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var ObjectDescriptorSpec Constraint[ObjectDescriptor]
 
 /*
 Len returns the integer length of the receiver instance.
@@ -74,36 +83,10 @@ ASN.1 primitive.
 */
 func (r ObjectDescriptor) IsPrimitive() bool { return true }
 
-func (r ObjectDescriptor) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
+func init() {
+	RegisterTextAlias[ObjectDescriptor](TagObjectDescriptor, nil, nil, nil, ObjectDescriptorSpec)
+	ObjectDescriptorSpec = func(o ObjectDescriptor) error {
+		// ObjectDescriptor supports GRAPHIC STRING characters
+		return graphicStringDecoderVerify([]byte(o))
 	}
-	return
-}
-
-func (r *ObjectDescriptor) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
-	}
-
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				*r = ObjectDescriptor(data)
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-	}
-
-	return
 }

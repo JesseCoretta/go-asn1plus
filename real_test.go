@@ -62,7 +62,7 @@ func TestReal_encodingRules(t *testing.T) {
 		rOrig.IsPrimitive()
 
 		var pkt Packet
-		if pkt, err = Marshal(rOrig, WithEncoding(rule)); err != nil {
+		if pkt, err = Marshal(rOrig, With(rule)); err != nil {
 			t.Errorf("%s failed [%s encode]: %v", t.Name(), rule, err)
 			return
 		}
@@ -99,7 +99,7 @@ func TestRealSpecial_encodingRules(t *testing.T) {
 		for _, rule := range encodingRules {
 			var pkt Packet
 			var err error
-			if pkt, err = Marshal(inf, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(inf, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encode infinity]: %v", t.Name(), rule, err)
 			}
 
@@ -176,7 +176,7 @@ func TestRealDeepEqual_encodingRules(t *testing.T) {
 		}
 
 		var pkt Packet
-		if pkt, err = Marshal(rOne, WithEncoding(rule)); err != nil {
+		if pkt, err = Marshal(rOne, With(rule)); err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
 
@@ -213,9 +213,8 @@ func TestRealDeepEqual_encodingRules(t *testing.T) {
 func TestRealDecodeErrors(t *testing.T) {
 	// Prepare an invalid DER packet: truncated REAL.
 	pkt := &DERPacket{data: []byte{byte(TagReal), 2, 0x80}, offset: 0}
-	tlv := pkt.Type().newTLV(0, TagReal, 2, false)
-	var rDecoded Real
-	err := rDecoded.read(pkt, tlv, &Options{})
+	var out Real
+	err := Unmarshal(pkt, &out)
 	if err == nil {
 		t.Errorf("Expected error for truncated REAL, but got none")
 	}
@@ -223,12 +222,6 @@ func TestRealDecodeErrors(t *testing.T) {
 
 func TestReal_codecov(_ *testing.T) {
 	decodeRealExponent([]byte(`blahjfksefhjshk`))
-	realBaseSwitch(0x0)
-	realBaseSwitch(0x1)
-	realBaseSwitch(0x2)
-	realBaseSwitch(0x3)
-	realBaseSwitch(0x4)
-
 	_, _, _ = float64ToRealParts(float64(0), 2)
 	_, _, _ = bigFloatToRealParts(big.NewFloat(0), 2)
 }
@@ -354,7 +347,7 @@ func TestFloat64Components_specials(t *testing.T) {
 }
 
 func TestFloat64Components_invalidBase(t *testing.T) {
-	if _, _, err := float64Components(1.23, 16); err == nil {
+	if _, _, err := float64Components(1.23, 17); err == nil {
 		t.Fatalf("expected error for unsupported base, got nil")
 	}
 }

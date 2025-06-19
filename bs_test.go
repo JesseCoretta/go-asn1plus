@@ -7,6 +7,35 @@ import (
 	"testing"
 )
 
+func TestBitString_customType(t *testing.T) {
+	type CustomBits BitString
+	RegisterBitStringAlias[CustomBits](TagBitString, nil, nil, nil, nil)
+
+	// We cheat here rather than writing a separate
+	// constructor merely for testing.
+	orig, _ := NewBitString(`'10100101'B`)
+	cust := CustomBits(orig)
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var out CustomBits
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	// We cheat again, since we didn't write a
+	// custom Bits method for this simple test.
+	want := BitString(cust).Bits()
+	got := BitString(out).Bits()
+	if want != got {
+		t.Fatalf("%s failed [BER bit string cmp.]:\n\twant: %s\n\tgot:  %s",
+			t.Name(), want, got)
+	}
+}
+
 func TestBitString(t *testing.T) {
 	for idx, want := range []string{
 		`'10100101'B`,
@@ -31,19 +60,10 @@ func TestBitString(t *testing.T) {
 		bs.Tag()
 		bs.IsPrimitive()
 
-		pkt, _ := Marshal(bs, WithEncoding(rule))
-
+		pkt, _ := Marshal(bs, With(rule))
 		var bs2 BitString
-
 		_ = Unmarshal(pkt, &bs2)
-
-		tlv := rule.newTLV(2, -1, bs.Len(), false, bs.Bytes...)
-
 		pkt.SetOffset()
-		bs2.read(nil, tlv, &Options{})
-
-		tlv = rule.newTLV(2, bs.Tag(), 5000, false, bs.Bytes...)
-		bs2.read(pkt, tlv, &Options{})
 	}
 
 	_, _ = NewBitString([]byte(`'1010111'B`))
@@ -446,12 +466,12 @@ func TestBitStringRightAlign_ShiftAndMerge(t *testing.T) {
 // ExampleBitString_withConstraints demonstrates four independent BIT STRING
 // constraints:
 //
-//   - bit-length constraint (1 … 8 bits)
+//   - bit-length constraint (1 ... 8 bits)
 //   - subset-of mask constraint
 //   - even-bit content constraint
 //   - successful acceptance of a value that meets them all
 func ExampleBitString_withConstraints() {
-	// bit-length constraint – allow 1 … 8 bits
+	// bit-length constraint – allow 1 ... 8 bits
 	cBitLength := func(bs BitString) error {
 		if bs.BitLength < 1 || bs.BitLength > 8 {
 			return fmt.Errorf("size %d is out of bounds [1, 8]", bs.BitLength)
@@ -541,7 +561,7 @@ func TestBitString_encodingRules(t *testing.T) {
 			}
 
 			var pkt Packet
-			if pkt, err = Marshal(bs, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(bs, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 			}
 

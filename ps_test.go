@@ -2,6 +2,28 @@ package asn1plus
 
 import "testing"
 
+func TestPrintableString_customType(t *testing.T) {
+	type CustomPrintable PrintableString
+	RegisterTextAlias[CustomPrintable](TagPrintableString, nil, nil, nil, nil)
+
+	cust := CustomPrintable(`Testing`)
+
+	pkt, err := Marshal(cust, With(DER))
+	if err != nil {
+		t.Fatalf("%s failed [DER encoding]: %v", t.Name(), err)
+	}
+
+	var out CustomPrintable
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [DER decoding]: %v", t.Name(), err)
+	}
+
+	if string(out) != "Testing" {
+		t.Fatalf("%s failed [string cmp.]:\n\twant: Testing\n\tgot:  %s",
+			t.Name(), out)
+	}
+}
+
 func TestNewPrintableStringValid(t *testing.T) {
 	// Build a string that uses allowed characters.
 	valid := "ABCabc0123 '()+,-./:?"
@@ -80,7 +102,7 @@ func TestPrintableString_encodingRules(t *testing.T) {
 			}
 
 			var pkt Packet
-			if pkt, err = Marshal(ps, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(ps, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
@@ -99,8 +121,5 @@ func TestPrintableString_encodingRules(t *testing.T) {
 func TestPrintableString_codecov(_ *testing.T) {
 	ps, _ := NewPrintableString(`Hello.`)
 	ps.IsZero()
-	ps.read(nil, TLV{Class: 2, Tag: ps.Tag()}, &Options{})
-	ps.read(nil, TLV{Class: 0, Tag: TagOID}, &Options{})
-	ps.read(&DERPacket{}, TLV{Class: 0, Tag: ps.Tag(), Length: 100}, &Options{})
 	_, _ = NewPrintableString(ps)
 }

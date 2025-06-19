@@ -12,7 +12,7 @@ func TestEmbeddedPDV_SyntaxesEncodingRules(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(syntaxes, WithEncoding(rule))
+		pkt, err := Marshal(syntaxes, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
 		}

@@ -19,15 +19,15 @@ one or more of:
 
 If an encoding rule is not specified, [DER] encoding is used as the default.
 
-See also [Unmarshal], [WithEncoding] and [WithOptions].
+See also [Unmarshal] and [With].
 */
-func Marshal(x any, options ...EncodingOption) (pkt Packet, err error) {
+func Marshal(x any, with ...EncodingOption) (pkt Packet, err error) {
 	// For example, we default to DER and to a default Options value.
 	cfg := &encodingConfig{
 		rule: DER,
 	}
 
-	for _, o := range options {
+	for _, o := range with {
 		o(cfg)
 	}
 
@@ -145,6 +145,8 @@ func marshalViaAdapter(v reflect.Value, pkt Packet, opts *Options) (handled bool
 	kw := ""
 	if opts != nil {
 		kw = opts.Identifier
+	} else {
+		opts = implicitOptions()
 	}
 
 	ad, ok := adapterForValue(v, kw)
@@ -158,9 +160,9 @@ func marshalViaAdapter(v reflect.Value, pkt Packet, opts *Options) (handled bool
 	}
 
 	if opts.Explicit {
-		err = wrapMarshalExplicit(pkt, codec.(Primitive), opts)
+		err = wrapMarshalExplicit(pkt, codec.(codecRW), opts)
 	} else {
-		_, err = codec.(Primitive).write(pkt, opts)
+		_, err = codec.(codecRW).write(pkt, opts)
 	}
 
 	return true, err
@@ -170,22 +172,34 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 	if !isPrimitive(v.Interface()) {
 		return false, nil
 	}
-
-	// Ensure we have an Options object.
 	if opts == nil {
 		opts = implicitOptions()
 	}
 
-	prim := toPtr(v).Interface().(Primitive)
-	if opts.Explicit {
-		err = wrapMarshalExplicit(pkt, prim, opts)
-	} else {
-		_, err = prim.write(pkt, opts)
+	raw := toPtr(v).Interface() // *T or value T
+
+	// Prefer the value’s own codec implementation
+	if c, ok := raw.(codecRW); ok {
+		if opts.Explicit {
+			return true, wrapMarshalExplicit(pkt, c, opts)
+		}
+		_, err := c.write(pkt, opts)
+		return true, err
 	}
-	return true, err
+
+	// Legacy pointer – build a codec on the fly
+	if bx, ok := createCodecForPrimitive(raw); ok {
+		if opts.Explicit {
+			return true, wrapMarshalExplicit(pkt, bx, opts)
+		}
+		_, err := bx.write(pkt, opts)
+		return true, err
+	}
+
+	return false, mkerr("no codec for primitive")
 }
 
-func wrapMarshalExplicit(pkt Packet, prim Primitive, opts *Options) (err error) {
+func wrapMarshalExplicit(pkt Packet, prim codecRW, opts *Options) (err error) {
 	tmp := pkt.Type().New()
 	innerOpts := *opts
 	innerOpts.Explicit = false
@@ -211,16 +225,16 @@ into x. x MUST be a pointer.
 The variadic [EncodingOption] input value allows for [Options] directives meant to
 further control the decoding process.
 
-It is not necessary to declare a particular [EncodingRule] using the [WithEncoding]
-package-level function, as the input instance of [Packet] already has this information.
-Providing an [EncodingRule] to Unmarshal -- whether valid or not -- will produce no
-perceptible effect.
+It is not necessary to declare a particular [EncodingRule] using the [With] package-level
+function, as the input instance of [Packet] already has this information. Providing an
+[EncodingRule] to Unmarshal -- whether valid or not -- will produce no perceptible effect.
 
-See also [Marshal].
+See also [Marshal] and [With].
 */
-func Unmarshal(pkt Packet, x any, options ...EncodingOption) error {
+func Unmarshal(pkt Packet, x any, with ...EncodingOption) error {
 	rv := reflect.ValueOf(x)
 	var err error
+
 	// Validate that target x is a non-nil pointer.
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		err = mkerr("Unmarshal: target must be a non-nil pointer")
@@ -230,7 +244,7 @@ func Unmarshal(pkt Packet, x any, options ...EncodingOption) error {
 	pkt.SetOffset(0)
 
 	cfg := &encodingConfig{rule: pkt.Type()}
-	for _, o := range options {
+	for _, o := range with {
 		o(cfg)
 	}
 
@@ -281,7 +295,7 @@ func unmarshalValue(pkt Packet, v reflect.Value, options *Options) (err error) {
 			return
 		}
 
-		if err = codec.(Primitive).read(pkt, tlv, opts); err != nil {
+		if err = codec.(codecRW).read(pkt, tlv, opts); err != nil {
 			return
 		}
 		pkt.SetOffset(start + outerLen)
@@ -296,16 +310,7 @@ func unmarshalValue(pkt Packet, v reflect.Value, options *Options) (err error) {
 	}
 
 	if val := v.Interface(); isPrimitive(val) {
-		var tlv TLV
-		if tlv, err = pkt.TLV(); err != nil {
-			err = mkerrf("unmarshalValue: failed reading tag/length for primitive: ", err.Error())
-			return
-		}
-		startOffset := pkt.Offset()
-		if err = toPtr(v).Interface().(Primitive).read(pkt, tlv, opts); err == nil {
-			pkt.SetOffset(startOffset + tlv.Length)
-		}
-		return
+		return unmarshalPrimitive(pkt, v, opts)
 	}
 
 	switch v.Kind() {
@@ -320,14 +325,41 @@ func unmarshalValue(pkt Packet, v reflect.Value, options *Options) (err error) {
 	return
 }
 
+func unmarshalPrimitive(pkt Packet, v reflect.Value, opts *Options) (err error) {
+	var tlv TLV
+	var start int
+	if tlv, err = pkt.TLV(); err == nil {
+		start = pkt.Offset()
+
+		// The pointer itself is a codec
+		if c, ok := toPtr(v).Interface().(codecRW); ok {
+			err = c.read(pkt, tlv, opts)
+		} else if bx, ok := createCodecForPrimitive(v.Interface()); ok { // Path 2: build codec
+			if err = bx.read(pkt, tlv, opts); err == nil {
+				v.Set(reflect.ValueOf(bx.getVal()))
+			}
+		} else {
+			err = mkerr("no codec for primitive")
+		}
+	}
+
+	if err == nil {
+		pkt.SetOffset(start + tlv.Length)
+	}
+	return
+}
+
 func unmarshalHandleTag(kw string, pkt Packet, tlv *TLV, opts *Options) (err error) {
+	if opts == nil {
+		opts = implicitOptions()
+	}
 	if opts.HasTag() {
 		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
 			err = mkerrf("identifier mismatch decoding ", kw)
 		} else if opts.Explicit {
 			inner := pkt.Type().New()
 			// TODO: determine why this is necessary (else, breaks
-			// "TestSequence_FieldsExplicit" via New(data...))
+			// "TestSequence_FieldsExplicit" via New(tlv.Value...))
 			inner.Append(tlv.Value...)
 			var innerTLV TLV
 			if innerTLV, err = inner.TLV(); err == nil {

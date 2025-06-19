@@ -36,7 +36,7 @@ Typical use-cases
 Generic parameters
 
   - T:  Any type *whose pointer* implements the asn1plus.Primitive interface (all built-in primitives already satisfy this).
-  - GoT: The Go-side type you want to expose to callers—often `string`, `[]byte`, or a domain-specific struct.
+  - GoT: The Go-side type you want to expose to callers; often `string`, `[]byte`, or a domain-specific struct.
 
 Arguments
 
@@ -87,6 +87,11 @@ Example (untested)
 See the bottom of adapt.go for a complete look at the (actively used) built-in
 adapter registrations for further insight.
 */
+// adapter_register.go  (same package)
+
+// RegisterAdapter binds a native Go type (GoT) to an ASN.1 primitive T.
+// If T has already been registered in the new generic registry (master)
+// we pull the factories from there; otherwise we fall back to *T Primitive.
 func RegisterAdapter[T any, GoT any](
 	ctor func(GoT, ...Constraint[T]) (T, error),
 	asGo func(*T) GoT,
@@ -95,36 +100,62 @@ func RegisterAdapter[T any, GoT any](
 	mu.Lock()
 	defer mu.Unlock()
 
+	// Build newCodec: prefer generic factory, else legacy pointer
+	var zero T
+	rt := reflect.TypeOf(zero) // concrete T (value)
+
 	newCodec := func() Primitive {
-		var zero T
+		if f, ok := master[rt]; ok { // generic codec exists
+			return f.newEmpty()
+		}
+		// legacy fallback: assume *T still has read/write
 		return any(&zero).(Primitive)
 	}
 
-	ad := adapter{
-		newCodec: newCodec,
-		toGo: func(p Primitive) any {
-			return asGo(any(p).(*T))
-		},
-		fromGo: func(g any, prim Primitive, opts *Options) error {
-			cs, err := collectConstraint[T](opts.Constraints)
-			if err == nil {
-				goVal, ok := g.(GoT)
-				if !ok {
-					expected := reflect.TypeOf(*new(GoT)).String()
-					got := reflect.TypeOf(g).String()
-					return mkerrf("adapter: expected ", expected, ", got ", got)
-				}
-				var val T
-				if val, err = ctor(goVal, cs...); err == nil {
-					*(any(prim).(*T)) = val
-				}
-			}
-			return err
-		},
+	// Build toGo / fromGo that work for BOTH cases
+	toGo := func(p Primitive) any {
+		// generic path
+		if bx, ok := p.(interface{ getVal() any }); ok {
+			val := bx.getVal().(T)
+			return asGo(&val)
+		}
+		// legacy pointer path
+		return asGo(any(p).(*T))
 	}
 
-	goTypeName := reflect.TypeOf((*GoT)(nil)).Elem().String()
+	fromGo := func(g any, prim Primitive, opts *Options) error {
+		cs, err := collectConstraint[T](opts.Constraints)
+		if err != nil {
+			return err
+		}
 
+		goVal, ok := g.(GoT)
+		if !ok {
+			want := reflect.TypeOf(*new(GoT)).String()
+			got := reflect.TypeOf(g).String()
+			return mkerrf("adapter: expected ", want, " got ", got)
+		}
+
+		val, err := ctor(goVal, cs...)
+		if err != nil {
+			return err
+		}
+
+		// generic codec?
+		if bx, ok := prim.(interface{ setVal(any) }); ok {
+			bx.setVal(val)
+			return nil
+		}
+
+		// legacy pointer codec
+		*(any(prim).(*T)) = val
+		return nil
+	}
+
+	// Store the adapter under all requested aliases
+	ad := adapter{newCodec: newCodec, toGo: toGo, fromGo: fromGo}
+
+	goTypeName := reflect.TypeOf((*GoT)(nil)).Elem().String()
 	for _, kw := range aliases {
 		kw = lc(kw)
 		if kw == "" {
@@ -133,8 +164,7 @@ func RegisterAdapter[T any, GoT any](
 			adapters[[2]string{goTypeName, kw}] = ad
 		}
 	}
-
-	atomic.AddInt64(&adaptersVer, 1) // <-- cache invalidation
+	atomic.AddInt64(&adaptersVer, 1) // cache invalidation
 }
 
 /*
@@ -383,17 +413,19 @@ keyword from the struct field (e.g. "numeric", "utf8").
 ok == false means no adapter is registered for that (go-type, keyword)
 combination and the caller should fall back to its old code path.
 */
-func adapterForValue(v reflect.Value, tagKeyword string) (ad adapter, ok bool) {
-	// Strip pointer for convenience; a *string field should behave the same
-	// as a string field for adapter selection.
-	v = derefValuePtr(v)
-	goTypeName := v.Type().String() // e.g. "string", "[]uint8", "*big.Int"
-
-	ad, err := lookupAdapter(goTypeName, tagKeyword)
-	if err != nil {
-		return adapter{}, false
+func adapterForValue(v reflect.Value, kw string) (adapter, bool) {
+	if f, ok := master[v.Type()]; ok { // exact hit
+		return buildAdapter(f, v.Interface()), true
 	}
-	return ad, true
+	// peel *until* we hit the value, keep the peeled value afterwards
+	vv := derefValuePtr(v)
+	if f, ok := master[vv.Type()]; ok {
+		return buildAdapter(f, vv.Interface()), true
+	}
+	// legacy fallback
+	name := v.Type().String()
+	ad, err := lookupAdapter(name, kw)
+	return ad, err == nil
 }
 
 /*
@@ -447,6 +479,58 @@ func wrapTemporalCtor[T any](
 			tc[i] = func(x Temporal) error { return cc(x.(T)) }
 		}
 		return raw(t, tc...)
+	}
+}
+
+// Every concrete codec (bytesCodec[T], stringCodec[T], ...) must satisfy this.
+type box interface {
+	Primitive // Tag/IsPrimitive/read/write
+	codecRW
+	setVal(any)  // copy Go → codec
+	getVal() any // copy codec → Go
+}
+
+type codecRW interface {
+	write(Packet, *Options) (int, error)
+	read(Packet, TLV, *Options) error
+}
+
+// Two factories: an empty codec for decode path, a populated one for encode.
+type factories struct {
+	newEmpty func() box    // produce *codec with zero value
+	newWith  func(any) box // produce *codec seeded with value
+}
+
+var master = map[reflect.Type]factories{}
+
+// registerType puts BOTH the value type and its pointer into the table.
+func registerType(rt reflect.Type, f factories) {
+	master[rt] = f
+	master[reflect.PtrTo(rt)] = f
+}
+
+func valueOf[T any](v any) T {
+	switch t := v.(type) {
+	case T:
+		return t
+	case *T:
+		return *t
+	default:
+		panic("asn1plus: factory received incompatible type")
+	}
+}
+
+func buildAdapter(f factories, seed any) adapter {
+	return adapter{
+		newCodec: func() Primitive { return f.newEmpty() },
+		toGo:     func(p Primitive) any { return p.(box).getVal() },
+		fromGo: func(g any, p Primitive, _ *Options) error {
+			if g == nil {
+				g = seed
+			} // encode path: seed is original value
+			p.(box).setVal(g)
+			return nil
+		},
 	}
 }
 
@@ -673,7 +757,7 @@ func registerNumericalAdapters() {
 	)
 }
 
-func registerTemporalAdapters() {
+func registerTemporalAliasAdapters() {
 	RegisterAdapter[GeneralizedTime, time.Time](
 		wrapTemporalCtor[GeneralizedTime](NewGeneralizedTime),
 		func(p *GeneralizedTime) time.Time { return time.Time(*p) },
@@ -792,6 +876,6 @@ end-user. This collection will likely grow over time.
 func init() {
 	registerStringAdapters()
 	registerNumericalAdapters()
-	registerTemporalAdapters()
+	registerTemporalAliasAdapters()
 	registerMiscAdapters()
 }

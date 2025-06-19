@@ -8,7 +8,11 @@ DISCLAIMER: much of the OID logic is adapted from the now-archived
 JesseCoretta/go-objectid, but with small improvements.
 */
 
-import "math/big"
+import (
+	"math/big"
+	"reflect"
+	"unsafe"
+)
 
 /*
 ObjectIdentifier implements an unbounded ASN.1 OBJECT IDENTIFIER (tag 6),
@@ -142,7 +146,7 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[ObjectIdentifier] = constraints
-		err = group.Validate(_d)
+		err = group.Constrain(_d)
 	}
 
 	if err == nil {
@@ -175,151 +179,42 @@ func newObjectIdentifierStr(dot string) (r ObjectIdentifier, err error) {
 	return
 }
 
-func (r ObjectIdentifier) write(pkt Packet, opts *Options) (n int, err error) {
-	if r.Len() < 2 {
-		err = mkerr("Length below encoding minimum")
-		return
+func vlqEncodeBig(n *big.Int) []byte {
+	if n.Sign() == 0 {
+		return []byte{0}
 	}
+	var buf [16]byte
+	i := len(buf)
+	tmp := newBigInt(0).Set(n)
+	rem := newBigInt(0)
 
-	var content []byte
-	var start int
-
-	// The first two arcs are encoded together if possible.
-	firstArc := r[0].Big()
-	secondArc := r[1].Big()
-	forty := newBigInt(40)
-
-	if secondArc.Cmp(forty) <= 0 { // secondArc <= 40
-		combined := new(big.Int).Mul(firstArc, forty)
-		combined.Add(combined, secondArc)
-		combinedBytes := combined.Bytes()
-		if len(combinedBytes) == 0 {
-			content = append(content, 0x00)
-		} else {
-			content = append(content, combinedBytes...)
+	for tmp.Sign() != 0 {
+		tmp.DivMod(tmp, newBigInt(128), rem)
+		i--
+		b := byte(rem.Uint64())
+		if len(buf)-i > 1 { // set continuation bit except on last octet
+			b |= 0x80
 		}
-		start = 2
-	} else {
-		if firstArc.Uint64() != 2 {
-			err = mkerr("Only joint-iso-itu-t(2) OIDs allow second-level arcs > 39")
-			return
-		}
-		start = 1
+		buf[i] = b
 	}
-
-	// Encode the remaining arcs using VLQ.
-	for i := start; i < len(r); i++ {
-		content = append(content, encodeVLQ(r[i].Big().Bytes())...)
-	}
-
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, len(content), false, content...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-
-	return
+	return buf[i:]
 }
 
-func (r *ObjectIdentifier) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil DER packet")
-	}
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
-	default:
-		err = mkerr("Unsupported packet type for OID decoding")
-	}
-	return
-}
-
-func (r *ObjectIdentifier) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err != nil {
-		return
-	}
-
-	var i int = 0
-	subidentifier := newBigInt(0)
-
-	*r = make(ObjectIdentifier, 0)
-	for i < len(data) {
-		for {
-			subidentifier.Lsh(subidentifier, 7)
-			subidentifier.Add(subidentifier, newBigInt(int64(data[i]&0x7F)))
-			if data[i]&0x80 == 0 {
-				break
-			}
-			i++
-			if i >= len(data) {
-				return mkerr("Truncated OID subidentifier")
-			}
+func vlqDecode(pkt Packet) (*big.Int, error) {
+	v := newBigInt(0)
+	for {
+		if pkt.Offset() >= pkt.Len() {
+			return nil, mkerr("truncated VLQ")
 		}
-		i++ // move past the last octet for the current subidentifier
-		var arc Integer
-		if subidentifier.IsInt64() {
-			arc = Integer{
-				big:    false,
-				native: subidentifier.Int64(),
-				bigInt: nil,
-			}
-		} else {
-			arc = Integer{
-				big:    true,
-				native: 0,
-				bigInt: subidentifier,
-			}
-		}
-		*r = append(*r, arc)
-		subidentifier = newBigInt(0)
-	}
-	if len(*r) > 0 {
-		r.decodeFirstArcs(data[0])
-	}
+		oct := pkt.Data()[pkt.Offset()]
+		pkt.SetOffset(pkt.Offset() + 1)
 
-	return
-}
-
-func (r *ObjectIdentifier) decodeFirstArcs(b byte) {
-	var firstArc *big.Int
-	var secondArc *big.Int
-
-	var forty *big.Int = newBigInt(40)
-	var eighty *big.Int = newBigInt(80)
-
-	if (*r)[0].Big().Cmp(newBigInt(80)) < 0 {
-		firstArc = newBigInt(0).Div((*r)[0].Big(), forty)
-		secondArc = newBigInt(0).Mod((*r)[0].Big(), forty)
-	} else {
-		firstArc = newBigInt(2)
-		if b >= 0x80 {
-			// Handle large second-level arcs for joint-iso-itu-t(2)
-			secondArc = newBigInt(0).Sub((*r)[0].Big(), firstArc)
-			secondArc.Add(secondArc, firstArc)
-		} else {
-			secondArc = newBigInt(0).Sub((*r)[0].Big(), eighty)
+		v.Lsh(v, 7)
+		v.Or(v, newBigInt(int64(oct&0x7F)))
+		if oct&0x80 == 0 {
+			return v, nil
 		}
 	}
-
-	var farc, sarc Integer
-	if secondArc.IsInt64() {
-		sarc = Integer{native: secondArc.Int64()}
-	} else {
-		sarc = Integer{big: true, bigInt: secondArc}
-	}
-
-	if firstArc.IsInt64() {
-		farc = Integer{native: firstArc.Int64()}
-	} else {
-		farc = Integer{big: true, bigInt: firstArc}
-	}
-
-	(*r)[0] = sarc
-	*r = append(ObjectIdentifier{farc}, *r...)
 }
 
 /*
@@ -422,46 +317,6 @@ func (r ObjectIdentifier) Valid() (is bool) {
 	}
 
 	return
-}
-
-/*
-encodeVLQ returns the VLQ -- or Variable Length Quantity -- encoding of
-the raw input value.
-*/
-func encodeVLQ(b []byte) []byte {
-	// Create a new big.Int from the input bytes.
-	n := new(big.Int).SetBytes(b)
-	// If n is zero, then by VLQ rules we want to return a single zero byte.
-	if n.Sign() == 0 {
-		return []byte{0x00}
-	}
-
-	// Preallocate a small buffer. For typical OID arc values, 16 bytes is more than enough.
-	var buf [16]byte
-	i := len(buf) // We'll fill the buffer from right to left.
-	base := newBigInt(128)
-	remainder := new(big.Int)
-	zero := newBigInt(0)
-
-	// Loop until we've reduced the big.Int to zero.
-	for n.Cmp(zero) > 0 {
-		// DivMod updates n to the quotient and returns the remainder.
-		n.DivMod(n, base, remainder)
-		i-- // move back one position in the buffer
-
-		// The lower 7 bits of the current VLQ byte are the remainder.
-		// For all but the last (most significant) byte, we set the highest bit.
-		byteVal := byte(remainder.Uint64())
-		if len(buf)-i > 1 {
-			byteVal |= 0x80
-		}
-
-		buf[i] = byteVal
-	}
-
-	// Return only the portion of the buffer that we used.
-	// This slice is in the correct order.
-	return buf[i:]
 }
 
 func isNumericOID(id string) bool {
@@ -607,65 +462,323 @@ Len returns the integer length of the receiver instance.
 */
 func (r RelativeOID) Len() int { return len(r) }
 
-func (r RelativeOID) write(pkt Packet, opts *Options) (n int, err error) {
-	if len(r) < 1 {
-		return 0, mkerr("Relative OID must have at least one arc")
+type oidCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
+}
+
+func (c *oidCodec[T]) Tag() int          { return c.tag }
+func (c *oidCodec[T]) IsPrimitive() bool { return true }
+func (c *oidCodec[T]) String() string    { return "oidCodec" }
+func (c *oidCodec[T]) getVal() any       { return c.val }
+func (c *oidCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func toObjectIdentifier[T any](v T) ObjectIdentifier   { return *(*ObjectIdentifier)(unsafe.Pointer(&v)) }
+func fromObjectIdentifier[T any](i ObjectIdentifier) T { return *(*T)(unsafe.Pointer(&i)) }
+
+func (c *oidCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
 	}
 
-	var content []byte
-	for i := 0; i < r.Len(); i++ {
-		content = append(content, encodeVLQ(r[i].Big().Bytes())...)
-	}
+	if err = c.cg.Constrain(c.val); err == nil {
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		} else {
+			oid := toObjectIdentifier(c.val)
+			if len(oid) < 2 {
+				err = mkerr("OID must have at least two arcs")
+				return
+			}
 
-	if len(content) >= 128 {
-		return 0, mkerr("Relative OID content too long")
-	}
+			first, second := oid[0].Big(), oid[1].Big()
+			if first.Cmp(newBigInt(0)) < 0 || first.Cmp(newBigInt(2)) > 0 {
+				err = mkerr("first arc must be 0..2")
+				return
+			}
 
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		if err = writeTLV(pkt, t.newTLV(0, r.Tag(), len(content), false, content...), opts); err == nil {
-			n = pkt.Offset() - off
+			if first.Cmp(newBigInt(2)) < 0 && second.Cmp(newBigInt(40)) >= 0 {
+				err = mkerr("second arc must be 0..39 when first arc is 0 or 1")
+				return
+			}
+
+			// first-two-arc compression
+			combined := newBigInt(0).Add(newBigInt(0).Mul(first, newBigInt(40)), second)
+
+			wire = vlqEncodeBig(combined)
+
+			// remaining arcs
+			for i := 2; i < len(oid); i++ {
+				wire = append(wire, vlqEncodeBig(oid[i].Big())...)
+			}
+		}
+
+		if err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			if err = writeTLV(pkt, tlv, o); err == nil {
+				off = pkt.Offset() - start
+			}
 		}
 	}
 
 	return
 }
 
-func (r *RelativeOID) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil DER packet")
+func (c *oidCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
 	}
 
-	switch pkt.Type() {
-	case BER, DER:
-		err = r.readBER(pkt, tlv, opts)
+	var err error
+	if tlv.Compound {
+		// unwrap ONE explicit layer if present
+		if tlv, err = getTLV(pkt, o); err != nil {
+			return err
+		}
+	}
+
+	var wire []byte
+	if wire, err = objectIdentifierReadData(pkt, tlv, o); err == nil {
+
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				var subs []*big.Int
+				for off := 0; off < len(wire) && err == nil; {
+					var v *big.Int
+					if v, err = readArc(wire, &off); err == nil {
+						subs = append(subs, v)
+					}
+				}
+
+				if len(subs) == 0 {
+					err = mkerr("zero-length OBJECT IDENTIFIER")
+				}
+
+				arcs := objectIdentifierReadExpandFirstArcs(subs)
+				out = fromObjectIdentifier[T](arcs)
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + tlv.Length)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+// VLQ-decode the sub-identifiers
+func readArc(buf []byte, p *int) (*big.Int, error) {
+	n := newBigInt(0)
+	for {
+		if *p >= len(buf) {
+			return nil, mkerr("truncated VLQ")
+		}
+		b := buf[*p]
+		*p++
+		n.Lsh(n, 7).Or(n, newBigInt(int64(b&0x7F)))
+		if b&0x80 == 0 {
+			return n, nil
+		}
+	}
+}
+
+func objectIdentifierReadExpandFirstArcs(subs []*big.Int) (arcs []Integer) {
+	// Expand the first compressed sub-identifier into arcs 0 & 1
+	forty, eighty := newBigInt(40), newBigInt(80)
+	var first, second *big.Int
+	switch {
+	case subs[0].Cmp(forty) < 0:
+		first, second = newBigInt(0), subs[0]
+	case subs[0].Cmp(eighty) < 0:
+		first, second = newBigInt(1), new(big.Int).Sub(subs[0], forty)
 	default:
-		err = mkerr("Encoding rule not implemented")
+		first, second = newBigInt(2), new(big.Int).Sub(subs[0], eighty)
+	}
+
+	toInt := func(b *big.Int) Integer {
+		if b.IsInt64() {
+			return Integer{native: b.Int64()}
+		}
+		return Integer{big: true, bigInt: b}
+	}
+
+	arcs = []Integer{toInt(first), toInt(second)}
+	for i := 1; i < len(subs); i++ {
+		arcs = append(arcs, toInt(subs[i]))
 	}
 
 	return
 }
 
-func (r *RelativeOID) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
-	var data []byte
-	if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err != nil {
+func objectIdentifierReadData(pkt Packet, tlv TLV, o *Options) (data []byte, err error) {
+	if len(tlv.Value) != 0 {
+		// We were handed some bytes; trust *their* length, not tlv.Length.
+		n := len(tlv.Value)
+		if tlv.Length > 0 && tlv.Length < n {
+			n = tlv.Length // trim any over-read wrapper junk
+		}
+		data = tlv.Value[:n]
+	} else {
+		// Value empty: cursor sits on header of the real primitive TLV.
+		var child TLV
+		if child, err = getTLV(pkt, o); err == nil {
+			data = child.Value[:child.Length] // getTLV verified bounds
+		}
+	}
+
+	if len(data) == 0 {
+		err = mkerr("empty OBJECT IDENTIFIER content")
+	}
+
+	return
+}
+
+func RegisterOIDAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+
+) {
+	all := append(ConstraintGroup[T]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &oidCodec[T]{tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+		newWith: func(v any) box {
+			return &oidCodec[T]{
+				val: valueOf[T](v), tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+type relOIDCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
+}
+
+func (c *relOIDCodec[T]) Tag() int          { return c.tag }
+func (c *relOIDCodec[T]) IsPrimitive() bool { return true }
+func (c *relOIDCodec[T]) String() string    { return "relativeOIDCodec" }
+func (c *relOIDCodec[T]) getVal() any       { return c.val }
+func (c *relOIDCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func toRelativeOID[T any](v T) RelativeOID   { return *(*RelativeOID)(unsafe.Pointer(&v)) }
+func fromRelativeOID[T any](i RelativeOID) T { return *(*T)(unsafe.Pointer(&i)) }
+
+func (c *relOIDCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
+
+	var err error
+	if tlv.Compound {
+		if tlv, err = getTLV(pkt, o); err != nil {
+			return err
+		}
+	}
+
+	var wire []byte
+	if len(tlv.Value) != 0 {
+		n := len(tlv.Value)
+		if tlv.Length > 0 && tlv.Length < n {
+			n = tlv.Length
+		}
+		wire = tlv.Value[:n]
+	} else {
+		var child TLV
+		if child, err = getTLV(pkt, o); err == nil {
+			wire = child.Value[:child.Length]
+		}
+	}
+
+	if len(wire) == 0 {
+		return mkerr("empty RELATIVE-OID content")
+	}
+
+	decodeVerify := func() (err error) {
+		for _, vfn := range c.decodeVerify {
+			if err = vfn(wire); err != nil {
+				break
+			}
+		}
+
 		return
 	}
 
-	if pkt.Len()-int(data[1]) != len(data) {
-		err = mkerrf("Length of bytes does not match the indicated length: ",
-			itoa(pkt.Len()-int(data[1])), "/", itoa(len(data)))
-		return
+	if err = decodeVerify(); err == nil {
+		var out T
+		if c.decodeHook != nil {
+			out, err = c.decodeHook(wire)
+		} else {
+			var roid RelativeOID
+			if roid, err = relativeOIDReadArcs(wire); err == nil {
+				out = fromRelativeOID[T](roid)
+			}
+		}
+
+		if err == nil {
+			if err = c.cg.Constrain(out); err == nil {
+				c.val = out
+			}
+		}
 	}
 
-	pkt.SetOffset(pkt.Offset() + 2 + int(data[1]))
+	return err
+}
 
-	var i int = 0
-	subidentifier := newBigInt(0)
-	*r = make(RelativeOID, 0)
+func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
+	var (
+		i             int
+		subidentifier = newBigInt(0)
+	)
 
-	// Decode each arc from the VLQ-encoded data.
 	for i < len(data) {
 		for {
 			subidentifier.Lsh(subidentifier, 7)
@@ -675,19 +788,106 @@ func (r *RelativeOID) readBER(pkt Packet, tlv TLV, opts *Options) (err error) {
 			}
 			i++
 			if i >= len(data) {
-				err = mkerr("Truncated Relative OID subidentifier")
-				break
+				err = mkerr("truncated RELATIVE-OID subidentifier")
+				return
 			}
 		}
-		i++ // Move past the final byte for this arc.
+		i++
+
 		var arc Integer
 		if subidentifier.IsInt64() {
-			arc = Integer{big: false, native: subidentifier.Int64(), bigInt: nil}
+			arc = Integer{native: subidentifier.Int64()}
 		} else {
-			arc = Integer{big: true, native: 0, bigInt: subidentifier}
+			arc = Integer{big: true, bigInt: new(big.Int).Set(subidentifier)}
 		}
-		*r = append(*r, arc)
-		subidentifier = newBigInt(0) // Reset for the next arc.
+		if arc.Big().Sign() < 0 {
+			err = mkerr("Relative OID arcs may not be negative")
+			return
+		}
+
+		roid = append(roid, arc)
+		subidentifier = newBigInt(0)
 	}
+
+	if len(roid) == 0 {
+		err = mkerr("Relative OID must have at least one arc")
+	}
+
 	return
+}
+
+func (c *relOIDCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
+	}
+	if err = c.cg.Constrain(c.val); err == nil {
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		} else {
+			roid := toRelativeOID[T](c.val)
+			if len(roid) == 0 {
+				return 0, mkerr("Relative OID must have at least one arc")
+			}
+
+			for _, arc := range roid {
+				if arc.Big().Sign() < 0 {
+					return 0, mkerr("Relative OID arcs may not be negative")
+				}
+				wire = append(wire, vlqEncodeBig(arc.Big())...)
+			}
+		}
+
+		if err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			if err = writeTLV(pkt, tlv, o); err == nil {
+				off = pkt.Offset() - start
+			}
+		}
+	}
+
+	return
+}
+
+func RegisterRelativeOIDAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+) {
+	all := append(ConstraintGroup[T]{spec}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &relOIDCodec[T]{tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+		newWith: func(v any) box {
+			return &relOIDCodec[T]{
+				val: valueOf[T](v), tag: tag, cg: all,
+				decodeVerify: verList,
+				decodeHook:   decoder,
+				encodeHook:   encoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterOIDAlias[ObjectIdentifier](TagOID, nil, nil, nil, nil)
+	RegisterRelativeOIDAlias[RelativeOID](TagRelativeOID, nil, nil, nil, nil)
 }

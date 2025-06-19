@@ -74,74 +74,53 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 		raw = string(tv)
 	default:
 		err = mkerr("Invalid type for ASN.1 PRINTABLE STRING")
+		return
 	}
 
-	for i := 0; i < len(raw) && err == nil; i++ {
-		char := rune(raw[i])
-		if !isPrintableStringChar(char) {
-			err = mkerrf("Invalid printable string character: ", string(char))
-		}
-	}
-
+	_ps := PrintableString(raw)
+	err = PrintableSpec(_ps)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[PrintableString] = constraints
 		err = group.Validate(PrintableString(raw))
 	}
 
 	if err == nil {
-		ps = PrintableString(raw)
+		ps = _ps
 	}
 
 	return
 }
 
-func (r *PrintableString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
+/*
+PrintableSpec implements the formal [Constraint] specification for [PrintableString].
 
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			var lt int = tlv.Length
-			if pkt.Offset()+lt > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+lt, pkt.Len(), "Length")
-			} else {
-				*r = PrintableString(data)
-				pkt.SetOffset(pkt.Offset() + lt)
-			}
-		}
-	}
-
-	return
-}
-
-func (r PrintableString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, r.Len(), false, []byte(r)...), opts); err == nil {
-			n = pkt.Offset() - off
-		}
-	}
-
-	return
-}
-
-func isPrintableStringChar(ch rune) bool {
-	if ch < 0 || ch > 0xFFFF {
-		return false
-	}
-	word := ch >> 6
-	bit := ch & 63
-	return (printableStringBitmap[word]>>bit)&1 != 0
-}
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var PrintableSpec Constraint[PrintableString]
 
 var printableStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
+	RegisterTextAlias[PrintableString](TagPrintableString, nil, nil, nil, PrintableSpec)
+
+	PrintableSpec = func(o PrintableString) (err error) {
+		for _, r := range []rune(o.String()) {
+			if r < 0 || r > 0xFFFF {
+				err = mkerrf("Invalid character '", string(r), "' (>0xFFFF) in PRINTABLE STRING")
+				break
+			}
+			word := r >> 6
+			bit := r & 63
+			if (printableStringBitmap[word]>>bit)&1 == 0 {
+				err = mkerrf("Invalid character '", string(word), "' in PRINTABLE STRING")
+				break
+			}
+		}
+
+		return
+	}
+
 	set := func(lo, hi rune) {
 		for r := lo; r <= hi; r++ {
 			printableStringBitmap[r>>6] |= 1 << (r & 63)

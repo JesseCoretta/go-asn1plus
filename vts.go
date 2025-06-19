@@ -42,22 +42,18 @@ func NewVideotexString(x any, constraints ...Constraint[VideotexString]) (Videot
 		raw = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 VIDEOTEX STRING")
+		return vts, err
 	}
 
-	runes := []rune(raw)
-	for i := 0; i < len(runes) && err == nil; i++ {
-		if char := runes[i]; !isVideotex(char) {
-			err = mkerrf("Invalid ASN.1 VIDEOTEX STRING character: ", itoa(int(char)))
-		}
-	}
-
+	_vts := VideotexString(raw)
+	err = VideotexSpec(_vts)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[VideotexString] = constraints
-		err = group.Validate(VideotexString(raw))
+		err = group.Validate(_vts)
 	}
 
 	if err == nil {
-		vts = VideotexString(raw)
+		vts = _vts
 	}
 
 	return vts, err
@@ -89,54 +85,15 @@ ASN.1 primitive.
 */
 func (r VideotexString) IsPrimitive() bool { return true }
 
-func (r VideotexString) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		start := pkt.Offset()
-		data := stringBytes(string(r))
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		tlv := t.newTLV(class, tag, len(data), false, data...)
-		if err = writeTLV(pkt, tlv, opts); err == nil {
-			n = pkt.Offset() - start
-		}
-	default:
-		err = mkerr("Unsupported packet type for VIDEOTEX STRING")
-	}
-	return
-}
+/*
+VideotexSpec implements the formal [Constraint] specification for [VideotexString].
 
-func (r *VideotexString) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		return mkerr("Nil Packet encountered during read")
-	}
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(TagVideotexString, pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				return errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			}
+Note that this specification is automatically executed during construction and
+need not be specified manually as a [Constraint] by the end user.
+*/
+var VideotexSpec Constraint[VideotexString]
 
-			// byte-wise rune validation – zero allocations
-			for i := 0; i < len(data); {
-				rn, sz := utf8.DecodeRune(data[i:])
-				if rn == utf8.RuneError || !isVideotex(rn) {
-					return mkerr("Invalid ASN.1 VIDEOTEX STRING character")
-				}
-				i += sz
-			}
-
-			// zero-copy view of the payload
-			*r = VideotexString(unsafe.String(&data[0], len(data)))
-
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
-		}
-
-	}
-	return
-}
-
-func isVideotex(ch rune) bool {
+func isVideotexRune(ch rune) bool {
 	if ch < 0 || ch > 0xFFFF { // we only built the BMP bitmap
 		return false
 	}
@@ -145,9 +102,36 @@ func isVideotex(ch rune) bool {
 	return (videotexBitmap[word]>>bit)&1 != 0
 }
 
+func videotexDecoderVerify(b []byte) error {
+	for i := 0; i < len(b); {
+		r, n := utf8.DecodeRune(b[i:])
+		if r == utf8.RuneError || !isVideotexRune(r) {
+			return mkerr("invalid Videotex character")
+		}
+		i += n
+	}
+	return nil
+}
+
+func videotexDecoder(b []byte) (VideotexString, error) {
+	return VideotexString(unsafe.String(&b[0], len(b))), nil
+}
+
 var videotexBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
+	RegisterTextAlias[VideotexString](TagVideotexString, videotexDecoderVerify, videotexDecoder, nil, VideotexSpec)
+	VideotexSpec = func(o VideotexString) (err error) {
+		for _, r := range []rune(o.String()) {
+			if !isVideotexRune(r) {
+				err = mkerrf("Invalid character '", itoa(int(r)), "' in VIDEOTEX STRING")
+				break
+			}
+		}
+
+		return
+	}
+
 	set := func(lo, hi rune) {
 		for r := lo; r <= hi; r++ {
 			videotexBitmap[r>>6] |= 1 << (r & 63)

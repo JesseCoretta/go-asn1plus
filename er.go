@@ -123,28 +123,22 @@ func With(args ...any) EncodingOption {
 }
 
 /*
-WithEncoding returns an option to set the encoding rule. This function is intended to
+Deprecated: WithEncoding returns an option to set the encoding rule. This function is intended to
 be executed in-line as a varadic input value to [Marshal].
 
-See also [WithOptions].
+Use [With] instead.
 */
 func WithEncoding(rule EncodingRule) EncodingOption {
-	return func(cfg *encodingConfig) {
-		cfg.rule = rule
-	}
+	return func(cfg *encodingConfig) { cfg.rule = rule }
 }
 
 /*
-WithOptions returns an option to set the encoding parameters. This function is intended to
-be executed in-line as a varadic input value to [Marshal] and [Unmarshal].
+Deprecated: WithOptions returns an option to set the encoding parameters. This function is intended
+to be executed in-line as a varadic input value to [Marshal] and [Unmarshal].
 
-See also [WithEncoding].
+Use [With] instead.
 */
-func WithOptions(opts Options) EncodingOption {
-	return func(cfg *encodingConfig) {
-		cfg.opts = &opts
-	}
-}
+func WithOptions(opts Options) EncodingOption { return func(cfg *encodingConfig) { cfg.opts = &opts } }
 
 /*
 String returns the string representation of the receiver instance.

@@ -5,6 +5,11 @@ bool.go contains all types and methods pertaining to the ASN.1
 BOOLEAN type.
 */
 
+import (
+	"reflect"
+	"unsafe"
+)
+
 /*
 Boolean implements the ASN.1 BOOLEAN type.
 */
@@ -77,21 +82,48 @@ func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error
 	return b, err
 }
 
-func (r *Boolean) read(pkt Packet, tlv TLV, opts *Options) (err error) {
-	if pkt == nil {
-		err = mkerr("Nil Packet encountered during read")
-		return
+type booleanCodec[T any] struct {
+	val T
+	tag int
+	cg  ConstraintGroup[T]
+
+	decodeVerify []DecodeVerifier
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
+}
+
+func (c *booleanCodec[T]) Tag() int          { return c.tag }
+func (c *booleanCodec[T]) IsPrimitive() bool { return true }
+func (c *booleanCodec[T]) getVal() any       { return c.val }
+func (c *booleanCodec[T]) String() string    { return "booleanCodec" }
+func (c *booleanCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+
+func toBoolean[T any](v T) Boolean   { return *(*Boolean)(unsafe.Pointer(&v)) }
+func fromBoolean[T any](i Boolean) T { return *(*T)(unsafe.Pointer(&i)) }
+
+func (c *booleanCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
+	if o == nil {
+		o = implicitOptions()
 	}
 
-	switch pkt.Type() {
-	case BER, DER:
-		var data []byte
-		if data, err = primitiveCheckRead(r.Tag(), pkt, tlv, opts); err == nil {
-			if pkt.Offset()+tlv.Length > pkt.Len() {
-				err = errorASN1Expect(pkt.Offset()+tlv.Length, pkt.Len(), "Length")
-			} else {
-				pkt.SetOffset(pkt.Offset() + 1)
-				*r = Boolean(data[0] != 0)
+	if err = c.cg.Constrain(c.val); err == nil {
+		var wire []byte = []byte{0x00} // assume FALSE
+		var err error
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		} else {
+			if toBoolean(c.val).Bool() {
+				wire = []byte{0xFF}
+			}
+		}
+
+		if err == nil {
+			tag, cls := effectiveTag(c.tag, 0, o)
+			start := pkt.Offset()
+
+			tlv := pkt.Type().newTLV(cls, tag, 1, false, wire[0])
+			if err = writeTLV(pkt, tlv, o); err == nil {
+				off = pkt.Offset() - start
 			}
 		}
 	}
@@ -99,15 +131,84 @@ func (r *Boolean) read(pkt Packet, tlv TLV, opts *Options) (err error) {
 	return
 }
 
-func (r Boolean) write(pkt Packet, opts *Options) (n int, err error) {
-	switch t := pkt.Type(); t {
-	case BER, DER:
-		off := pkt.Offset()
-		tag, class := effectiveTag(r.Tag(), 0, opts)
-		if err = writeTLV(pkt, t.newTLV(class, tag, 1, false, r.Byte()), opts); err == nil {
-			n = pkt.Offset() - off
+func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+	if o == nil {
+		o = implicitOptions()
+	}
+
+	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	if err == nil {
+		if len(wire) != 1 {
+			return mkerr("BOOLEAN: content length ≠ 1")
+		}
+
+		decodeVerify := func() (err error) {
+			for _, vfn := range c.decodeVerify {
+				if err = vfn(wire); err != nil {
+					break
+				}
+			}
+
+			return
+		}
+
+		if err = decodeVerify(); err == nil {
+			var out T
+			if c.decodeHook != nil {
+				out, err = c.decodeHook(wire)
+			} else {
+				out = fromBoolean[T](Boolean(wire[0] != 0))
+			}
+
+			if err == nil {
+				if err = c.cg.Constrain(out); err == nil {
+					c.val = out
+					pkt.SetOffset(pkt.Offset() + 1)
+				}
+			}
 		}
 	}
 
-	return
+	return err
+}
+
+func RegisterBooleanAlias[T any](
+	tag int,
+	verify DecodeVerifier,
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
+	spec Constraint[T],
+	user ...Constraint[T],
+) {
+	all := append(ConstraintGroup[T]{}, user...)
+
+	var verList []DecodeVerifier
+	if verify != nil {
+		verList = []DecodeVerifier{verify}
+	}
+
+	f := factories{
+		newEmpty: func() box {
+			return &booleanCodec[T]{
+				tag: tag, cg: all,
+				decodeVerify: verList,
+				encodeHook:   encoder,
+				decodeHook:   decoder}
+		},
+		newWith: func(v any) box {
+			return &booleanCodec[T]{val: valueOf[T](v),
+				tag: tag, cg: all,
+				decodeVerify: verList,
+				encodeHook:   encoder,
+				decodeHook:   decoder}
+		},
+	}
+
+	rt := reflect.TypeOf((*T)(nil)).Elem()
+	registerType(rt, f)
+	registerType(reflect.PointerTo(rt), f)
+}
+
+func init() {
+	RegisterBooleanAlias[Boolean](TagBoolean, nil, nil, nil, nil)
 }

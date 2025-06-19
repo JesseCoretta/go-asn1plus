@@ -58,7 +58,7 @@ func TestUniversalString_EncodingContentDER(t *testing.T) {
 	}
 
 	var pkt Packet
-	if pkt, err = Marshal(us, WithEncoding(DER)); err != nil {
+	if pkt, err = Marshal(us, With(DER)); err != nil {
 		t.Fatalf("%s failed: %v", t.Name(), err)
 	}
 
@@ -83,54 +83,6 @@ func TestUniversalString_EncodingContentDER(t *testing.T) {
 	}
 }
 
-func TestUniversalString_bER(t *testing.T) {
-	original := "Hello, 世界"
-	usOrig, err := NewUniversalString(original)
-	if err != nil {
-		t.Fatalf("NewUniversalString error: %v", err)
-	}
-
-	var pkt Packet
-	if pkt, err = Marshal(usOrig, WithEncoding(BER)); err != nil {
-		t.Fatalf("%s failed: %v", t.Name(), err)
-	}
-
-	if len(pkt.Data()) < 2 {
-		t.Fatalf("Packet data too short")
-	}
-
-	var usDecoded UniversalString
-	if err = Unmarshal(pkt, &usDecoded); err != nil {
-		t.Errorf("%s failed: %v", t.Name(), err)
-	} else if usDecoded.String() != original {
-		t.Errorf("Roundtrip failed: expected %q, got %q", original, usDecoded.String())
-	}
-}
-
-func TestUniversalString_dER(t *testing.T) {
-	original := "Hello, 世界"
-	usOrig, err := NewUniversalString(original)
-	if err != nil {
-		t.Fatalf("NewUniversalString error: %v", err)
-	}
-
-	var pkt Packet
-	if pkt, err = Marshal(usOrig, WithEncoding(DER)); err != nil {
-		t.Fatalf("%s failed: %v", t.Name(), err)
-	}
-
-	if len(pkt.Data()) < 2 {
-		t.Fatalf("Packet data too short")
-	}
-
-	var usDecoded UniversalString
-	if err = Unmarshal(pkt, &usDecoded); err != nil {
-		t.Errorf("%s failed: %v", t.Name(), err)
-	} else if usDecoded.String() != original {
-		t.Errorf("Roundtrip failed: expected %q, got %q", original, usDecoded.String())
-	}
-}
-
 func TestUniversalString_encodingRules(t *testing.T) {
 	for _, value := range []any{
 		"Hello, 世界",
@@ -142,7 +94,7 @@ func TestUniversalString_encodingRules(t *testing.T) {
 			}
 
 			var pkt Packet
-			if pkt, err = Marshal(usOrig, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(usOrig, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
@@ -154,22 +106,6 @@ func TestUniversalString_encodingRules(t *testing.T) {
 					t.Name(), rule, value, usDecoded.String())
 			}
 		}
-	}
-}
-
-func TestDerUniversalString_InvalidLength(t *testing.T) {
-	dp := &DERPacket{}
-	invalidTLV := TLV{
-		typ:      dp.Type(),
-		Class:    ClassUniversal,
-		Tag:      TagUniversalString,
-		Compound: false,
-		Length:   5, // Not a multiple of 4
-	}
-	dp.Append([]byte{0, 0, 0, 0, 0}...)
-	var us UniversalString
-	if err := us.read(dp, invalidTLV, &Options{}); err == nil {
-		t.Error("Expected error for invalid content length (not a multiple of 4), got nil")
 	}
 }
 
@@ -216,11 +152,6 @@ func TestUniversalString_codecov(_ *testing.T) {
 
 	var us2 UniversalString
 	_ = Unmarshal(pkt, &us2)
-
-	us.read(nil, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400}, &Options{})
-	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400}, &Options{})
-	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 400, Value: []byte{byte(us.Tag()), 0x03, 0x1, 0x2, 0x3}}, &Options{})
-	us.read(pkt, TLV{typ: pkt.Type(), Tag: us.Tag(), Length: 3, Value: []byte{byte(us.Tag()), 0x03, 0x1, 0x2, 0x3}}, &Options{})
 }
 
 func ExampleUniversalString_withConstraints() {

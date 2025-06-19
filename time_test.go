@@ -6,6 +6,35 @@ import (
 	"time"
 )
 
+func TestDuration_customType(t *testing.T) {
+	type CustomDur Duration
+	RegisterDurationAlias[CustomDur](TagDuration, nil, nil, nil, nil)
+
+	// We cheat here rather than writing a separate
+	// constructor merely for testing.
+	orig, _ := NewDuration(time.Duration(time.Second * 50))
+	cust := CustomDur(orig)
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var out CustomDur
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	// We cheat again, since we didn't write a
+	// custom OID method for this simple test.
+	cast1 := Duration(orig).String()
+	cast2 := Duration(cust).String()
+	if cast1 != cast2 {
+		t.Fatalf("%s failed [BER Duration cmp.]:\n\twant: %s\n\tgot:  %s",
+			t.Name(), cast1, cast2)
+	}
+}
+
 /*
 This example demonstrates encoding and decoding an ASN.1 DATE
 (2021-09-18) to/from a simple Go string.
@@ -19,9 +48,7 @@ func ExampleDate_viaGoString() {
 	opts := Options{Identifier: "date"}
 
 	pkt, err := Marshal(`2021-09-18`,
-		WithEncoding(BER),
-		WithOptions(opts),
-	)
+		With(BER, opts))
 
 	if err != nil {
 		fmt.Println(err)
@@ -31,7 +58,7 @@ func ExampleDate_viaGoString() {
 	fmt.Printf("Packet hex: %s\n", pkt.Hex())
 
 	var date string
-	if err = Unmarshal(pkt, &date, WithOptions(opts)); err != nil {
+	if err = Unmarshal(pkt, &date, With(opts)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -46,10 +73,7 @@ func ExampleDate_viaGoString() {
 func ExampleTimeOfDay_viaGoString() {
 	opts := Options{Identifier: "time-of-day"}
 
-	pkt, err := Marshal(`15:32:01`,
-		WithEncoding(BER),
-		WithOptions(opts),
-	)
+	pkt, err := Marshal(`15:32:01`, With(BER, opts))
 
 	if err != nil {
 		fmt.Println(err)
@@ -59,7 +83,7 @@ func ExampleTimeOfDay_viaGoString() {
 	fmt.Printf("Packet hex: %s\n", pkt.Hex())
 
 	var tod string
-	if err = Unmarshal(pkt, &tod, WithOptions(opts)); err != nil {
+	if err = Unmarshal(pkt, &tod, With(opts)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -325,7 +349,7 @@ func TestGeneralizedTime_encodingRules(t *testing.T) {
 			_ = gt.String()
 
 			var pkt Packet
-			if pkt, err = Marshal(gt, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(gt, With(rule)); err != nil {
 				t.Fatalf("%s[%s encoding] failed: %v\n", t.Name(), rule, err)
 			}
 
@@ -351,7 +375,7 @@ func TestUTCTime_encodingRules(t *testing.T) {
 			_ = gt.String()
 
 			var pkt Packet
-			if pkt, err = Marshal(gt, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(gt, With(rule)); err != nil {
 				t.Fatalf("%s[%s encoding] failed: %v\n", t.Name(), rule, err)
 			}
 
@@ -385,7 +409,7 @@ func TestDateTime_encodingRules(t *testing.T) {
 			_ = gt.String()
 
 			var pkt Packet
-			if pkt, err = Marshal(gt, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(gt, With(rule)); err != nil {
 				t.Fatalf("%s[%s encoding][%d] failed: %v\n", t.Name(), rule, idx, err)
 			}
 
@@ -419,7 +443,7 @@ func TestTimeOfDay_encodingRules(t *testing.T) {
 			_ = gt.String()
 
 			var pkt Packet
-			if pkt, err = Marshal(gt, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(gt, With(rule)); err != nil {
 				t.Fatalf("%s[%s encoding][%d] failed: %v\n", t.Name(), rule, idx, err)
 			}
 
@@ -453,7 +477,7 @@ func TestDate_encodingRules(t *testing.T) {
 			_ = gt.String()
 
 			var pkt Packet
-			if pkt, err = Marshal(gt, WithEncoding(rule)); err != nil {
+			if pkt, err = Marshal(gt, With(rule)); err != nil {
 				t.Fatalf("%s[%s encoding][%d] failed: %v\n", t.Name(), rule, idx, err)
 			}
 
@@ -558,8 +582,6 @@ func TestGeneralizedTime(t *testing.T) {
 }
 
 func TestTime_codecov(_ *testing.T) {
-	var pkt Packet
-
 	var t Time
 	t.Tag()
 	t.Cast()
@@ -570,8 +592,6 @@ func TestTime_codecov(_ *testing.T) {
 	d.Cast()
 	d.IsPrimitive()
 	d.Layout()
-	d.read(pkt, TLV{}, &Options{})
-	d.read(invalidPacket{}, TLV{}, &Options{})
 	_, _ = parseDate(`1`)
 	_, _ = parseDate(`2015?11=26`)
 	_, _ = parseDate(`2015-13-36`)
@@ -581,8 +601,6 @@ func TestTime_codecov(_ *testing.T) {
 	dt.Cast()
 	dt.IsPrimitive()
 	dt.Layout()
-	dt.read(pkt, TLV{}, &Options{})
-	dt.read(invalidPacket{}, TLV{}, &Options{})
 	_, _ = parseDateTime(`1`)
 	_, _ = parseDateTime(`2015?13-36T24:33:21`)
 	_, _ = parseDateTime(`2015-13-36T14:33:21`)
@@ -592,8 +610,6 @@ func TestTime_codecov(_ *testing.T) {
 	tod.Cast()
 	tod.IsPrimitive()
 	tod.Layout()
-	tod.read(invalidPacket{}, TLV{}, &Options{})
-	tod.read(pkt, TLV{}, &Options{})
 	_, _ = parseTimeOfDay(`1`)
 	_, _ = parseTimeOfDay(`24?33=21`)
 	_, _ = parseTimeOfDay(`24:53:21`)
@@ -601,8 +617,6 @@ func TestTime_codecov(_ *testing.T) {
 	var dur Duration
 	dur.Tag()
 	dur.IsPrimitive()
-	dur.read(invalidPacket{}, TLV{}, &Options{})
-	dur.read(pkt, TLV{}, &Options{})
 	NewDuration(`1`)
 	NewDuration(`P1T1`)
 	NewDuration(`P1YM3DT4H5M30S`)
@@ -613,15 +627,11 @@ func TestTime_codecov(_ *testing.T) {
 	utc.Tag()
 	utc.IsPrimitive()
 	utc.Layout()
-	utc.read(invalidPacket{}, TLV{}, &Options{})
-	utc.read(pkt, TLV{}, &Options{})
 
 	var gt GeneralizedTime
 	gt.Tag()
 	gt.IsPrimitive()
 	gt.Layout()
-	gt.read(invalidPacket{}, TLV{}, &Options{})
-	gt.read(pkt, TLV{}, &Options{})
 	NewUTCTime(`9908041543`)
 	NewUTCTime(`990804154300`)
 	NewUTCTime(`990804154300-0700`)

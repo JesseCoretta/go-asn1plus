@@ -41,7 +41,7 @@ func TestSet_encodingRules(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(orig, WithEncoding(rule))
+		pkt, err := Marshal(orig, With(rule))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
