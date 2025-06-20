@@ -174,3 +174,24 @@ func ExampleOctetString_viaGoStringWithTaggedConstraint() {
 	// Encoded value: 04 04 54455354
 	// Decoded value: TEST
 }
+
+func TestPacket_LargeOctetStringCER(t *testing.T) {
+	var large OctetString = OctetString(strrpt("X", 2001)) // X*2001 times
+
+	pkt, err := Marshal(large, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var alsoLarge OctetString
+	if err = Unmarshal(pkt, &alsoLarge); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+
+	want := large.Len()
+	got := alsoLarge.Len()
+	if want != got {
+		t.Fatalf("%s failed [CER large OctetString size cmp.]:\n\twant: %d bytes\n\tgot:  %d bytes",
+			t.Name(), want, got)
+	}
+}

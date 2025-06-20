@@ -49,7 +49,7 @@ type nullCodec[T any] struct {
 
 func (c *nullCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdNullWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -81,7 +81,7 @@ func bcdNullWrite[T any](c *nullCodec[T], pkt Packet, o *Options) (off int, err 
 
 func (c *nullCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdNullRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented

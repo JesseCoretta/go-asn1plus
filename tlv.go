@@ -14,7 +14,7 @@ func tlvString(tlv TLV) (str string) {
 	}
 
 	switch tlv.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		str = "{Type: " + tlv.typ.String() +
 			", Class:" + itoa(tlv.Class) +
 			", Tag:" + itoa(tlv.Tag) +
@@ -112,10 +112,11 @@ func encodeTLV(t TLV, opts *Options) []byte {
 		b = append(b, encodeBase128Int(tagVal)...)
 	}
 
-	indef := t.Type() == BER &&
-		(opts != nil && opts.Indefinite) || t.Length < 0
+	indef := t.Type().allowsIndefinite() &&
+		((opts != nil && opts.Indefinite) || t.Length < 0)
+
 	if indef {
-		b = append(b, 0x80)
+		b = append(b, 0x80) // indefinite-length indicator
 	} else {
 		encodeLengthInto(t.Type(), &b, t.Length)
 	}
@@ -128,28 +129,35 @@ func encodeTLV(t TLV, opts *Options) []byte {
 }
 
 func getTLV(r Packet, opts *Options) (TLV, error) {
+
 	if r.Offset() >= r.Len() {
 		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: no data available at offset ",
 			itoa(r.Offset()), " (len:", itoa(r.Len()), ")")
 	}
 
 	d := r.Data()
+
 	sub := d[r.Offset():]
 
+	// Parse class.
 	class, err := parseClassIdentifier(sub)
 	if err != nil {
 		return TLV{}, err
 	}
 
+	// Parse compound flag.
 	compound, _ := parseCompoundIdentifier(sub)
 
+	// Parse tag.
 	tag, idLen, err := parseTagIdentifier(sub)
 	if err != nil {
-		return TLV{}, mkerrf(r.Type().String(),
-			" Packet.TLV: error reading tag: ", err.Error())
+		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: error reading tag: ", err.Error())
 	}
+
+	// Advance offset by identifier length.
 	r.SetOffset(r.Offset() + idLen)
 
+	// If there's an override in options, adjust.
 	if opts != nil {
 		if opts.HasTag() || opts.HasClass() {
 			if opts.Explicit && !compound {
@@ -164,41 +172,42 @@ func getTLV(r Packet, opts *Options) (TLV, error) {
 		}
 	}
 
+	// Parse length.
 	var length, lenLen int
 	if length, lenLen, err = tlvVerifyLengthState(r, d); err != nil {
 		return TLV{}, err
 	}
 
+	// Advance offset by the length bytes.
 	r.SetOffset(r.Offset() + lenLen)
 
+	// Use remaining data as value bytes.
+	// Note: For definite lengths it may be necessary to slice exactly the given number
+	// of bytes, but here we pass all remaining bytes.
 	var tlv TLV
 	switch r.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		tlv = r.Type().newTLV(class, tag, length, compound, d[r.Offset():]...)
 	default:
-		return TLV{}, mkerr("Unsupported encoding rule")
+		tlv = TLV{}
+		err = errorRuleNotImplemented
 	}
 
-	return tlv, nil
+	return tlv, err
 }
 
 func tlvVerifyLengthState(r Packet, d []byte) (length, lenLen int, err error) {
 	if length, lenLen, err = parseLength(d[r.Offset():]); err != nil {
 		err = mkerrf(r.Type().String(),
 			" Packet.TLV: error reading length: ", err.Error())
+	} else if !r.Type().allowsIndefinite() && length < 0 {
+		err = errorIndefiniteProhibited
 	} else if r.Type() == DER {
 		// DER canonical-form checks
-		if length < 0 {
-			err = mkerr("DER forbids indefinite length")
-			return
-		}
 		if lenLen > 1 && length < 0x80 {
 			err = mkerr("DER: non-minimal length encoding")
-			return
-		}
-		if lenLen > 2 && d[r.Offset()+1] == 0x00 {
+		} else if lenLen > 2 && d[r.Offset()+1] == 0x00 {
 			err = mkerr("DER: leading zero in length")
-			return
 		}
 	}
 
@@ -206,9 +215,9 @@ func tlvVerifyLengthState(r Packet, d []byte) (length, lenLen int, err error) {
 }
 
 func writeTLV(pkt Packet, t TLV, opts *Options) error {
-	if pkt.Type() == DER && opts != nil && opts.Indefinite {
-		return mkerr("DER forbids indefinite length")
-	} else if !(t.Type() == BER || t.Type() == DER) {
+	if !pkt.Type().allowsIndefinite() && opts != nil && opts.Indefinite {
+		return mkerrf(pkt.Type().String(), " forbids indefinite length")
+	} else if !t.Type().isAnyOf(encodingRules...) && t.Type() != CER {
 		return mkerrf(pkt.Type().String(), " Packet.WriteTLV: expected ",
 			pkt.Type().String(), ", got ", t.Type().String())
 	}
@@ -216,8 +225,9 @@ func writeTLV(pkt Packet, t TLV, opts *Options) error {
 	encoded := encodeTLV(t, opts)
 	pkt.Append(encoded...)
 
-	// Add end-of-contents for BER-indefinite.
-	if t.Type() == BER && opts != nil && opts.Indefinite {
+	// Add end-of-contents for encoding rules that
+	// permit indefinite value lengths if present.
+	if t.Type().allowsIndefinite() && opts != nil && opts.Indefinite {
 		pkt.Append(0x00, 0x00)
 	}
 	pkt.SetOffset(pkt.Len())
@@ -284,21 +294,12 @@ func readBase128Int(pkt Packet) (int, error) {
 	return result, nil
 }
 
-/*
-TODO: retire this.
-*/
-func encodeLength(rule EncodingRule, n int) []byte {
-	bufPtr := getBuf()
-	encodeLengthInto(rule, bufPtr, n)
-	out := append([]byte(nil), (*bufPtr)...)
-	putBuf(bufPtr)
-	return out
-}
-
 func encodeLengthInto(rule EncodingRule, dst *[]byte, n int) {
 	switch rule {
 	case BER:
 		encodeBERLengthInto(dst, n)
+	case CER:
+		encodeCERLengthInto(dst, n)
 	case DER:
 		encodeDERLengthInto(dst, n)
 	}

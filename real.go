@@ -432,7 +432,7 @@ func (c *realCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 
 func (c *realCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdRealWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -495,7 +495,7 @@ func bcdRealWrite[T any](c *realCodec[T], pkt Packet, o *Options) (off int, err 
 
 func (c *realCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdRealRead[T](c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented

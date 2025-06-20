@@ -129,7 +129,7 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byt
 			// WITH a length of 0x80.
 			//
 			// TODO: revisit this approach.
-			if pkt.Type() == BER && pkt.Data()[1] == 0x80 {
+			if pkt.Type().allowsIndefinite() && pkt.Data()[1] == 0x80 {
 				if data[len(data)-1] == 0x00 &&
 					data[len(data)-2] == 0x00 {
 					data = data[:len(data)-2]

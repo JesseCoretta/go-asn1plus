@@ -250,8 +250,8 @@ func TestGetTLV_UnsupportedEncodingRule(t *testing.T) {
 	}
 
 	_, err := getTLV(pkt, nil)
-	if err == nil || err.Error() != "Unsupported encoding rule" {
-		t.Fatalf("expected 'Unsupported encoding rule', got %v", err)
+	if err == nil || err.Error() != errorRuleNotImplemented.Error() {
+		t.Fatalf("expected 'encoding rule not yet implemented', got %v", err)
 	}
 }
 

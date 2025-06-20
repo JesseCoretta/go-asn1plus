@@ -87,7 +87,10 @@ func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err
 		// Inner sequences use the universal SEQUENCE tag (0x30).
 		pkt.Append(0x30)
 		enc := encodeTLV(tlv, nil)
-		pkt.Append(encodeLength(sub.Type(), len(enc))...)
+		bufPtr := getBuf()
+		encodeLengthInto(pkt.Type(), bufPtr, len(enc))
+		pkt.Append(*bufPtr...)
+		putBuf(bufPtr)
 		pkt.Append(enc...)
 	}
 
@@ -122,7 +125,10 @@ func marshalSequenceChoiceField(opts *Options, ch Choice, pkt, sub Packet, depth
 				id = byte(ClassContextSpecific<<6) | 0x20
 			}
 			wrapped.Append(id)
-			wrapped.Append(encodeLength(pkt.Type(), len(inner))...)
+			bufPtr := getBuf()
+			encodeLengthInto(pkt.Type(), bufPtr, len(inner))
+			wrapped.Append(*bufPtr...)
+			putBuf(bufPtr)
 			wrapped.Append(inner...)
 
 			// replace the old bytes in ‘sub’
@@ -145,8 +151,10 @@ func marshalSequenceChoiceField(opts *Options, ch Choice, pkt, sub Packet, depth
 				explicitID = byte(opts.Class()<<6) | 0x20 | byte((*opts.choiceTag))
 			}
 			sub.Append(explicitID)
-			lenBytes := encodeLength(sub.Type(), len(innerEnc))
-			sub.Append(lenBytes...)
+			bufPtr := getBuf()
+			encodeLengthInto(pkt.Type(), bufPtr, len(innerEnc))
+			sub.Append(*bufPtr...)
+			putBuf(bufPtr)
 			sub.Append(innerEnc...)
 		}
 	}

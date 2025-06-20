@@ -2,6 +2,7 @@ package asn1plus
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -21,6 +22,8 @@ func TestNewBoolean(t *testing.T) {
 		} else {
 			B.IsPrimitive()
 			B.Tag()
+			B.Bool()
+			B.Byte()
 			_ = B.String()
 
 			for _, rule := range encodingRules {
@@ -52,6 +55,53 @@ func TestNewBoolean(t *testing.T) {
 
 func TestBoolean_codecov(t *testing.T) {
 	_, _ = NewBoolean(struct{}{})
+	bc := new(booleanCodec[Boolean])
+	bc.encodeHook = func(b Boolean) ([]byte, error) {
+		return []byte{b.Byte()}, nil
+	}
+	bc.decodeHook = func(b []byte) (Boolean, error) {
+		return Boolean(b[0]==0xFF), nil
+	}
+	bc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+	bc.IsPrimitive()
+	_ = bc.String()
+	tpkt := &testPacket{}
+	bpkt := &BERPacket{}
+	_, _ = bc.write(tpkt, nil)
+	_, _ = bc.write(bpkt, nil)
+	bc.read(tpkt, TLV{}, nil)
+}
+
+type customBoolean Boolean
+func (_ customBoolean) Tag() int { return TagBoolean }
+func (_ customBoolean) String() string { return `` }
+func (_ customBoolean) IsPrimitive() bool { return true }
+
+func TestCustomBoolean_withControls(t *testing.T) {
+	RegisterBooleanAlias[customBoolean](TagBoolean,
+		func([]byte) error {
+			return nil
+		},
+		func(customBoolean) ([]byte, error) {
+			return []byte{0x1, 0x1, 0xFF}, nil
+		},
+		func([]byte) (customBoolean, error) {
+			return customBoolean(true), nil
+		},
+		nil)
+
+	var cust customBoolean = customBoolean(true)
+
+	pkt, err := Marshal(cust, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var next customBoolean
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(reflect.TypeOf(cust))
 }
 
 func ExampleNewBoolean() {

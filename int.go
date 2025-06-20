@@ -309,7 +309,7 @@ func (c *integerCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 // NOTE: called for both Integer and Enumerated
 func (c *integerCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdIntegerWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -352,7 +352,7 @@ func bcdIntegerWrite[T any](c *integerCodec[T], pkt Packet, o *Options) (off int
 // NOTE: called for both Integer and Enumerated
 func (c *integerCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdIntegerRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented

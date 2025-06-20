@@ -1300,7 +1300,7 @@ type temporalCodec[T Temporal] struct {
 
 func (c *temporalCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdTemporalWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -1328,7 +1328,7 @@ func bcdTemporalWrite[T Temporal](c *temporalCodec[T], pkt Packet, o *Options) (
 
 func (c *temporalCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdTemporalRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented
@@ -1523,7 +1523,7 @@ func fromDuration[T any](d Duration) T { return *(*T)(unsafe.Pointer(&d)) }
 
 func (c *durationCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdDurationWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -1557,7 +1557,7 @@ func bcdDurationWrite[T any](c *durationCodec[T], pkt Packet, o *Options) (off i
 
 func (c *durationCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdDurationRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented

@@ -322,7 +322,7 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 	var candidate any
 	var structTag string
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		// Extract the outer TLV from the Packet.
 		var tlv TLV
 		if tlv, err = pkt.TLV(); err == nil {

@@ -15,12 +15,33 @@ const (
 	testEncodingRule EncodingRule = iota - 1
 	invalidEncodingRule
 	BER
-	_ // CER
+	CER
 	DER
 )
 
 // for unit tests
-var encodingRules []EncodingRule = []EncodingRule{BER, DER}
+var encodingRules []EncodingRule = []EncodingRule{BER, CER, DER}
+
+/*
+allowsIndefinite returns a Boolean value indicative of whether the
+receiver instance allows indefinite lengths.
+*/
+func (r EncodingRule) allowsIndefinite() (ok bool) {
+	switch r {
+	case BER, CER:
+		ok = true
+	}
+
+	return
+}
+
+func (r EncodingRule) isAnyOf(e ...EncodingRule) (is bool) {
+	for i := 0; i < len(e) && !is; i++ {
+		is = r == e[i]
+	}
+
+	return
+}
 
 /*
 New returns a qualifying instance of [Packet] based on the receiver value.
@@ -35,6 +56,20 @@ func (r EncodingRule) New(src ...byte) Packet {
 	switch r {
 	case BER:
 		b := berPktPool.Get().(*BERPacket)
+
+		if cap(b.data) < len(src) {
+			bufPtr := bufPool.Get().(*[]byte)
+			if cap(*bufPtr) < len(src) {
+				*bufPtr = make([]byte, 0, roundup(len(src)))
+			}
+			b.data = *bufPtr
+		}
+
+		b.data = append(b.data[:0], src...)
+		pkt = b
+
+	case CER:
+		b := cerPktPool.Get().(*CERPacket)
 
 		if cap(b.data) < len(src) {
 			bufPtr := bufPool.Get().(*[]byte)
@@ -80,7 +115,7 @@ func (r EncodingRule) newTLV(class, tag, length int, compound bool, value ...byt
 	}
 
 	switch r {
-	case BER, DER:
+	case BER, CER, DER:
 		tlv = TLV{typ: r, Class: class, Tag: tag, Length: length, Compound: compound, Value: append([]byte{}, value...)}
 	}
 
@@ -149,6 +184,8 @@ func (r EncodingRule) String() string {
 	switch r {
 	case BER:
 		s = `BER`
+	case CER:
+		s = `CER`
 	case DER:
 		s = `DER`
 	}
@@ -165,6 +202,8 @@ func (r EncodingRule) OID() ObjectIdentifier {
 	switch r {
 	case BER:
 		oid = berOID
+	case CER:
+		oid = cerOID
 	case DER:
 		oid = derOID
 	}

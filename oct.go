@@ -5,6 +5,8 @@ oct.go contains all types and methods pertaining to the ASN.1
 OCTET STRING type.
 */
 
+import "bytes"
+
 /*
 OctetString returns an instance of [OctetString] alongside an error
 following an attempt to marshal x.
@@ -81,6 +83,147 @@ func (r OctetString) Len() int {
 		l = len(r)
 	}
 	return l
+}
+
+func cerSegmentedOctetStringWrite[T binLike](c *textCodec[T], pkt Packet, o *Options) (n int, err error) {
+	const maxSegSize = 1000
+
+	// 1. Obtain the raw "wire" data.
+	var wire []byte
+	if c.encodeHook != nil {
+		wire, err = c.encodeHook(c.val)
+	} else {
+		wire = []byte(c.val)
+	}
+
+	if err == nil {
+		// 2. Build the outer header manually.
+		// For CER, we use a constructed OCTET STRING with indefinite length.
+		// A common encoding is:
+		//   Identifier: 0x04 (OCTET STRING) with constructed flag (0x20) ⇒ 0x24
+		//   Length: 0x80 indicating indefinite length.
+		outerHeader := []byte{0x24, 0x80}
+
+		// 3. Build the inner segments.
+		var innerBuf bytes.Buffer
+		segCount := 0
+		for i := 0; i < len(wire); i += maxSegSize {
+			end := i + maxSegSize
+			if end > len(wire) {
+				end = len(wire)
+			}
+			segment := wire[i:end]
+			// For a primitive OCTET STRING, the identifier is fixed to 0x04.
+			id := byte(0x04)
+			segLen := len(segment)
+			var lenBytes []byte
+			encodeLengthInto(pkt.Type(), &lenBytes, segLen)
+			innerBuf.WriteByte(id)
+			innerBuf.Write(lenBytes)
+			innerBuf.Write(segment)
+			segCount++
+		}
+
+		// 4. Append the EOC marker (two zero bytes).
+		eocMarker := []byte{0x00, 0x00}
+
+		// 5. Assemble the complete CER message:
+		// Outer header || Inner segments || EOC marker.
+		completeBuf := make([]byte, 0, len(outerHeader)+innerBuf.Len()+len(eocMarker))
+		completeBuf = append(completeBuf, outerHeader...)
+		completeBuf = append(completeBuf, innerBuf.Bytes()...)
+		completeBuf = append(completeBuf, eocMarker...)
+
+		// 6. Manufacture a new Packet using the provided constructor.
+		rep := pkt.Type().New(completeBuf...)
+		rep.SetOffset(0)
+
+		// 7. Replace the original Packet's contents in place.
+		pkt.(*CERPacket).data = rep.Data()
+
+		n = len(completeBuf)
+
+	}
+
+	return
+}
+
+func cerSegmentedOctetStringRead[T binLike](c *textCodec[T], pkt Packet, o *Options) (err error) {
+	// Reset offset to 0 to start reading the complete constructed value.
+	pkt.SetOffset(0)
+	data := pkt.Data()
+	offset := pkt.Offset()
+
+	// 1. Read and verify the outer header.
+	// Expected outer header for a constructed OCTET STRING in CER is:
+	//   Identifier: 0x24 (0x04 with constructed flag 0x20)
+	//   Length: 0x80 (indefinite)
+	if offset+2 > len(data) {
+		return mkerr("data too short for outer CER header")
+	}
+	outerId := data[offset]
+	outerLen := data[offset+1]
+	if outerId != 0x24 || outerLen != 0x80 {
+		return mkerrf("outer header not as expected: got ", itoa(int(outerId)), " ", itoa(int(outerLen)))
+	}
+	offset += 2
+
+	// Iterate over inner segments until
+	// we encounter the EOC marker (00 00).
+	var full []byte
+	segIndex := 0
+	for {
+		// Check for EOC marker.
+		if cerCheckEOC(offset, data) {
+			break
+		}
+		if offset >= len(data) {
+			return mkerrf("unexpected end-of-data while reading segment ", itoa(segIndex))
+		}
+
+		offset++
+		segLen, lr, err := decodeCERLength(data, offset)
+		if err != nil {
+			return mkerrf("failed reading length for segment ", itoa(segIndex), ": ", err.Error())
+		}
+		offset += lr
+		if offset+segLen > len(data) {
+			return mkerrf("truncated inner TLV: value incomplete at segment ", itoa(segIndex))
+		}
+		segmentValue := data[offset : offset+segLen]
+		offset += segLen
+
+		full = append(full, segmentValue...)
+		segIndex++
+	}
+
+	for _, vfn := range c.decodeVerify {
+		if err := vfn(full); err != nil {
+			return err
+		}
+	}
+
+	var val, zero T
+	if c.decodeHook != nil {
+		var err error
+		val, err = c.decodeHook(full)
+		if err != nil {
+			return err
+		}
+	} else {
+		switch any(zero).(type) {
+		case string:
+			val = T(string(full))
+		default:
+			val = T(append([]byte(nil), full...))
+		}
+	}
+
+	if err = c.cg.Constrain(val); err == nil {
+		c.val = val
+	}
+
+	return err
 }
 
 func init() {

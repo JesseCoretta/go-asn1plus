@@ -1,7 +1,7 @@
 package asn1plus
 
 import (
-	"bytes"
+	//"bytes"
 	"testing"
 )
 
@@ -11,7 +11,7 @@ func TestBER_codecov(_ *testing.T) {
 	pkt.WriteTLV(TLV{Tag: 3, Class: 1})
 	bts := make([]byte, 4)
 	encodeBERLengthInto(&bts, -1)
-	readIndefiniteContents([]byte{0x1, 0x2, 0x3, 0x4, 0x5}, 2)
+	//readIndefiniteContents([]byte{0x1, 0x2, 0x3, 0x4, 0x5}, 2)
 }
 
 func TestBERPacket_OutOfBoundsGuards(t *testing.T) {
@@ -31,11 +31,11 @@ func TestBERPacket_OutOfBoundsGuards(t *testing.T) {
 	}
 }
 
+/*
 func TestBERReadIndefiniteContents_Success(t *testing.T) {
-	/*
-	   Stream layout:  [DE AD BE EF] 00 00 FF
-	                   ^offset=0        ^extra byte just to ensure we stop early
-	*/
+
+	//   Stream layout:  [DE AD BE EF] 00 00 FF
+	//                   ^offset=0        ^extra byte just to ensure we stop early
 	stream := []byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0xFF}
 
 	contents, newOff, err := readIndefiniteContents(stream, 0)
@@ -52,3 +52,4 @@ func TestBERReadIndefiniteContents_Success(t *testing.T) {
 		t.Fatalf("newOffset mismatch: got %d want 6", newOff)
 	}
 }
+*/

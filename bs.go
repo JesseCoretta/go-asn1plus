@@ -6,6 +6,7 @@ STRING type.
 */
 
 import (
+	"bytes"
 	"reflect"
 	"unsafe"
 )
@@ -451,6 +452,12 @@ func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
 	case BER, DER:
 		n, err = bcdBitStringWrite(c, pkt, o)
+	case CER:
+		if c.Tag() == TagBitString && len(toBitString(c.val).Bytes) > 1000 {
+			n, err = cerSegmentedBitStringWrite(c, pkt, o)
+		} else {
+			n, err = bcdBitStringWrite(c, pkt, o)
+		}
 	default:
 		err = errorRuleNotImplemented
 	}
@@ -494,6 +501,12 @@ func (c *bitStringCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
 	case BER, DER:
 		err = bcdBitStringRead(c, pkt, tlv, o)
+	case CER:
+		if tlv.Compound && tlv.Length < 0 && c.Tag() == TagBitString {
+			err = cerSegmentedBitStringRead(c, pkt, o)
+		} else {
+			err = bcdBitStringRead(c, pkt, tlv, o)
+		}
 	default:
 		err = errorRuleNotImplemented
 	}
@@ -530,10 +543,8 @@ func bcdBitStringRead[T any](c *bitStringCodec[T], pkt Packet, tlv TLV, o *Optio
 		}
 
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
@@ -607,6 +618,178 @@ func RegisterBitStringAlias[T any](
 	rt := reflect.TypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
+}
+
+// cerSegmentedBitStringWrite encodes a large BIT STRING value in CER segmented form.
+// It splits the raw bit string into inner segments and then wraps them in a constructed BIT STRING.
+func cerSegmentedBitStringWrite[T any](c *bitStringCodec[T], pkt Packet, o *Options) (n int, err error) {
+	const maxSegData = 1000 // maximum allowed inner segment data bytes (not counting the 1 byte for unused bits)
+
+	// 1. Obtain the BIT STRING value.
+	bsVal := toBitString(c.val) // bsVal should have fields: Bytes []byte and BitLength int
+	data := bsVal.Bytes
+	totalBytes := len(data)
+	// Compute overall unused bits based on the BIT LENGTH.
+	remainder := bsVal.BitLength % 8
+	overallUnused := 0
+	if remainder != 0 {
+		overallUnused = 8 - remainder
+	}
+
+	// 2. Build the inner segments.
+	// Each inner segment value = [unused-bits byte] || [raw data chunk].
+	var innerBuf bytes.Buffer
+	segCount := 0
+	for i := 0; i < totalBytes; i += maxSegData {
+		end := i + maxSegData
+		if end > totalBytes {
+			end = totalBytes
+		}
+		chunk := data[i:end]
+		var segUnused int
+		// For all segments before the last, the chunk is full so unused bits = 0.
+		// For the last segment, use overallUnused.
+		if end < totalBytes {
+			segUnused = 0
+		} else {
+			segUnused = overallUnused
+		}
+		var segValue []byte
+		segValue = append(segValue, byte(segUnused))
+		segValue = append(segValue, chunk...)
+
+		// 3. Build the inner TLV.
+		// For a primitive BIT STRING, the identifier is 0x03.
+		id := byte(0x03)
+		segLen := len(segValue)
+		var lenBytes []byte
+		// Use CER’s minimal-length encoder.
+		encodeLengthInto(CER, &lenBytes, segLen)
+		innerBuf.WriteByte(id)
+		innerBuf.Write(lenBytes)
+		innerBuf.Write(segValue)
+		segCount++
+	}
+
+	// 4. Build the outer header.
+	// For a constructed BIT STRING, the outer header is:
+	//   Identifier: 0x23 = (3 | 0x20) and
+	//   Length: 0x80 meaning indefinite.
+	outerHeader := []byte{0x23, 0x80}
+
+	// 5. Append the End-of-Content marker.
+	eocMarker := []byte{0x00, 0x00}
+
+	// 6. Assemble the complete CER message.
+	completeBuf := make([]byte, 0, len(outerHeader)+innerBuf.Len()+len(eocMarker))
+	completeBuf = append(completeBuf, outerHeader...)
+	completeBuf = append(completeBuf, innerBuf.Bytes()...)
+	completeBuf = append(completeBuf, eocMarker...)
+
+	// 7. Manufacture and replace the packet.
+	rep := pkt.Type().New(completeBuf...)
+	rep.SetOffset(0)
+	// Replace the original packet’s data in place.
+	pkt.(*CERPacket).data = rep.Data()
+
+	n = len(completeBuf)
+	return
+}
+
+// cerSegmentedBitStringRead decodes a CER-encoded BIT STRING that was written in segmented form.
+// It reassembles the inner segments and produces the final BIT STRING value.
+func cerSegmentedBitStringRead[T any](c *bitStringCodec[T], pkt Packet, o *Options) error {
+	// Reset reading offset to 0.
+	pkt.SetOffset(0)
+	data := pkt.Data()
+	offset := pkt.Offset()
+
+	// 1. Verify outer header.
+	// Expected for constructed BIT STRING: identifier=0x23, length=0x80.
+	if offset+2 > len(data) {
+		return mkerr("data too short for outer CER BIT STRING header")
+	}
+	outerId := data[offset]
+	outerLen := data[offset+1]
+	if outerId != 0x23 || outerLen != 0x80 {
+		return mkerrf("outer BIT STRING header not as expected: got %02X %02X", outerId, outerLen)
+	}
+	offset += 2
+
+	// 2. Iterate over inner segments until EOC (two zero bytes).
+	// Each inner TLV is expected to be a primitive BIT STRING.
+	// Its value starts with one byte for "unused bits" then the data bytes.
+	var full []byte
+	var lastUnused byte = 0
+	segIndex := 0
+
+	for {
+		// Check for EOC marker.
+		if cerCheckEOC(offset, data) {
+			break
+		}
+		if offset >= len(data) {
+			return mkerrf("unexpected end-of-data while reading inner BIT STRING segment %d", segIndex)
+		}
+
+		// Consume the TLV identifier expected to be 0x03.
+		// We do not store the value; simply reading it with the blank identifier avoids any warning.
+		_ = data[offset]
+		offset++ // Consume the identifier byte.
+
+		// Decode the length using the CER length decoder.
+		segLen, lr, err := decodeCERLength(data, offset)
+		if err != nil {
+			return mkerrf("failed reading length for BIT STRING segment %d: %v", segIndex, err)
+		}
+		offset += lr
+		if offset+segLen > len(data) {
+			return mkerrf("truncated inner TLV: value incomplete at BIT STRING segment %d", segIndex)
+		}
+		segValue := data[offset : offset+segLen]
+		offset += segLen
+
+		if len(segValue) < 1 {
+			return mkerr("inner BIT STRING segment has no unused bits byte")
+		}
+		currUnused := segValue[0]
+		lastUnused = currUnused // Record the unused bits from this (ultimately the last) segment.
+		// Append the remaining bytes (skipping the unused-bits byte) to our full accumulator.
+		full = append(full, segValue[1:]...)
+		segIndex++
+	}
+
+	// 3. Compute overall bit length.
+	// The total bit length is the number of bits in the reassembled data, minus the unused bits from the last segment.
+	bitLength := len(full)*8 - int(lastUnused)
+
+	// 4. Run any decode verification hooks.
+	for _, vfn := range c.decodeVerify {
+		if err := vfn(full); err != nil {
+			return err
+		}
+	}
+
+	// 5. Convert the reassembled bytes into the in-memory BIT STRING value.
+	var out T
+	var err error
+	if c.decodeHook != nil {
+		// It may be preferable to pass the full wire including the unused byte in front.
+		out, err = c.decodeHook(append([]byte{lastUnused}, full...))
+		if err != nil {
+			return err
+		}
+	} else {
+		out = fromBitString[T](BitString{
+			Bytes:     append([]byte(nil), full...),
+			BitLength: bitLength,
+		})
+	}
+	if err = c.cg.Constrain(out); err != nil {
+		return err
+	}
+	c.val = out
+	return nil
 }
 
 func init() {

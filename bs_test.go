@@ -352,7 +352,62 @@ func TestBitString_codecov(_ *testing.T) {
 	}
 	_ = nb.String()
 	verifyBitStringContents([]byte{0x00})
+
+	/*
+	text.go:type EncodeOverride[T any] func(T) ([]byte, error)
+	text.go:type DecodeOverride[T any] func([]byte) (T, error)
+	*/
+
+        _, _ = NewBitString(struct{}{})
+        bc := new(bitStringCodec[BitString])
+        bc.encodeHook = func(b BitString) ([]byte, error) {
+                return b.Bytes, nil
+        }
+        bc.decodeHook = func(b []byte) (BitString, error) {
+                return BitString{Bytes:[]byte{0x1, 0x2}, BitLength: 2*8}, nil
+        }
+        bc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+        bc.IsPrimitive()
+        _ = bc.String()
+        tpkt := &testPacket{}
+        bpkt := &BERPacket{}
+        _, _ = bc.write(tpkt, nil)
+        _, _ = bc.write(bpkt, nil)
+        bc.read(tpkt, TLV{}, nil)
 }
+
+type customBitString BitString
+func (_ customBitString) Tag() int { return TagBitString }
+func (_ customBitString) String() string { return `` }
+func (_ customBitString) IsPrimitive() bool { return true }
+
+func TestCustomBitString_withControls(t *testing.T) {
+        RegisterBitStringAlias[customBitString](TagBitString,
+                func([]byte) error {
+                        return nil
+                },
+                func(customBitString) ([]byte, error) {
+                        return []byte{0x1, 0x1, 0xFF}, nil
+                },
+                func([]byte) (customBitString, error) {
+                        return customBitString{Bytes: []byte{0x1, 0x2}, BitLength: 2*8}, nil
+                },
+                nil)
+
+        var cust customBitString = customBitString{Bytes: []byte{0x1, 0x2}, BitLength: 2*8}
+
+        pkt, err := Marshal(cust, With(CER))
+        if err != nil {
+                t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+        }
+
+        var next customBitString
+        if err = Unmarshal(pkt, &next); err != nil {
+                t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+        }
+        unregisterType(reflect.TypeOf(cust))
+}
+
 
 func ExampleNamedBits() {
 	var bs BitString = BitString{
@@ -570,5 +625,32 @@ func TestBitString_encodingRules(t *testing.T) {
 				t.Fatalf("%s[%d] failed [%s decoding]: %v", t.Name(), idx, rule, err)
 			}
 		}
+	}
+}
+
+func TestPacket_LargeBitStringCER(t *testing.T) {
+	data := []byte(strrpt("Y", 2001))
+	large := BitString{
+		Bytes:     data,
+		BitLength: len(data) * 8,
+	}
+
+	pkt, err := Marshal(large, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var alsoLarge BitString
+	if err = Unmarshal(pkt, &alsoLarge); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+
+	if large.BitLength != alsoLarge.BitLength {
+		t.Fatalf("%s failed [CER large BitString size cmp.]:\n\twant: %d bits\n\tgot:  %d bits",
+			t.Name(), large.BitLength, alsoLarge.BitLength)
+	}
+
+	if !bytes.Equal(large.Bytes, alsoLarge.Bytes) {
+		t.Fatalf("%s failed [CER large BitString contents cmp.]: contents differ", t.Name())
 	}
 }

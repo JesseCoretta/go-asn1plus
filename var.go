@@ -120,14 +120,15 @@ var CompoundNames = map[bool]string{
 var (
 	berOID,
 	derOID,
-	perOID ObjectIdentifier
+	cerOID ObjectIdentifier
 )
 
 func init() {
-	derOID, _ = NewObjectIdentifier(2, 1, 2, 1)
 	berOID, _ = NewObjectIdentifier(2, 1, 1)
+	cerOID, _ = NewObjectIdentifier(2, 1, 2, 0)
+	derOID, _ = NewObjectIdentifier(2, 1, 2, 1)
+
 	//perOID, _ = NewObjectIdentifier(2, 1, 3, 0, 0)
-	//cerOID, _ = NewObjectIdentifier(2,1,2,0)
 	//cperOID, _ = NewObjectIdentifier(2.1.3.1.0)
 	//ucperOID, _ = NewObjectIdentifier(2.1.3.1.1)
 	//uperOID, _ = NewObjectIdentifier(2.1.3.0.1)

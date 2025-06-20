@@ -77,7 +77,7 @@ unsupported options statements just prior to the marshaling process.
 */
 func checkBadMarshalOptions(rule EncodingRule, o *Options) (err error) {
 	if o != nil {
-		if rule != BER && o.Indefinite {
+		if rule.allowsIndefinite() && o.Indefinite {
 			err = mkerrf("Use of INDEFINITE-LENGTH is incompatible with encoding rule ", rule.String())
 		}
 	}
@@ -112,7 +112,10 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 
 		id := byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
 		pkt.Append(id)
-		pkt.Append(encodeLength(pkt.Type(), len(inner))...)
+		bufPtr := getBuf()
+		encodeLengthInto(pkt.Type(), bufPtr, len(inner))
+		pkt.Append(*bufPtr...)
+		putBuf(bufPtr)
 		pkt.Append(inner...)
 		return nil
 	}
@@ -211,7 +214,10 @@ func wrapMarshalExplicit(pkt Packet, prim codecRW, opts *Options) (err error) {
 
 		id := byte(opts.Class()<<6) | 0x20 | byte(opts.Tag())
 		pkt.Append(id)
-		pkt.Append(encodeLength(pkt.Type(), len(content))...)
+		bufPtr := getBuf()
+		encodeLengthInto(pkt.Type(), bufPtr, len(content))
+		pkt.Append(*bufPtr...)
+		putBuf(bufPtr)
 		pkt.Append(content...)
 	}
 

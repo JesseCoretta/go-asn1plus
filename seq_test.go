@@ -142,6 +142,7 @@ func TestSequence_AutomaticTagging(t *testing.T) {
 	// 81 02 48 69   -- [1] IMPLICIT PrintableString "Hi"
 	hexes := map[EncodingRule]string{
 		BER: "30 07 80012A81024869",
+		CER: "30 07 80012A81024869",
 		DER: "30 07 80012A81024869",
 	}
 

@@ -103,7 +103,7 @@ func fromBoolean[T any](i Boolean) T { return *(*T)(unsafe.Pointer(&i)) }
 
 func (c *booleanCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdBooleanWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -127,7 +127,7 @@ func bcdBooleanWrite[T any](c *booleanCodec[T], pkt Packet, o *Options) (off int
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveTag(c.Tag(), 0, o)
 			start := pkt.Offset()
 
 			tlv := pkt.Type().newTLV(cls, tag, 1, false, wire[0])
@@ -142,7 +142,7 @@ func bcdBooleanWrite[T any](c *booleanCodec[T], pkt Packet, o *Options) (off int
 
 func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdBooleanRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented
@@ -154,17 +154,15 @@ func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 func bcdBooleanRead[T any](c *booleanCodec[T], pkt Packet, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
-	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
+	wire, err := primitiveCheckRead(c.Tag(), pkt, tlv, o)
 	if err == nil {
 		if len(wire) != 1 {
 			return mkerr("BOOLEAN: content length ≠ 1")
 		}
 
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return

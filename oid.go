@@ -483,7 +483,7 @@ func fromObjectIdentifier[T any](i ObjectIdentifier) T { return *(*T)(unsafe.Poi
 
 func (c *oidCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdOIDWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -542,7 +542,7 @@ func bcdOIDWrite[T any](c *oidCodec[T], pkt Packet, o *Options) (off int, err er
 
 func (c *oidCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdOIDRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented
@@ -732,7 +732,7 @@ func fromRelativeOID[T any](i RelativeOID) T { return *(*T)(unsafe.Pointer(&i)) 
 
 func (c *relOIDCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		err = bcdRelOIDRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented
@@ -844,7 +844,7 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 
 func (c *relOIDCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
-	case BER, DER:
+	case BER, CER, DER:
 		n, err = bcdRelOIDWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented

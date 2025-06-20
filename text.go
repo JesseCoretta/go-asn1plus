@@ -33,9 +33,16 @@ func (c *textCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	switch pkt.Type() {
 	case BER, DER:
 		n, err = bcdTextWrite[T](c, pkt, o)
+	case CER:
+		if len([]byte(c.val)) > 1000 && c.Tag() == TagOctetString {
+			n, err = cerSegmentedOctetStringWrite(c, pkt, o)
+		} else {
+			n, err = bcdTextWrite[T](c, pkt, o)
+		}
 	default:
 		err = errorRuleNotImplemented
 	}
+
 	return
 }
 
@@ -66,7 +73,13 @@ func bcdTextWrite[T binLike](c *textCodec[T], pkt Packet, o *Options) (off int, 
 func (c *textCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
 	case BER, DER:
-		err = bcdTextRead[T](c, pkt, tlv, o)
+		err = bcdTextRead(c, pkt, tlv, o)
+	case CER:
+		if tlv.Compound && tlv.Length < 0 && c.Tag() == TagOctetString {
+			err = cerSegmentedOctetStringRead(c, pkt, o)
+		} else {
+			err = bcdTextRead(c, pkt, tlv, o)
+		}
 	default:
 		err = errorRuleNotImplemented
 	}

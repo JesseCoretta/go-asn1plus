@@ -143,6 +143,8 @@ func setPacketOffset(pkt Packet, offset ...int) {
 	switch pkt.Type() {
 	case BER:
 		pkt.(*BERPacket).offset = off
+	case CER:
+		pkt.(*CERPacket).offset = off
 	case DER:
 		pkt.(*DERPacket).offset = off
 	}
@@ -284,7 +286,7 @@ func parseBody(b []byte, off int, typ EncodingRule) ([]byte, error) {
 	}
 
 	// BER indefinite
-	if typ != BER {
+	if !typ.allowsIndefinite() {
 		return nil, errorIndefiniteProhibited
 	}
 	relEnd, err := findEOC(sub[idLen+lenLen:])
@@ -311,7 +313,7 @@ func parseFullBytes(data []byte, off int, typ EncodingRule) ([]byte, error) {
 		return nil, err
 	}
 
-	if typ == DER && length == -1 {
+	if !typ.allowsIndefinite() && length == -1 {
 		return nil, errorIndefiniteProhibited
 	}
 

@@ -509,6 +509,11 @@ func registerType(rt reflect.Type, f factories) {
 	master[reflect.PtrTo(rt)] = f
 }
 
+func unregisterType(rt reflect.Type) {
+	delete(master, rt)
+	delete(master, reflect.PtrTo(rt))
+}
+
 func valueOf[T any](v any) T {
 	switch t := v.(type) {
 	case T:
