@@ -47,10 +47,18 @@ type nullCodec[T any] struct {
 	decodeHook   DecodeOverride[T]
 }
 
-func (c *nullCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *nullCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdNullWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdNullWrite[T any](c *nullCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte
@@ -71,10 +79,18 @@ func (c *nullCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *nullCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *nullCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdNullRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdNullRead[T any](c *nullCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {

@@ -14,7 +14,7 @@ primitives defined throughout this package.
 */
 type binLike interface{ ~string | ~[]byte }
 
-type binCodec[T binLike] struct {
+type textCodec[T binLike] struct {
 	val          T
 	tag          int
 	cg           ConstraintGroup[T]
@@ -23,16 +23,24 @@ type binCodec[T binLike] struct {
 	encodeHook   EncodeOverride[T]
 }
 
-func (c *binCodec[T]) Tag() int          { return c.tag }
-func (c *binCodec[T]) String() string    { return "BinCodec" }
-func (c *binCodec[T]) IsPrimitive() bool { return true }
-func (c *binCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
-func (c *binCodec[T]) getVal() any       { return c.val }
+func (c *textCodec[T]) Tag() int          { return c.tag }
+func (c *textCodec[T]) String() string    { return "textCodec" }
+func (c *textCodec[T]) IsPrimitive() bool { return true }
+func (c *textCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
+func (c *textCodec[T]) getVal() any       { return c.val }
 
-func (c *binCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *textCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdTextWrite[T](c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdTextWrite[T binLike](c *textCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte
@@ -55,10 +63,18 @@ func (c *binCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *binCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *textCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdTextRead[T](c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdTextRead[T binLike](c *textCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
@@ -151,13 +167,13 @@ func RegisterTextAlias[T binLike](
 
 	f := factories{
 		newEmpty: func() box {
-			return &binCodec[T]{tag: tag, cg: all,
+			return &textCodec[T]{tag: tag, cg: all,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
 		},
 		newWith: func(v any) box {
-			return &binCodec[T]{
+			return &textCodec[T]{
 				val: valueOf[T](v), tag: tag, cg: all,
 				decodeVerify: verList,
 				decodeHook:   decoder,

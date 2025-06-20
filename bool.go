@@ -101,10 +101,19 @@ func (c *booleanCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toBoolean[T any](v T) Boolean   { return *(*Boolean)(unsafe.Pointer(&v)) }
 func fromBoolean[T any](i Boolean) T { return *(*T)(unsafe.Pointer(&i)) }
 
-func (c *booleanCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *booleanCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdBooleanWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+
+	return
+}
+
+func bcdBooleanWrite[T any](c *booleanCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte = []byte{0x00} // assume FALSE
@@ -131,10 +140,19 @@ func (c *booleanCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdBooleanRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+
+	return
+}
+
+func bcdBooleanRead[T any](c *booleanCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {

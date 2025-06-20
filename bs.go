@@ -447,10 +447,19 @@ func (c *bitStringCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toBitString[T any](v T) BitString   { return *(*BitString)(unsafe.Pointer(&v)) }
 func fromBitString[T any](i BitString) T { return *(*T)(unsafe.Pointer(&i)) }
 
-func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdBitStringWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+
+	return
+}
+
+func bcdBitStringWrite[T any](c *bitStringCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		bsVal := toBitString(c.val)
@@ -481,10 +490,19 @@ func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *bitStringCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *bitStringCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdBitStringRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+
+	return
+}
+
+func bcdBitStringRead[T any](c *bitStringCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	// Reject primitives encoded with indefinite length
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)

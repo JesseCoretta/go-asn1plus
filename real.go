@@ -430,10 +430,19 @@ func (c *realCodec[T]) String() string    { return "realCodec" }
 func (c *realCodec[T]) getVal() any       { return c.val }
 func (c *realCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 
-func (c *realCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *realCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdRealWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdRealWrite[T any](c *realCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
+
 	if err := c.cg.Constrain(c.val); err == nil {
 		r := toReal(c.val)
 		var wire []byte
@@ -484,7 +493,17 @@ func (c *realCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *realCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+func (c *realCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdRealRead[T](c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
+	}
+	return
+}
+
+func bcdRealRead[T any](c *realCodec[T], pkt Packet, tlv TLV, o *Options) (err error) {
 	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)

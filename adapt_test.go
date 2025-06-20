@@ -79,7 +79,7 @@ func ExampleListAdapters() {
 	}
 
 	// Output:
-	// string → asn1plus.binCodec[github.com/JesseCoretta/go-asn1plus.UTF8String]  (keyword "example")
+	// string → asn1plus.textCodec[github.com/JesseCoretta/go-asn1plus.UTF8String]  (keyword "example")
 }
 
 func testMust[T any](v T, err error) T {

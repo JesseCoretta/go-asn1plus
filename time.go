@@ -1298,10 +1298,18 @@ type temporalCodec[T Temporal] struct {
 	decodeHook   DecodeOverride[T]
 }
 
-func (c *temporalCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *temporalCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdTemporalWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdTemporalWrite[T Temporal](c *temporalCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte
@@ -1318,10 +1326,18 @@ func (c *temporalCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *temporalCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *temporalCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdTemporalRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdTemporalRead[T Temporal](c *temporalCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
@@ -1505,10 +1521,18 @@ func (c *durationCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toDuration[T any](v T) Duration   { return *(*Duration)(unsafe.Pointer(&v)) }
 func fromDuration[T any](d Duration) T { return *(*T)(unsafe.Pointer(&d)) }
 
-func (c *durationCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *durationCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdDurationWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdDurationWrite[T any](c *durationCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte
@@ -1531,10 +1555,18 @@ func (c *durationCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *durationCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *durationCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdDurationRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdDurationRead[T any](c *durationCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {

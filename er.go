@@ -15,6 +15,7 @@ const (
 	testEncodingRule EncodingRule = iota - 1
 	invalidEncodingRule
 	BER
+	_ // CER
 	DER
 )
 

@@ -481,10 +481,18 @@ func (c *oidCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toObjectIdentifier[T any](v T) ObjectIdentifier   { return *(*ObjectIdentifier)(unsafe.Pointer(&v)) }
 func fromObjectIdentifier[T any](i ObjectIdentifier) T { return *(*T)(unsafe.Pointer(&i)) }
 
-func (c *oidCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *oidCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdOIDWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdOIDWrite[T any](c *oidCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte
@@ -532,10 +540,18 @@ func (c *oidCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 	return
 }
 
-func (c *oidCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *oidCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdOIDRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdOIDRead[T any](c *oidCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	var err error
 	if tlv.Compound {
@@ -714,7 +730,17 @@ func (c *relOIDCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toRelativeOID[T any](v T) RelativeOID   { return *(*RelativeOID)(unsafe.Pointer(&v)) }
 func fromRelativeOID[T any](i RelativeOID) T { return *(*T)(unsafe.Pointer(&i)) }
 
-func (c *relOIDCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
+func (c *relOIDCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdRelOIDRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
+	}
+	return
+}
+
+func bcdRelOIDRead[T any](c *relOIDCodec[T], pkt Packet, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
 	var err error
@@ -816,10 +842,19 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 	return
 }
 
-func (c *relOIDCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *relOIDCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdRelOIDWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdRelOIDWrite[T any](c *relOIDCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
+
 	if err = c.cg.Constrain(c.val); err == nil {
 		var wire []byte
 		if c.encodeHook != nil {

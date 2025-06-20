@@ -246,7 +246,7 @@ func TestGetTLV_UnsupportedEncodingRule(t *testing.T) {
 		data:   d,
 		offset: 0,
 		length: len(d), // honest length
-		typ:    3,      // 3 ⇒ neither BER(0) nor DER(1) → default case
+		typ:    18,     // 18 ⇒ neither BER(1) nor DER(3) → default case
 	}
 
 	_, err := getTLV(pkt, nil)

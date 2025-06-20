@@ -307,10 +307,18 @@ func (c *integerCodec[T]) getVal() any       { return c.val }
 func (c *integerCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 
 // NOTE: called for both Integer and Enumerated
-func (c *integerCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
-	if o == nil {
-		o = implicitOptions()
+func (c *integerCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		n, err = bcdIntegerWrite(c, pkt, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdIntegerWrite[T any](c *integerCodec[T], pkt Packet, o *Options) (off int, err error) {
+	o = deferImplicit(o)
 
 	intVal := toInt(c.val)
 	if err = c.cg.Constrain(intVal); err == nil {
@@ -330,7 +338,8 @@ func (c *integerCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 		if err == nil {
 			tag, cls := effectiveTag(c.tag, 0, o)
 			start := pkt.Offset()
-			err = writeTLV(pkt, pkt.Type().newTLV(cls, tag, len(wire), false, wire...), o)
+			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
+			err = writeTLV(pkt, tlv, o)
 			if err == nil {
 				off = pkt.Offset() - start
 			}
@@ -341,10 +350,18 @@ func (c *integerCodec[T]) write(pkt Packet, o *Options) (off int, err error) {
 }
 
 // NOTE: called for both Integer and Enumerated
-func (c *integerCodec[T]) read(pkt Packet, tlv TLV, o *Options) error {
-	if o == nil {
-		o = implicitOptions()
+func (c *integerCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+	switch pkt.Type() {
+	case BER, DER:
+		err = bcdIntegerRead(c, pkt, tlv, o)
+	default:
+		err = errorRuleNotImplemented
 	}
+	return
+}
+
+func bcdIntegerRead[T any](c *integerCodec[T], pkt Packet, tlv TLV, o *Options) error {
+	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
