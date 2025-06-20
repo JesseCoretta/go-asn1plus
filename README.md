@@ -24,7 +24,7 @@ This package has no dependence upon the `encoding/asn1` package, as this package
 
 ## Features
 
- - Fast ASN.1 [BER](## "Basic Encoding Rules") and [DER](## "Distinguished Encoding Rules") encoding/decoding
+ - Fast ASN.1 [BER](## "Basic Encoding Rules"), [CER](## "Canonical Encoding Rules") and [DER](## "Distinguished Encoding Rules") encoding/decoding
    - With parallel executions disabled and no cache utilization, this package runs well over 300 unit tests in approximately 0.009s
  - Full ASN.1 primitive type support -- twenty six (26) types are implemented, such as`OctetString`, `Time`, `Real` and many others (including legacy/deprecated types)
  - `SET` and `SEQUENCE` support
@@ -361,15 +361,5 @@ $ go test -c -o pkg.test
 size pkg.test
    text	   data	    bss	    dec	    hex	filename
 5500643	 138720	 191136	5830499	 58f763	pkg.test
-```
-
-# Coverage
-
-NOTE: This will increase as package becomes more stable.
-
-```
-$ go test -cover ./...
-
-ok  	github.com/JesseCoretta/go-asn1plus	0.010s	coverage: 89.9% of statements
 ```
 
