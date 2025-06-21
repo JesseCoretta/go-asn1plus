@@ -25,7 +25,6 @@ This package has no dependence upon the `encoding/asn1` package, as this package
 ## Features
 
  - Fast ASN.1 [BER](## "Basic Encoding Rules"), [CER](## "Canonical Encoding Rules") and [DER](## "Distinguished Encoding Rules") encoding/decoding
-   - With parallel executions disabled and no cache utilization, this package runs well over 300 unit tests in approximately 0.009s
  - Full ASN.1 primitive type support -- twenty six (26) types are implemented, such as`OctetString`, `Time`, `Real` and many others (including legacy/deprecated types)
  - `SET` and `SEQUENCE` support
  - Constraints -- Flexible ASN.1 constraint logic has been implemented for maximum control
