@@ -8,13 +8,13 @@ and use of all string/[]byte type derivatives.
 import "reflect"
 
 /*
-binLike is implemented through string and []byte types,
+TextLike is implemented through string and []byte types,
 which represent the predominant type forms of most ASN.1
 primitives defined throughout this package.
 */
-type binLike interface{ ~string | ~[]byte }
+type TextLike interface{ ~string | ~[]byte }
 
-type textCodec[T binLike] struct {
+type textCodec[T TextLike] struct {
 	val          T
 	tag          int
 	cg           ConstraintGroup[T]
@@ -46,7 +46,7 @@ func (c *textCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	return
 }
 
-func bcdTextWrite[T binLike](c *textCodec[T], pkt Packet, o *Options) (off int, err error) {
+func bcdTextWrite[T TextLike](c *textCodec[T], pkt Packet, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
@@ -86,32 +86,25 @@ func (c *textCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	return
 }
 
-func bcdTextRead[T binLike](c *textCodec[T], pkt Packet, tlv TLV, o *Options) error {
+func bcdTextRead[T TextLike](c *textCodec[T], pkt Packet, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
 		}
 
-		var val, zero T
+		var val T
 		if err = decodeVerify(); err == nil {
 			if c.decodeHook != nil {
 				val, err = c.decodeHook(wire)
 			} else {
-				switch any(zero).(type) {
-				case string:
-					val = T(string(wire))
-				default:
-					val = T(append([]byte(nil), wire...))
-				}
+				val = T(append([]byte(nil), wire...))
 			}
 
 			if err == nil {
@@ -163,7 +156,7 @@ as [PrintableString], [BMPString], [UTF8String], et al.
 Note this does NOT include [BitString], which has its own dedicated
 constructor [RegisterBitStringAlias].
 */
-func RegisterTextAlias[T binLike](
+func RegisterTextAlias[T TextLike](
 	tag int,
 	verify DecodeVerifier,
 	decoder DecodeOverride[T],
