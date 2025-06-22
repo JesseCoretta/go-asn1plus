@@ -2,7 +2,6 @@ package asn1plus
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -978,7 +977,7 @@ func TestTime_codecov(_ *testing.T) {
 	tc.IsPrimitive()
 	_ = tc.String()
 
-	if f, ok := master[reflect.TypeOf(GeneralizedTime(time.Time{}))]; ok {
+	if f, ok := master[refTypeOf(GeneralizedTime(time.Time{}))]; ok {
 		_ = f.newEmpty().(box)
 		_ = f.newWith(gt).(box)
 	}
@@ -990,7 +989,7 @@ func TestTime_codecov(_ *testing.T) {
 	dc.IsPrimitive()
 	_ = dc.String()
 
-	if f, ok := master[reflect.TypeOf(Duration{})]; ok {
+	if f, ok := master[refTypeOf(Duration{})]; ok {
 		_ = f.newEmpty().(box)
 		_ = f.newWith(dur).(box)
 	}
@@ -1027,7 +1026,7 @@ func TestCustomTemporal_withControls(t *testing.T) {
 	if err = Unmarshal(pkt, &next); err != nil {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
-	unregisterType(reflect.TypeOf(cust))
+	unregisterType(refTypeOf(cust))
 }
 
 type customD Duration
@@ -1060,7 +1059,7 @@ func TestCustomDuration_withControls(t *testing.T) {
 	if err = Unmarshal(pkt, &next); err != nil {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
-	unregisterType(reflect.TypeOf(cust))
+	unregisterType(refTypeOf(cust))
 }
 
 func Test_fillTemporalHooks_PanicsOnUnknownType(t *testing.T) {

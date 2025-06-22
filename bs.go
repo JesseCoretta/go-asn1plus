@@ -373,6 +373,8 @@ func assertBitString(x any) (raw []byte, err error) {
 		raw = []byte(tv)
 	case BitString:
 		raw = []byte(tv.Bits())
+	case Primitive:
+		raw = []byte(tv.String())
 	default:
 		err = mkerr("Invalid type for ASN.1 BITSTRING")
 	}
@@ -615,7 +617,7 @@ func RegisterBitStringAlias[T any](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }

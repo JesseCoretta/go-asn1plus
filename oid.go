@@ -704,7 +704,7 @@ func RegisterOIDAlias[T any](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }
@@ -913,7 +913,7 @@ func RegisterRelativeOIDAlias[T any](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }

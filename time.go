@@ -1431,7 +1431,7 @@ func RegisterTemporalAlias[T Temporal](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }
@@ -1443,7 +1443,7 @@ func attachDefaults[Canon any, T Temporal](
 	canonEnc EncodeOverride[Canon],
 	canonDec DecodeOverride[Canon],
 ) bool {
-	canonRT := reflect.TypeOf((*Canon)(nil)).Elem()
+	canonRT := refTypeOf((*Canon)(nil)).Elem()
 
 	// match ONLY the identical canonical type
 	if rt != canonRT {
@@ -1480,7 +1480,7 @@ func fillTemporalHooks[T Temporal](
 		return enc, dec
 	}
 
-	rt := derefTypePtr(reflect.TypeOf((*T)(nil)).Elem())
+	rt := derefTypePtr(refTypeOf((*T)(nil)).Elem())
 
 	switch {
 	case attachDefaults[TimeOfDay](rt, &enc, &dec, encTimeOfDay, decTimeOfDay):
@@ -1668,7 +1668,7 @@ func RegisterDurationAlias[T any](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }

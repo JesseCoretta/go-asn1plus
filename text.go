@@ -187,7 +187,7 @@ func RegisterTextAlias[T TextLike](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }

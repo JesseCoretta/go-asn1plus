@@ -40,7 +40,7 @@ func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (Univ
 	)
 
 	switch tv := x.(type) {
-	case UniversalString:
+	case Primitive:
 		raw = tv.String()
 	case []byte:
 		raw = string(tv)

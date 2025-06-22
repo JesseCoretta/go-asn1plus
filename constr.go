@@ -354,14 +354,14 @@ func putConstraint[T any](name string, fn Constraint[T]) {
 		panic("asn1: duplicate constraint name " + name)
 	}
 	constraintReg[key] = constraintEntry{
-		typ: reflect.TypeOf((*T)(nil)).Elem(),
+		typ: refTypeOf((*T)(nil)).Elem(),
 		fn:  fn,
 	}
 }
 
 func collectConstraint[T any](names []string) ([]Constraint[T], error) {
 	var out []Constraint[T]
-	want := reflect.TypeOf((*T)(nil)).Elem()
+	want := refTypeOf((*T)(nil)).Elem()
 
 	for _, n := range names {
 		e, ok := constraintReg[lc(n)]

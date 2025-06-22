@@ -62,7 +62,7 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 	var raw string
 
 	switch tv := x.(type) {
-	case PrintableString:
+	case Primitive:
 		raw = tv.String()
 	case string:
 		if len(tv) == 0 {

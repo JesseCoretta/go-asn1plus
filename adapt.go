@@ -102,7 +102,7 @@ func RegisterAdapter[T any, GoT any](
 
 	// Build newCodec: prefer generic factory, else legacy pointer
 	var zero T
-	rt := reflect.TypeOf(zero) // concrete T (value)
+	rt := refTypeOf(zero) // concrete T (value)
 
 	newCodec := func() Primitive {
 		if f, ok := master[rt]; ok { // generic codec exists
@@ -131,8 +131,8 @@ func RegisterAdapter[T any, GoT any](
 
 		goVal, ok := g.(GoT)
 		if !ok {
-			want := reflect.TypeOf(*new(GoT)).String()
-			got := reflect.TypeOf(g).String()
+			want := refTypeOf(*new(GoT)).String()
+			got := refTypeOf(g).String()
 			return mkerrf("adapter: expected ", want, " got ", got)
 		}
 
@@ -155,7 +155,7 @@ func RegisterAdapter[T any, GoT any](
 	// Store the adapter under all requested aliases
 	ad := adapter{newCodec: newCodec, toGo: toGo, fromGo: fromGo}
 
-	goTypeName := reflect.TypeOf((*GoT)(nil)).Elem().String()
+	goTypeName := refTypeOf((*GoT)(nil)).Elem().String()
 	for _, kw := range aliases {
 		kw = lc(kw)
 		if kw == "" {
@@ -213,7 +213,7 @@ func ListAdapters() []AdapterInfo {
 		out = append(out, AdapterInfo{
 			GoType:    k[0],
 			Keyword:   k[1],
-			Primitive: reflect.TypeOf(ad.newCodec()).Elem().String(),
+			Primitive: refTypeOf(ad.newCodec()).Elem().String(),
 		})
 	}
 	for goType, slice := range defaultAdapters {
@@ -221,7 +221,7 @@ func ListAdapters() []AdapterInfo {
 			out = append(out, AdapterInfo{
 				GoType:    goType,
 				Keyword:   "",
-				Primitive: reflect.TypeOf(ad.newCodec()).Elem().String(),
+				Primitive: refTypeOf(ad.newCodec()).Elem().String(),
 			})
 		}
 	}

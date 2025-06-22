@@ -111,7 +111,7 @@ func (k ClassFieldKind) NewField(
 		return ClassField{}, mkerrf("ClassField ", label, ": nil prototype")
 	}
 
-	rt := reflect.TypeOf(prototype)
+	rt := refTypeOf(prototype)
 	return ClassField{
 		Label: label,
 		Kind:  k,

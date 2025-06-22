@@ -73,19 +73,21 @@ var NumericSpec Constraint[NumericString]
 
 func convertToNumericString(x any) (str string, err error) {
 	// Do an explicit check for string first.
-	if s, ok := x.(string); ok {
-		if len(s) == 0 {
+	switch tv := x.(type) {
+	case string:
+		if len(tv) == 0 {
 			err = mkerr("ASN.1 NUMERICSTRING is zero")
 			return
 		}
-		str = s
+		str = tv
 		return
-	} else if ns, ok := x.(NumericString); ok {
+	case Primitive:
+		ns := tv.String()
 		if len(ns) == 0 {
 			err = mkerr("ASN.1 NUMERICSTRING is zero")
 			return
 		}
-		str = ns.String()
+		str = ns
 		return
 	}
 

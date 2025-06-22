@@ -189,7 +189,7 @@ func isPrimitive(target any) (primitive bool) {
 		// First, try the direct type assertion.
 		if _, primitive = target.(Primitive); !primitive {
 			// Fallback to reflection.
-			t := reflect.TypeOf(target)
+			t := refTypeOf(target)
 
 			// deref if it's a pointer
 			if t.Kind() == reflect.Ptr {
@@ -197,7 +197,7 @@ func isPrimitive(target any) (primitive bool) {
 			}
 
 			// Check both the value and pointer type.
-			primitiveInterface := reflect.TypeOf((*Primitive)(nil)).Elem()
+			primitiveInterface := refTypeOf((*Primitive)(nil)).Elem()
 			primitive = t.Implements(primitiveInterface) || reflect.PtrTo(t).Implements(primitiveInterface)
 		}
 	}
@@ -207,7 +207,7 @@ func isPrimitive(target any) (primitive bool) {
 
 func createCodecForPrimitive(val any) (c box, ok bool) {
 	if c, ok = val.(box); !ok {
-		rt := reflect.TypeOf(val)
+		rt := refTypeOf(val)
 		if rt.Kind() == reflect.Ptr {
 			rt = rt.Elem()
 		}

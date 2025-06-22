@@ -39,6 +39,9 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 		}
 		e = tv.String()
 
+	case Primitive:
+		e = tv.String()
+
 	case string:
 		e = tv
 

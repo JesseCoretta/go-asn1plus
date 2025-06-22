@@ -137,7 +137,7 @@ func (r *Choices) Register(instance any, opts ...string) error {
 	}
 	r.tagIx[options.Tag] = len(r.alts)
 	r.alts = append(r.alts, choiceAlternative{
-		Type: derefTypePtr(reflect.TypeOf(instance)),
+		Type: derefTypePtr(refTypeOf(instance)),
 		Opts: options,
 	})
 
@@ -204,7 +204,7 @@ func (r Choices) Choose(instance any, opts ...string) (c Choice, err error) {
 		return
 	}
 
-	inputType := derefTypePtr(reflect.TypeOf(instance))
+	inputType := derefTypePtr(refTypeOf(instance))
 	var matches []choiceAlternative
 
 	for _, alt := range r.alts {
@@ -270,7 +270,7 @@ to contain multiple fields that are all of the choiceAlternative type, thus
 there needed to be a way to differentiate them.
 */
 func getChoicesMethod(field string, x any) (func() Choices, bool) {
-	v := reflect.ValueOf(x)
+	v := refValueOf(x)
 	method := v.MethodByName(field + "Choices")
 	if !method.IsValid() {
 		return nil, false
@@ -281,7 +281,7 @@ func getChoicesMethod(field string, x any) (func() Choices, bool) {
 		return nil, false
 	}
 
-	choicesType := reflect.TypeOf((*Choices)(nil)).Elem()
+	choicesType := refTypeOf((*Choices)(nil)).Elem()
 	if !mType.Out(0).AssignableTo(choicesType) {
 		return nil, false
 	}
@@ -379,8 +379,8 @@ func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts *Option
 			err = c.read(sub, subTLV, opts)
 		} else if bx, ok := createCodecForPrimitive(candidateInst); ok {
 			if err = bx.read(sub, subTLV, opts); err == nil {
-				reflect.ValueOf(candidateInst).Elem().
-					Set(reflect.ValueOf(bx.getVal()))
+				refValueOf(candidateInst).Elem().
+					Set(refValueOf(bx.getVal()))
 			}
 
 		} else {
@@ -394,13 +394,13 @@ func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts *Option
 			// This allows inner decoders (for, say, ObjectIdentifier) to use
 			// their natural universal tag.
 			opts.tag = nil
-			err = unmarshalValue(sub, reflect.ValueOf(candidateInst), opts)
+			err = unmarshalValue(sub, refValueOf(candidateInst), opts)
 		}
 	}
 
 	if err == nil {
 		// Dereference the candidate instance (allocated as a pointer) and return it.
-		candidate = reflect.ValueOf(candidateInst).Elem().Interface()
+		candidate = refValueOf(candidateInst).Elem().Interface()
 	}
 
 	return

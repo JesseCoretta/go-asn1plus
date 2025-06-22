@@ -48,8 +48,8 @@ By default, the [utf8.ValidString] function is used for validation.
 func NewUTF8String(x any, constraints ...Constraint[UTF8String]) (u8 UTF8String, err error) {
 	var raw string
 	switch tv := x.(type) {
-	case UTF8String:
-		raw = string(tv)
+	case Primitive:
+		raw = tv.String()
 	case []byte:
 		raw = string(tv)
 	case string:

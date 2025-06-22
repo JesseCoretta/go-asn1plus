@@ -52,7 +52,7 @@ func NewIA5String(x any, constraints ...Constraint[IA5String]) (ia5 IA5String, e
 		raw = tv
 	case []byte:
 		raw = string(tv)
-	case IA5String:
+	case Primitive:
 		raw = tv.String()
 	default:
 		err = mkerr("Invalid type for IA5String")

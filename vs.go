@@ -28,7 +28,7 @@ func NewVisibleString(x any, constraints ...Constraint[VisibleString]) (VisibleS
 		raw = tv
 	case []byte:
 		raw = string(tv)
-	case VisibleString:
+	case Primitive:
 		raw = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 VISIBLE STRING")

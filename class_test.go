@@ -130,7 +130,7 @@ func TestClass(t *testing.T) {
 	badLabelField := ClassField{
 		Label: "noAmpersand",
 		Kind:  ClassValueField,
-		Typ:   reflect.TypeOf(0), // any non-nil type
+		Typ:   refTypeOf(0), // any non-nil type
 	}
 	if _, err := NewClass("BAD1", badLabelField); err == nil {
 		t.Fatalf("expected error for field label without '&'")

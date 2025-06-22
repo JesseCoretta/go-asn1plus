@@ -24,7 +24,7 @@ func NewGeneralString(x any, constraints ...Constraint[GeneralString]) (gen Gene
 		s = tv
 	case []byte:
 		s = string(tv)
-	case GeneralString:
+	case Primitive:
 		s = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 GENERAL STRING")

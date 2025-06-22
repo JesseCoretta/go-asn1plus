@@ -38,7 +38,7 @@ func NewVideotexString(x any, constraints ...Constraint[VideotexString]) (Videot
 		raw = tv
 	case []byte:
 		raw = string(tv)
-	case VideotexString:
+	case Primitive:
 		raw = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 VIDEOTEX STRING")

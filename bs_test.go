@@ -406,7 +406,7 @@ func TestCustomBitString_withControls(t *testing.T) {
 	if err = Unmarshal(pkt, &next); err != nil {
 		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
 	}
-	unregisterType(reflect.TypeOf(cust))
+	unregisterType(refTypeOf(cust))
 }
 
 func ExampleNamedBits() {

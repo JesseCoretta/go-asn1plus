@@ -61,7 +61,7 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 		raw = tv
 	case []byte:
 		raw = string(tv)
-	case T61String:
+	case Primitive:
 		raw = tv.String()
 	default:
 		err = mkerr("Invalid ASN.1 T.61 STRING type")

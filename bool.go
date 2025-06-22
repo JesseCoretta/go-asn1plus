@@ -56,6 +56,10 @@ an attempt to marshal x.
 */
 func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error) {
 	switch tv := x.(type) {
+	case Boolean:
+		b = tv
+	case Primitive:
+		b, err = NewBoolean(tv.String())
 	case bool:
 		b = Boolean(tv)
 	case *bool:
@@ -220,7 +224,7 @@ func RegisterBooleanAlias[T any](
 		},
 	}
 
-	rt := reflect.TypeOf((*T)(nil)).Elem()
+	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
 }
