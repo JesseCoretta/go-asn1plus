@@ -42,6 +42,8 @@ func TestTLVEncode(t *testing.T) {
 		Length:   6,
 		Value:    []byte("Hello0"),
 	}
+	_ = a.String()
+
 	encoded := encodeTLV(a, nil)
 	// Expect: identifier octet: 0x04 (0<<6 | 0x04), then length 0x06, then "Hello0".
 	expected := append([]byte{0x04, 0x06}, []byte("Hello0")...)
@@ -316,4 +318,24 @@ func TestEncodeTLV_ExplicitSetsCompound(t *testing.T) {
 	if out[0]&0x20 == 0 {
 		t.Fatalf("constructed bit not set; got first byte 0x%02X", out[0])
 	}
+}
+
+func TestEncodeTLV_PanicsOnNegativeTag(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+
+	encodeTLV(TLV{Tag: -1}, nil)
+}
+
+func TestEncodeTLV_codecov(t *testing.T) {
+	encodeTLV(TLV{typ: BER, Tag: 3, Class: 1}, &Options{Indefinite: true})
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x80, 0x83, 0x01, 0xe4})
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x03, 0x83, 0x01, 0xe4})
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x04, 0x82, 0x00, 0x80, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x02, 0x81, 0x7F, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
+	writeTLV(&BERPacket{}, TLV{Length: -1}, &Options{Indefinite: true})
+	writeTLV(&DERPacket{}, TLV{Length: -1}, &Options{Indefinite: true})
 }

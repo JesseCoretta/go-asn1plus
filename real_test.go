@@ -224,6 +224,90 @@ func TestReal_codecov(_ *testing.T) {
 	decodeRealExponent([]byte(`blahjfksefhjshk`))
 	_, _, _ = float64ToRealParts(float64(0), 2)
 	_, _, _ = bigFloatToRealParts(big.NewFloat(0), 2)
+
+	NewRealPlusInfinity().Float()
+	NewRealMinusInfinity().Float()
+	encodeRealExponent(-1)
+	encodeRealExponent(0)
+	encodeRealExponent(1)
+
+	zeroInt, _ := NewInteger(0)
+	r := Real{
+		Special:  RealNormal,
+		Mantissa: zeroInt,
+		Base:     2,
+		Exponent: 0,
+	}
+
+	encodeMantissa(new(big.Int))
+	float64Components(float64(3.1415900000), 10)
+	float64Components(float64(3.1415900000), 16)
+
+	rc := new(realCodec[Real])
+	rc.encodeHook = func(b Real) ([]byte, error) {
+		return []byte{0x9, 0x5, 0xc1, 0x3, 0x12, 0xd6, 0x87}, nil
+	}
+	rc.decodeHook = func(b []byte) (Real, error) {
+		return r, nil
+	}
+	rc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+
+	if f, ok := master[refTypeOf(Real{})]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(Real{}).(box)
+	}
+
+	rc.IsPrimitive()
+	rc.Tag()
+	_ = rc.String()
+	tpkt := &testPacket{}
+	bpkt := &BERPacket{}
+	_, _ = rc.write(tpkt, nil)
+	_, _ = rc.write(bpkt, nil)
+	rc.read(tpkt, TLV{}, nil)
+
+	realBaseToHeader(2)
+	realBaseToHeader(8)
+	realBaseToHeader(10)
+	realBaseToHeader(16)
+	realHeaderToBase(0x00)
+	realHeaderToBase(0x40)
+	realHeaderToBase(0x80)
+	realHeaderToBase(0xC0)
+}
+
+type customReal Real
+
+func (_ customReal) Tag() int          { return TagReal }
+func (_ customReal) String() string    { return `` }
+func (_ customReal) IsPrimitive() bool { return true }
+
+func TestCustomReal_withControls(t *testing.T) {
+	orig, _ := NewReal(314159, 10, -5)
+	var cust customReal = customReal(orig) // cheat
+
+	RegisterRealAlias[customReal](TagReal,
+		func([]byte) error {
+			return nil
+		},
+		func(customReal) ([]byte, error) {
+			return []byte{0x9, 0x5, 0xc1, 0x3, 0x12, 0xd6, 0x87}, nil
+		},
+		func([]byte) (customReal, error) {
+			return cust, nil
+		},
+		nil)
+
+	pkt, err := Marshal(cust, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var next customReal
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(refTypeOf(cust))
 }
 
 func reconstruct(mant *big.Int, base int, exp int) float64 {
@@ -358,4 +442,22 @@ func TestFloat64Components_base2OddMantissa(t *testing.T) {
 	if m.BitLen() > 0 && bits.TrailingZeros64(m.Uint64()) != 0 {
 		t.Fatalf("mantissa not odd: %s", m)
 	}
+}
+
+func ExampleReal_withConstraints() {
+	// Prohibit use of any base other than 2 or 8
+	baseConstraint := LiftConstraint(func(o Real) Real { return o },
+		func(o Real) (err error) {
+			if o.Base != 2 && o.Base != 8 {
+				err = fmt.Errorf("Constraint violation: prohibited base detected: %d", o.Base)
+			}
+			return
+		})
+
+	// Create a Real using base10.
+	_, err := NewReal(314159, 10, -5, baseConstraint)
+	fmt.Println(err)
+
+	// Output:
+	// Constraint violation: prohibited base detected: 10
 }

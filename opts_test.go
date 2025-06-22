@@ -46,6 +46,8 @@ func TestOptions_codecov(_ *testing.T) {
 	_ = opts.String()
 	opts, _ = NewOptions(`asn1:"application,tag:2,default:thanks"`)
 	_ = opts.String()
+	opts, _ = NewOptions(`asn1:"application,constraint:fakeConstraint,tag:2,default:thanks"`)
+	_ = opts.String()
 	opts.Default = struct{}{}
 	_ = opts.String()
 	opts, _ = NewOptions(`asn1:"application,tag:2,default:thanks"`)
@@ -54,4 +56,15 @@ func TestOptions_codecov(_ *testing.T) {
 	field := reflect.StructField{Tag: "blarg"}
 	_, _ = NewOptions("asn1:")
 	_, _ = extractOptions(field, 0, false)
+	_ = defaultOptions()
+
+	opts.Constraints = []string{`fakeConstraint`}
+	opts.writeClassToken("context-specific")
+	opts.setBool("automatic")
+	opts.setBool("indefinite")
+	_ = opts.String()
+	opts.Default = struct{}{}
+	opts.parseOptionDefault("")
+	field = reflect.StructField{Name: "field", Tag: `asn1:"automatic,explicit"`}
+	extractOptions(field, 0, true)
 }

@@ -95,10 +95,8 @@ func bcdNullRead[T any](c *nullCodec[T], pkt Packet, tlv TLV, o *Options) error 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
@@ -109,9 +107,7 @@ func bcdNullRead[T any](c *nullCodec[T], pkt Packet, tlv TLV, o *Options) error 
 			if c.decodeHook != nil {
 				out, err = c.decodeHook(wire)
 			} else {
-				if tlv.Length != 0 {
-					err = mkerrf("NULL: content length must be 0, got ", itoa(tlv.Length))
-				}
+				err = errorNullLengthNonZero(tlv.Length)
 			}
 
 			if err == nil {

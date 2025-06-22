@@ -85,7 +85,7 @@ func (r OctetString) Len() int {
 	return l
 }
 
-func cerSegmentedOctetStringWrite[T binLike](c *textCodec[T], pkt Packet, o *Options) (n int, err error) {
+func cerSegmentedOctetStringWrite[T TextLike](c *textCodec[T], pkt Packet, o *Options) (n int, err error) {
 	const maxSegSize = 1000
 
 	// 1. Obtain the raw "wire" data.
@@ -148,7 +148,7 @@ func cerSegmentedOctetStringWrite[T binLike](c *textCodec[T], pkt Packet, o *Opt
 	return
 }
 
-func cerSegmentedOctetStringRead[T binLike](c *textCodec[T], pkt Packet, o *Options) (err error) {
+func cerSegmentedOctetStringRead[T TextLike](c *textCodec[T], pkt Packet, o *Options) (err error) {
 	// Reset offset to 0 to start reading the complete constructed value.
 	pkt.SetOffset(0)
 	data := pkt.Data()
@@ -197,30 +197,23 @@ func cerSegmentedOctetStringRead[T binLike](c *textCodec[T], pkt Packet, o *Opti
 		segIndex++
 	}
 
-	for _, vfn := range c.decodeVerify {
-		if err := vfn(full); err != nil {
-			return err
-		}
+	for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+		err = c.decodeVerify[i](full)
 	}
 
-	var val, zero T
-	if c.decodeHook != nil {
-		var err error
-		val, err = c.decodeHook(full)
-		if err != nil {
-			return err
-		}
-	} else {
-		switch any(zero).(type) {
-		case string:
-			val = T(string(full))
-		default:
+	if err == nil {
+		var val T
+		if c.decodeHook != nil {
+			val, err = c.decodeHook(full)
+		} else {
 			val = T(append([]byte(nil), full...))
 		}
-	}
 
-	if err = c.cg.Constrain(val); err == nil {
-		c.val = val
+		if err == nil {
+			if err = c.cg.Constrain(val); err == nil {
+				c.val = val
+			}
+		}
 	}
 
 	return err

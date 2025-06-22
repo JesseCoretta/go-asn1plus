@@ -13,6 +13,36 @@ func TestOctetString_codecov(_ *testing.T) {
 	_, _ = NewOctetString(nil)
 	_, _ = NewOctetString(struct{}{})
 	NewOctetString(string(rune(0xFFFFF)))
+
+	oc := new(textCodec[OctetString])
+	oc.encodeHook = func(b OctetString) ([]byte, error) {
+		return []byte{0x4, 0x4, 0xc1, 0x3, 0x12, 0xd7}, nil
+	}
+	oc.decodeHook = func(b []byte) (OctetString, error) {
+		return OctetString("test"), nil
+	}
+	oc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+
+	if f, ok := master[refTypeOf(OctetString{})]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(OctetString{}).(box)
+	}
+
+	oc.IsPrimitive()
+	oc.Tag()
+	_ = oc.String()
+	tpkt := &testPacket{}
+	cpkt := &CERPacket{}
+	_, _ = oc.write(tpkt, nil)
+	_, _ = oc.write(cpkt, nil)
+	oc.read(tpkt, TLV{}, nil)
+	cerSegmentedOctetStringWrite(oc, cpkt, nil)
+	cpkt.offset = 100
+	cerSegmentedOctetStringRead(oc, cpkt, nil)
+	cpkt.data = nil
+	cerSegmentedOctetStringRead(oc, cpkt, nil)
+	cpkt.data = []byte{0x00}
+	cerSegmentedOctetStringRead(oc, cpkt, nil)
 }
 
 func TestOctetString_encodingRules(t *testing.T) {

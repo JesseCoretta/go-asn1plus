@@ -309,6 +309,7 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 		if parsedOpts, err = parseOptions(tagStr); err != nil {
 			err = mkerrf("Marshal: error parsing tag for field ", field.Name,
 				"(", itoa(fieldNum), "): ", err.Error())
+			return
 		} else {
 			opts = &parsedOpts
 		}
@@ -331,13 +332,6 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 	}
 
 	return
-}
-
-func headerOpts(tlv TLV) *Options {
-	opts := &Options{}
-	opts.SetTag(tlv.Tag)
-	opts.SetClass(tlv.Class)
-	return opts
 }
 
 func (r *Options) SetTag(n int) {

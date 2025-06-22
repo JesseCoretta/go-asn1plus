@@ -101,14 +101,21 @@ func decodeUniversalString(b []byte) (UniversalString, error) {
 func encodeUniversalString(u UniversalString) (content []byte, err error) {
 	runes := []rune(u)
 	content = make([]byte, 4*len(runes))
-	for i, r := range runes {
-		if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
-			err = mkerr("UNIVERSAL STRING: invalid rune")
-			break
+	for i := 0; i < len(runes) && err == nil; i++ {
+		r := runes[i]
+		if err = universalStringCharacterOutOfBounds(r); err == nil {
+			binary.BigEndian.PutUint32(content[i*4:], uint32(r))
 		}
-		binary.BigEndian.PutUint32(content[i*4:], uint32(r))
 	}
 	return content, err
+}
+
+func universalStringCharacterOutOfBounds(r rune) (err error) {
+	if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
+		err = mkerrf("UNIVERSAL STRING: invalid code point ", string(r), " (", itoa(int(r)), ")")
+	}
+
+	return
 }
 
 /*
@@ -127,11 +134,12 @@ func (r UniversalString) String() string {
 	runes := make([]rune, 0, len(r)/4)
 	for i := 0; i+4 <= len(r); i += 4 {
 		code := binary.BigEndian.Uint32([]byte(r[i:])) // has to be []byte
-		if code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) {
-			// Not valid UTF-32BE; bail out to raw bytes.
-			return string(r)
-		}
 		runes = append(runes, rune(code))
+		if universalStringCharacterOutOfBounds(rune(code)) != nil {
+			// Not valid UTF-32BE; bail out to raw bytes.
+			runes = []rune(string(r))
+			break
+		}
 	}
 	return string(runes)
 }
@@ -143,18 +151,17 @@ func (r UniversalString) IsZero() bool { return len(r) == 0 }
 
 func init() {
 	RegisterTextAlias[UniversalString](TagUniversalString, universalStringDecoderVerify, decodeUniversalString, encodeUniversalString, UniversalSpec)
-	UniversalSpec = func(us UniversalString) error {
+	UniversalSpec = func(us UniversalString) (err error) {
 		// Reject byte sequences that are not valid UTF-8.
 		if !utf8OK(string(us)) {
 			return mkerr("UniversalString: input is not valid UTF-8")
 		}
 
 		// Reject surrogates and code points beyond Unicode max.
-		for _, r := range us {
-			if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
-				return mkerrf("UniversalString: invalid code point: ", itoa(int(r)))
-			}
+		for i := 0; i < len(us) && err == nil; i++ {
+			err = universalStringCharacterOutOfBounds(rune(us[i]))
 		}
-		return nil
+
+		return
 	}
 }

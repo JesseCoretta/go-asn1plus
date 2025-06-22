@@ -53,6 +53,7 @@ func TestGeneralString_codecov(_ *testing.T) {
 	_, _ = NewGeneralString(nil)
 	_, _ = NewGeneralString(string(rune(2)))
 	_, _ = NewGeneralString(struct{}{})
+	GeneralSpec(GeneralString(string(rune(0xFFFFFF))))
 }
 
 func TestGeneralString_encodingRules(t *testing.T) {

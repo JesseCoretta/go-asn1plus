@@ -5,16 +5,17 @@ import (
 	"testing"
 )
 
-func TestBER_codecov(_ *testing.T) {
-	pkt := BER.New()
+func TestCER_codecov(_ *testing.T) {
+	pkt := CER.New()
 	pkt.HasMoreData()
 	pkt.WriteTLV(TLV{Tag: 3, Class: 1})
+	pkt.Type().OID()
 	bts := make([]byte, 4)
-	encodeBERLengthInto(&bts, -1)
+	encodeCERLengthInto(&bts, -1)
 }
 
-func TestBERPacket_OutOfBoundsGuards(t *testing.T) {
-	pkt := BER.New(0x02, 0x01, 0x00)
+func TestCERPacket_OutOfBoundsGuards(t *testing.T) {
+	pkt := CER.New(0x02, 0x01, 0x00)
 	pkt.SetOffset(pkt.Len())
 
 	if _, err := pkt.Class(); err != errorOutOfBounds {

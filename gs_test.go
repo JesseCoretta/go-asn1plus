@@ -53,6 +53,18 @@ func TestGraphicString_codecov(_ *testing.T) {
 	_, _ = NewGraphicString(nil)
 	_, _ = NewGraphicString(string(rune(2)))
 	_, _ = NewGraphicString(struct{}{})
+	graphicStringDecoderVerify([]byte{0x08})
+	graphicStringDecoderVerify([]byte{byte(string(rune(127))[0])})
+
+	badRune := uint32(0xD800)
+	b := []byte{
+		byte(badRune >> 24),
+		byte(badRune >> 16),
+		byte(badRune >> 8),
+		byte(badRune),
+	}
+	graphicStringDecoderVerify(b)
+	graphicStringDecoderVerify([]byte{0x30})
 }
 
 func TestGraphicString_encodingRules(t *testing.T) {

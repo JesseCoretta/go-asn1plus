@@ -35,9 +35,24 @@ func (r EncodingRule) allowsIndefinite() (ok bool) {
 	return
 }
 
-func (r EncodingRule) isAnyOf(e ...EncodingRule) (is bool) {
+/*
+In returns a Boolean instance indicative of r being present within e.
+*/
+func (r EncodingRule) In(e ...EncodingRule) (is bool) {
 	for i := 0; i < len(e) && !is; i++ {
 		is = r == e[i]
+	}
+
+	return
+}
+
+/*
+Extends returns a Boolean instance indicative of r extending from e.
+*/
+func (r EncodingRule) Extends(e EncodingRule) (is bool) {
+	switch r {
+	case BER:
+		is = (e == CER || e == DER)
 	}
 
 	return

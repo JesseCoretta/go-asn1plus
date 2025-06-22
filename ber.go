@@ -31,38 +31,19 @@ func (r BERPacket) Type() EncodingRule { return BER }
 Class returns an integer alongside an error following an attempt to parse
 the outermost class identifier present within the underlying receiver buffer.
 */
-func (r BERPacket) Class() (int, error) {
-	buf := r.Data()
-	if r.Offset() >= len(buf) {
-		return 0, errorOutOfBounds
-	}
-	return parseClassIdentifier(buf[r.Offset():])
-}
+func (r BERPacket) Class() (int, error) { return getPacketClass(&r) }
 
 /*
 Tag returns an integer alongside an error following an attempt to parse
 the outermost tag identifier present within the underlying receiver buffer.
 */
-func (r BERPacket) Tag() (int, error) {
-	buf := r.Data()
-	if r.Offset() >= len(buf) {
-		return 0, errorOutOfBounds
-	}
-	tag, _, err := parseTagIdentifier(buf[r.Offset():])
-	return tag, err
-}
+func (r BERPacket) Tag() (int, error) { return getPacketTag(&r) }
 
 /*
 Compound returns a Boolean alongside an error following an attempt to parse the
 outermost compound identifier present within the underlying receiver buffer.
 */
-func (r BERPacket) Compound() (bool, error) {
-	buf := r.Data()
-	if r.Offset() >= len(buf) {
-		return false, errorOutOfBounds
-	}
-	return parseCompoundIdentifier(buf[r.Offset():])
-}
+func (r BERPacket) Compound() (bool, error) { return getPacketCompound(&r) }
 
 /*
 Bytes returns the "body" of the underlying buffer alongside an error following an attempt
@@ -226,9 +207,3 @@ func encodeBERLengthInto(dst *[]byte, n int) {
 }
 
 var berPktPool = sync.Pool{New: func() any { return &BERPacket{} }}
-
-func getBERPacket() *BERPacket { return berPktPool.Get().(*BERPacket) }
-func putBERPacket(p *BERPacket) {
-	*p = BERPacket{}
-	berPktPool.Put(p)
-}

@@ -1,6 +1,9 @@
 package asn1plus
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestVideotexString_encodingRules(t *testing.T) {
 	for idx, value := range []any{
@@ -102,6 +105,23 @@ func BenchmarkVideotexConstructor(b *testing.B) {
 	}
 }
 
+func ExampleVideotexString_withConstraint() {
+	caseConstraint := LiftConstraint(func(o VideotexString) VideotexString { return o },
+		func(o VideotexString) (err error) {
+			for i := 0; i < len(o); i++ {
+				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+					break
+				}
+			}
+			return
+		})
+
+	_, err := NewVideotexString(`this is a VIDEOTEX STRING`, caseConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: policy prohibits lower-case ASCII
+}
+
 func TestVideotexString_codecov(_ *testing.T) {
 	_, _ = NewVideotexString(struct{}{})
 	_, _ = NewVideotexString(string([]rune{
@@ -120,4 +140,15 @@ func TestVideotexString_codecov(_ *testing.T) {
 	vts.Tag()
 	vts.IsZero()
 	vts.IsPrimitive()
+
+	badRune := uint32(0xD800)
+
+	b := []byte{
+		byte(badRune >> 24),
+		byte(badRune >> 16),
+		byte(badRune >> 8),
+		byte(badRune),
+	}
+
+	videotexDecoderVerify(b)
 }

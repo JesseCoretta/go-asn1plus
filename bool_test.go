@@ -60,9 +60,10 @@ func TestBoolean_codecov(t *testing.T) {
 		return []byte{b.Byte()}, nil
 	}
 	bc.decodeHook = func(b []byte) (Boolean, error) {
-		return Boolean(b[0]==0xFF), nil
+		return Boolean(b[0] == 0xFF), nil
 	}
 	bc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+	bc.Tag()
 	bc.IsPrimitive()
 	_ = bc.String()
 	tpkt := &testPacket{}
@@ -70,11 +71,20 @@ func TestBoolean_codecov(t *testing.T) {
 	_, _ = bc.write(tpkt, nil)
 	_, _ = bc.write(bpkt, nil)
 	bc.read(tpkt, TLV{}, nil)
+	bpkt.data = []byte{0x1, 0x1, 0xFF, 0xFF}
+	bc.read(tpkt, TLV{}, nil)
+	bc.read(bpkt, TLV{}, nil)
+
+	if f, ok := master[refTypeOf(Boolean(true))]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(Boolean(true)).(box)
+	}
 }
 
 type customBoolean Boolean
-func (_ customBoolean) Tag() int { return TagBoolean }
-func (_ customBoolean) String() string { return `` }
+
+func (_ customBoolean) Tag() int          { return TagBoolean }
+func (_ customBoolean) String() string    { return `` }
 func (_ customBoolean) IsPrimitive() bool { return true }
 
 func TestCustomBoolean_withControls(t *testing.T) {

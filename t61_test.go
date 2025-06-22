@@ -1,6 +1,9 @@
 package asn1plus
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestNewT61String_Valid(t *testing.T) {
 	input := "HELLO 123" // H, E, L, L, O, space, 1,2,3 – all within allowed ranges.
@@ -126,4 +129,21 @@ func TestT61String_encodingRules(t *testing.T) {
 			}
 		}
 	}
+}
+
+func ExampleT61String_withConstraint() {
+	caseConstraint := LiftConstraint(func(o T61String) T61String { return o },
+		func(o T61String) (err error) {
+			for i := 0; i < len(o); i++ {
+				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+					break
+				}
+			}
+			return
+		})
+
+	_, err := NewT61String(`this is a T.61 string`, caseConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: policy prohibits lower-case ASCII
 }

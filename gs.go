@@ -82,16 +82,11 @@ known ASN.1 primitive.
 func (r GraphicString) IsPrimitive() bool { return true }
 
 func graphicStringDecoderVerify(b []byte) (err error) {
-	for _, ch := range string(b) {
-		if ch < 128 {
-			// Only characters 32..126 allowed in ASCII.
-			if ch < 32 || ch > 126 {
-				err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
-				break
-			}
-		} else if !unicode.IsPrint(ch) || unicode.IsControl(ch) {
+	runes := []rune(string(b))
+	for i := 0; i < len(runes) && err == nil; i++ {
+		ch := rune(runes[i])
+		if !unicode.IsPrint(ch) || unicode.IsControl(ch) || (ch < 128 && !(32 <= ch && ch <= 126)) {
 			err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
-			break
 		}
 	}
 	return

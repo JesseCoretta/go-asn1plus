@@ -113,7 +113,7 @@ func init() {
 			word := r >> 6
 			bit := r & 63
 			if (printableStringBitmap[word]>>bit)&1 == 0 {
-				err = mkerrf("Invalid character '", string(word), "' in PRINTABLE STRING")
+				err = mkerrf("Invalid character '", string(r), "' (", itoa(int(r)), ") in PRINTABLE STRING")
 				break
 			}
 		}

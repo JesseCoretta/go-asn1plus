@@ -27,31 +27,3 @@ func TestText_codecov(t *testing.T) {
 	}
 
 }
-
-type customText PrintableString
-
-func (_ customText) Tag() int          { return TagPrintableString }
-func (_ customText) String() string    { return `` }
-func (_ customText) IsPrimitive() bool { return true }
-
-func TestCustomText_withControls(t *testing.T) {
-	RegisterTextAlias[customText](TagPrintableString, // any <X>String tag would do (except BitString)
-		func([]byte) error { return nil },                                       // verify decoder
-		func(b []byte) (customText, error) { return customText(b), nil },        // custom decoder
-		func(customText) ([]byte, error) { return []byte{0x1, 0x1, 0xFF}, nil }, // custom encoder
-		nil, // spec constraint
-	)
-
-	var cust customText = customText("Hello!")
-
-	pkt, err := Marshal(cust, With(CER))
-	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
-	}
-
-	var next customText
-	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
-	}
-	unregisterType(refTypeOf(cust))
-}

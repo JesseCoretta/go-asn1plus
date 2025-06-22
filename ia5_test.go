@@ -163,6 +163,10 @@ func TestIA5String_encodingRules(t *testing.T) {
 func TestIA5String_codecov(_ *testing.T) {
 	var ia5 IA5String
 	ia5.Tag()
+	ia5.Len()
+	ia5.IsPrimitive()
+	_ = ia5.String()
+	NewIA5String(ia5)
 }
 
 func ExampleIA5String_withConstraints() {

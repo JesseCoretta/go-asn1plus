@@ -200,22 +200,22 @@ func vlqEncodeBig(n *big.Int) []byte {
 	return buf[i:]
 }
 
-func vlqDecode(pkt Packet) (*big.Int, error) {
-	v := newBigInt(0)
-	for {
-		if pkt.Offset() >= pkt.Len() {
-			return nil, mkerr("truncated VLQ")
-		}
-		oct := pkt.Data()[pkt.Offset()]
-		pkt.SetOffset(pkt.Offset() + 1)
-
-		v.Lsh(v, 7)
-		v.Or(v, newBigInt(int64(oct&0x7F)))
-		if oct&0x80 == 0 {
-			return v, nil
-		}
-	}
-}
+//func vlqDecode(pkt Packet) (*big.Int, error) {
+//	v := newBigInt(0)
+//	for {
+//		if pkt.Offset() >= pkt.Len() {
+//			return nil, mkerr("truncated VLQ")
+//		}
+//		oct := pkt.Data()[pkt.Offset()]
+//		pkt.SetOffset(pkt.Offset() + 1)
+//
+//		v.Lsh(v, 7)
+//		v.Or(v, newBigInt(int64(oct&0x7F)))
+//		if oct&0x80 == 0 {
+//			return v, nil
+//		}
+//	}
+//}
 
 /*
 IntSlice returns slices of integer values and an error. The integer values are based
@@ -482,8 +482,8 @@ func toObjectIdentifier[T any](v T) ObjectIdentifier   { return *(*ObjectIdentif
 func fromObjectIdentifier[T any](i ObjectIdentifier) T { return *(*T)(unsafe.Pointer(&i)) }
 
 func (c *oidCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
-	switch pkt.Type() {
-	case BER, CER, DER:
+	switch {
+	case pkt.Type().In(BER, CER, DER):
 		n, err = bcdOIDWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented
@@ -565,10 +565,8 @@ func bcdOIDRead[T any](c *oidCodec[T], pkt Packet, tlv TLV, o *Options) error {
 	if wire, err = objectIdentifierReadData(pkt, tlv, o); err == nil {
 
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
@@ -589,10 +587,10 @@ func bcdOIDRead[T any](c *oidCodec[T], pkt Packet, tlv TLV, o *Options) error {
 
 				if len(subs) == 0 {
 					err = mkerr("zero-length OBJECT IDENTIFIER")
+				} else {
+					arcs := objectIdentifierReadExpandFirstArcs(subs)
+					out = fromObjectIdentifier[T](arcs)
 				}
-
-				arcs := objectIdentifierReadExpandFirstArcs(subs)
-				out = fromObjectIdentifier[T](arcs)
 			}
 
 			if err == nil {
@@ -631,9 +629,9 @@ func objectIdentifierReadExpandFirstArcs(subs []*big.Int) (arcs []Integer) {
 	case subs[0].Cmp(forty) < 0:
 		first, second = newBigInt(0), subs[0]
 	case subs[0].Cmp(eighty) < 0:
-		first, second = newBigInt(1), new(big.Int).Sub(subs[0], forty)
+		first, second = newBigInt(1), newBigInt(0).Sub(subs[0], forty)
 	default:
-		first, second = newBigInt(2), new(big.Int).Sub(subs[0], eighty)
+		first, second = newBigInt(2), newBigInt(0).Sub(subs[0], eighty)
 	}
 
 	toInt := func(b *big.Int) Integer {
@@ -731,8 +729,8 @@ func toRelativeOID[T any](v T) RelativeOID   { return *(*RelativeOID)(unsafe.Poi
 func fromRelativeOID[T any](i RelativeOID) T { return *(*T)(unsafe.Pointer(&i)) }
 
 func (c *relOIDCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
-	switch pkt.Type() {
-	case BER, CER, DER:
+	switch {
+	case pkt.Type().In(BER, CER, DER):
 		err = bcdRelOIDRead(c, pkt, tlv, o)
 	default:
 		err = errorRuleNotImplemented
@@ -769,10 +767,8 @@ func bcdRelOIDRead[T any](c *relOIDCodec[T], pkt Packet, tlv TLV, o *Options) er
 	}
 
 	decodeVerify := func() (err error) {
-		for _, vfn := range c.decodeVerify {
-			if err = vfn(wire); err != nil {
-				break
-			}
+		for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+			err = c.decodeVerify[i](wire)
 		}
 
 		return
@@ -824,7 +820,7 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 		if subidentifier.IsInt64() {
 			arc = Integer{native: subidentifier.Int64()}
 		} else {
-			arc = Integer{big: true, bigInt: new(big.Int).Set(subidentifier)}
+			arc = Integer{big: true, bigInt: newBigInt(0).Set(subidentifier)}
 		}
 		if arc.Big().Sign() < 0 {
 			err = mkerr("Relative OID arcs may not be negative")
@@ -843,8 +839,8 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 }
 
 func (c *relOIDCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
-	switch pkt.Type() {
-	case BER, CER, DER:
+	switch {
+	case pkt.Type().In(BER, CER, DER):
 		n, err = bcdRelOIDWrite(c, pkt, o)
 	default:
 		err = errorRuleNotImplemented

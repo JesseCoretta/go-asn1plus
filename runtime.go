@@ -77,7 +77,7 @@ unsupported options statements just prior to the marshaling process.
 */
 func checkBadMarshalOptions(rule EncodingRule, o *Options) (err error) {
 	if o != nil {
-		if rule.allowsIndefinite() && o.Indefinite {
+		if !rule.allowsIndefinite() && o.Indefinite {
 			err = mkerrf("Use of INDEFINITE-LENGTH is incompatible with encoding rule ", rule.String())
 		}
 	}
@@ -85,15 +85,14 @@ func checkBadMarshalOptions(rule EncodingRule, o *Options) (err error) {
 	return
 }
 
-func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
+func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) (err error) {
 	switch {
 	case v.Kind() == reflect.Invalid:
 		return mkerr("Nil value passed to Marshal")
 	case v.Kind() == reflect.Ptr && v.IsNil():
 		return mkerr("Marshal: input must be non-nil")
-	case v.Kind() == reflect.Ptr:
-		v = v.Elem()
 	}
+	v = derefValuePtr(v)
 
 	// CHOICE unwrap
 	if ch, ok := v.Interface().(Choice); ok {
@@ -105,24 +104,17 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 
 		tmp := pkt.Type().New()
 
-		if err := marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err != nil {
-			return err
+		if err = marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err == nil {
+			inner := tmp.Data()
+			id := byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
+			pkt.Append(id)
+			bufPtr := getBuf()
+			encodeLengthInto(pkt.Type(), bufPtr, len(inner))
+			pkt.Append(*bufPtr...)
+			putBuf(bufPtr)
+			pkt.Append(inner...)
 		}
-		inner := tmp.Data()
-
-		id := byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
-		pkt.Append(id)
-		bufPtr := getBuf()
-		encodeLengthInto(pkt.Type(), bufPtr, len(inner))
-		pkt.Append(*bufPtr...)
-		putBuf(bufPtr)
-		pkt.Append(inner...)
-		return nil
-	}
-
-	// Adapter path
-	if done, err := marshalViaAdapter(v, pkt, opts); done {
-		return err
+		return
 	}
 
 	// Primitive path
@@ -130,8 +122,12 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 		return err
 	}
 
+	// Adapter path
+	if done, err := marshalViaAdapter(v, pkt, opts); done {
+		return err
+	}
+
 	// Composite types
-	var err error
 	switch v.Kind() {
 	case reflect.Slice:
 		err = marshalSet(v, pkt, opts, depth+1)
@@ -145,12 +141,8 @@ func marshalValue(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 }
 
 func marshalViaAdapter(v reflect.Value, pkt Packet, opts *Options) (handled bool, err error) {
-	kw := ""
-	if opts != nil {
-		kw = opts.Identifier
-	} else {
-		opts = implicitOptions()
-	}
+	opts = deferImplicit(opts)
+	kw := opts.Identifier
 
 	ad, ok := adapterForValue(v, kw)
 	if !ok {
@@ -175,31 +167,32 @@ func marshalPrimitive(v reflect.Value, pkt Packet, opts *Options) (handled bool,
 	if !isPrimitive(v.Interface()) {
 		return false, nil
 	}
-	if opts == nil {
-		opts = implicitOptions()
-	}
+	opts = deferImplicit(opts)
+	raw := toPtr(v).Interface()
 
-	raw := toPtr(v).Interface() // *T or value T
-
-	// Prefer the value’s own codec implementation
 	if c, ok := raw.(codecRW); ok {
+		// Prefer the value’s own codec implementation
 		if opts.Explicit {
-			return true, wrapMarshalExplicit(pkt, c, opts)
+			handled = true
+			err = wrapMarshalExplicit(pkt, c, opts)
+		} else {
+			_, err = c.write(pkt, opts)
+			handled = true
 		}
-		_, err := c.write(pkt, opts)
-		return true, err
+	} else if bx, ok := createCodecForPrimitive(raw); ok {
+		// Legacy pointer – build a codec on the fly
+		if opts.Explicit {
+			handled = true
+			err = wrapMarshalExplicit(pkt, bx, opts)
+		} else {
+			_, err = bx.write(pkt, opts)
+			handled = true
+		}
+	} else {
+		err = mkerr("no codec found for primitive")
 	}
 
-	// Legacy pointer – build a codec on the fly
-	if bx, ok := createCodecForPrimitive(raw); ok {
-		if opts.Explicit {
-			return true, wrapMarshalExplicit(pkt, bx, opts)
-		}
-		_, err := bx.write(pkt, opts)
-		return true, err
-	}
-
-	return false, mkerr("no codec for primitive")
+	return
 }
 
 func wrapMarshalExplicit(pkt Packet, prim codecRW, opts *Options) (err error) {
@@ -270,7 +263,7 @@ aided by [Options] directives.
 This function is called by the top-level Unmarshal function, as well as certain low
 level functions via recursion.
 */
-func unmarshalValue(pkt Packet, v reflect.Value, options *Options) (err error) {
+func unmarshalValue(pkt Packet, v reflect.Value, opts *Options) (err error) {
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			err = mkerr("unmarshalValue: input pointer is nil")
@@ -279,12 +272,8 @@ func unmarshalValue(pkt Packet, v reflect.Value, options *Options) (err error) {
 		v = v.Elem()
 	}
 
-	kw := ""
-	opts := implicitOptions()
-	if options != nil {
-		opts = options
-		kw = opts.Identifier
-	}
+	opts = deferImplicit(opts)
+	kw := opts.Identifier
 
 	if ad, ok := adapterForValue(v, kw); ok {
 		codec := ad.newCodec()
@@ -356,9 +345,7 @@ func unmarshalPrimitive(pkt Packet, v reflect.Value, opts *Options) (err error) 
 }
 
 func unmarshalHandleTag(kw string, pkt Packet, tlv *TLV, opts *Options) (err error) {
-	if opts == nil {
-		opts = implicitOptions()
-	}
+	opts = deferImplicit(opts)
 	if opts.HasTag() {
 		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
 			err = mkerrf("identifier mismatch decoding ", kw)

@@ -140,6 +140,7 @@ func TestPacket_invalidPacket(_ *testing.T) {
 	invp.Free()
 	invp.Bytes()
 	invp.FullBytes()
+	invp.HasMoreData()
 	invp.Class()
 	invp.Compound()
 	invp.Tag()
@@ -254,6 +255,14 @@ func TestPacket_codecov(_ *testing.T) {
 	pktB.Type().OID()
 	pktD := &DERPacket{}
 	pktD.Type().OID()
+	With(&Options{})
+	x := WithEncoding(DER)
+	x(&encodingConfig{})
+	x = WithOptions(Options{})
+	x(&encodingConfig{})
+	tester := testPacket{}
+	tester.Type().New()
+	tester.HasMoreData()
 
 	Marshal(nil)
 	var slice []int
@@ -275,6 +284,24 @@ func TestPacket_codecov(_ *testing.T) {
 	opts.SetClass(3)
 	marshalPrepareSpecialOptions(EmbeddedPDV{}, &opts)
 	checkBadMarshalOptions(DER, &Options{Indefinite: true})
+
+	marshalValue(refValueOf(nil), &BERPacket{}, nil, 0)
+	var nill *struct{}
+	marshalValue(refValueOf(nill), &BERPacket{}, nil, 0)
+	marshalValue(refValueOf(OctetString("test")), &BERPacket{}, nil, 0)
+	marshalValue(refValueOf(Choice{Value: nil, Explicit: true}), &BERPacket{}, nil, 0)
+
+	unmarshalHandleTag("octet", &BERPacket{}, &TLV{Tag: 4, Length: 4000}, &opts)
+	berBytes := []byte{
+		0x0c, 0x16, 0x74, 0x68, 0x69, 0x73, 0x20, 0x69,
+		0x73, 0x20, 0x61, 0x20, 0x55, 0x54, 0x46, 0x2d,
+		0x38, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67,
+	}
+
+	o := OctetString("test")
+	unmarshalPrimitive(&BERPacket{data: berBytes}, refValueOf(&o), &opts)
+
+	BER.Extends(CER)
 }
 
 func TestParseLengthCornerCases(t *testing.T) {

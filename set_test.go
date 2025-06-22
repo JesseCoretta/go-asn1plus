@@ -20,7 +20,11 @@ func TestSet_encodingRules(t *testing.T) {
 				}
 			}
 		default:
-			boo = strInSlice(a, b)
+			for i := 0; i < len(a) && !boo; i++ {
+				for j := 0; j < len(b) && !boo; j++ {
+					boo = a[i] == b[j]
+				}
+			}
 		}
 
 		return boo
@@ -74,14 +78,27 @@ func TestSet_codecov(_ *testing.T) {
 	isSet([]uint8{}, nil)
 
 	type mySequence struct {
-		OctetString
-		PrintableString
+		Oct     OctetString
+		PS      PrintableString
+		private string
 	}
 
 	mine := mySequence{
-		OctetString(`Hello world`),
-		PrintableString(`Hello world`),
+		Oct: OctetString(`Hello world`),
+		PS:  PrintableString(`Hello world`),
 	}
+	_ = marshalSet(refValueOf(struct{}{}), nil, nil, 0)
+	_ = marshalSet(refValueOf(rune(66)), nil, nil, 0)
+
+	type incompatibleSequence struct {
+		Byte byte
+	}
+	incomp := incompatibleSequence{0x0F}
+
+	_ = unmarshalSet(refValueOf(incomp), &BERPacket{data: []byte{0xa, 0x13, 0x07, 0x7e}}, nil)
+	_ = unmarshalSet(refValueOf(mine), &BERPacket{data: []byte{0xa, 0x13, 0x07, 0x7e}}, nil)
+	_ = unmarshalSet(refValueOf(struct{}{}), nil, nil)
+	_ = unmarshalSet(refValueOf(rune(66)), nil, nil)
 
 	pkt := BER.New()
 

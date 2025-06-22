@@ -223,4 +223,5 @@ func TestUTF8String_codecov(_ *testing.T) {
 	u.IsPrimitive()
 	u.IsZero()
 	u.Tag()
+	u.Len()
 }

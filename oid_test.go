@@ -173,6 +173,7 @@ func TestObjectIdentifier_codecov(_ *testing.T) {
 	_, _ = NewObjectIdentifier(1, 3, ``, 1)
 	_, _ = NewObjectIdentifier(1, -3, 6, 1)
 	_, _ = NewObjectIdentifier(1, struct{}{}, 6, 1)
+	_, _ = NewObjectIdentifier(ObjectIdentifier{})
 
 	nf, _ := NewInteger(1)
 	o = append(o, nf)
@@ -201,6 +202,75 @@ func TestObjectIdentifier_codecov(_ *testing.T) {
 	isNumericOID(`1.3..3`)
 	isNumericOID(`1.3.3.`)
 	isNumericOID(`1.3.AA`)
+
+	oc := new(oidCodec[ObjectIdentifier])
+	root := Integer{native: int64(1)}
+	rootBad := Integer{native: int64(3)}
+	second := Integer{native: int64(1)}
+	secondBad := Integer{native: int64(9999)}
+	//oc.encodeHook = func(b ObjectIdentifier) ([]byte, error) {
+	//        return nil, nil
+	//}
+	//oc.decodeHook = func(b []byte) (ObjectIdentifier, error) {
+	//        return ObjectIdentifier{}, nil
+	//}
+	//oc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+	oc.IsPrimitive()
+	oc.Tag()
+	_ = oc.String()
+	tpkt := &testPacket{}
+	bpkt := &BERPacket{}
+	oc.val = ObjectIdentifier{}
+	_, _ = oc.write(bpkt, nil)
+
+	oc.val = ObjectIdentifier{rootBad, second}
+	_, _ = oc.write(tpkt, nil)
+	_, _ = oc.write(bpkt, nil)
+	oc.read(tpkt, TLV{}, nil)
+	bpkt.data = []byte{0x1, 0x1, 0xFF, 0xFF}
+	oc.read(tpkt, TLV{}, nil)
+	oc.read(bpkt, TLV{}, nil)
+	oc.val = ObjectIdentifier{root, secondBad}
+	_, _ = oc.write(bpkt, nil)
+
+	if f, ok := master[refTypeOf(ObjectIdentifier{})]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(ObjectIdentifier{}).(box)
+	}
+}
+
+type customOID ObjectIdentifier
+
+func (_ customOID) Tag() int          { return TagOID }
+func (_ customOID) String() string    { return `` }
+func (_ customOID) IsPrimitive() bool { return true }
+
+func TestCustomOID_withControls(t *testing.T) {
+	orig, _ := NewObjectIdentifier(1, 2, 3)
+	var cust customOID
+	cust = customOID(orig)
+
+	RegisterOIDAlias[customOID](TagOID,
+		func(b []byte) (err error) { return nil },
+		func(b customOID) ([]byte, error) {
+			return []byte{0x6, 0x7, 0x2, 0x1, 0x2}, nil
+		},
+		func(b []byte) (customOID, error) {
+			return cust, nil
+		},
+		nil)
+
+	pkt, err := Marshal(cust, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var next customOID
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(refTypeOf(&cust))
+	unregisterType(refTypeOf(cust))
 }
 
 func TestRelativeOID_roundTripBER(t *testing.T) {
@@ -285,11 +355,80 @@ func ExampleRelativeOID_Absolute() {
 	// Output: 1.3.6.1.4.1.56521.389
 }
 
+type relOID RelativeOID
+
+func (_ relOID) Tag() int          { return TagRelativeOID }
+func (_ relOID) String() string    { return `` }
+func (_ relOID) IsPrimitive() bool { return true }
+
 func TestRelativeOID_codecov(_ *testing.T) {
 	r, _ := NewRelativeOID(`33.44.55`)
 	r.IsPrimitive()
 	r.Tag()
 	r, _ = NewRelativeOID(r)
+	_, _ = NewRelativeOID(33, -1, 44)
+
+	badArc := Integer{native: int64(-3)}
+
+	rc := new(relOIDCodec[RelativeOID])
+	rc.encodeHook = func(b RelativeOID) ([]byte, error) {
+		return nil, nil
+	}
+	rc.decodeHook = func(b []byte) (RelativeOID, error) {
+		return RelativeOID{}, nil
+	}
+	rc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+	rc.IsPrimitive()
+	rc.Tag()
+	_ = rc.String()
+
+	rc.val = RelativeOID{}
+	tpkt := &testPacket{}
+	bpkt := &BERPacket{}
+	_, _ = rc.write(bpkt, nil)
+
+	rc.val = RelativeOID{badArc}
+	_, _ = rc.write(tpkt, nil)
+	_, _ = rc.write(bpkt, nil)
+	rc.read(tpkt, TLV{}, nil)
+	rc.read(bpkt, TLV{}, nil)
+
+	bpkt.data = []byte{0x1, 0x1, 0xFF, 0xFF}
+	rc.read(tpkt, TLV{}, nil)
+	rc.read(bpkt, TLV{}, nil)
+
+	if f, ok := master[refTypeOf(RelativeOID{})]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(RelativeOID{}).(box)
+	}
+}
+
+func TestCustomRelativeOID_withControls(t *testing.T) {
+	orig, _ := NewRelativeOID(1, 2, 3)
+	var cust relOID
+	cust = relOID(orig)
+
+	RegisterRelativeOIDAlias[relOID](TagRelativeOID,
+		func(b []byte) (err error) { return nil },
+		func(b relOID) ([]byte, error) {
+			return []byte{0x6, 0x7, 0x2, 0x1, 0x2}, nil
+		},
+		func(b []byte) (relOID, error) {
+			return cust, nil
+		},
+		nil)
+
+	pkt, err := Marshal(cust, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var next relOID
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(refTypeOf(&cust))
+	unregisterType(refTypeOf(cust))
 }
 
 func ExampleNewObjectIdentifier_withConstraint() {

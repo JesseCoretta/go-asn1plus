@@ -92,6 +92,10 @@ func TestNumericString_String(t *testing.T) {
 func TestNumericString_codecov(_ *testing.T) {
 	var ns NumericString
 	ns.Tag()
+	ns.IsPrimitive()
+	ns.Len()
+	_ = ns.String()
+	convertToNumericString(NumericString(``))
 }
 
 func ExampleNumericString_dER() {
@@ -160,4 +164,24 @@ func TestNumericString_encodingRules(t *testing.T) {
 			}
 		}
 	}
+}
+
+func ExampleNumericString_withConstraints() {
+	// Prohibit use of ASCII '2' and '4' runes
+	twoFourConstraint := LiftConstraint(func(o NumericString) NumericString { return o },
+		func(o NumericString) (err error) {
+			for i := 0; i < len(o) && err == nil; i++ {
+				if '2' == rune(o[i]) || '4' == rune(o[i]) {
+					err = fmt.Errorf("Constraint violation: policy prohibits use of '2' and '4'")
+				}
+			}
+			return
+		})
+
+	// First try trips on a digit violation, so caseConstraint is never reached.
+	_, err := NewNumericString(`05 18 208`, twoFourConstraint)
+	fmt.Println(err)
+
+	// Output:
+	// Constraint violation: policy prohibits use of '2' and '4'
 }

@@ -423,6 +423,31 @@ func parseLength(b []byte) (length int, lenLen int, err error) {
 	return
 }
 
+func getPacketClass(r Packet) (int, error) {
+	buf := r.Data()
+	if r.Offset() >= len(buf) {
+		return 0, errorOutOfBounds
+	}
+	return parseClassIdentifier(buf[r.Offset():])
+}
+
+func getPacketTag(r Packet) (int, error) {
+	buf := r.Data()
+	if r.Offset() >= len(buf) {
+		return 0, errorOutOfBounds
+	}
+	tag, _, err := parseTagIdentifier(buf[r.Offset():])
+	return tag, err
+}
+
+func getPacketCompound(r Packet) (bool, error) {
+	buf := r.Data()
+	if r.Offset() >= len(buf) {
+		return false, errorOutOfBounds
+	}
+	return parseCompoundIdentifier(buf[r.Offset():])
+}
+
 /*
 bufPool implements a sync.Pool for efficient
 slice operations.

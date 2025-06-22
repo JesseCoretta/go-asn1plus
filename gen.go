@@ -84,18 +84,14 @@ var generalStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 func init() {
 	RegisterTextAlias[GeneralString](TagGeneralString, nil, nil, nil, GeneralSpec)
 	GeneralSpec = func(o GeneralString) (err error) {
-		for _, r := range []rune(o.String()) {
-			if r < 0 || r > 0x00FF {
-				err = mkerrf("Invalid character '", string(r), "' (>0xFFFF) in GENERAL STRING")
-				break
-			}
-
+		runes := []rune(o.String())
+		for i := 0; i < len(runes) && err == nil; i++ {
+			r := rune(runes[i])
 			word := r >> 6
 			bit := r & 63
 
 			if (generalStringBitmap[word]>>bit)&1 == 0 {
-				err = mkerrf("Invalid character '", string(word), "' in GENERAL STRING")
-				break
+				err = mkerrf("Invalid character '", string(r), "' (<0x0000 | >0xFFFF) in GENERAL STRING")
 			}
 		}
 
@@ -107,7 +103,8 @@ func init() {
 			generalStringBitmap[r>>6] |= 1 << (r & 63)
 		}
 	}
-	set(0x0000, 0x007F) // Basic Latin (includes control characters)
-	set(0x0080, 0x009F) // C1 Controls (rarely printable but part of the charset)
-	set(0x00A0, 0x00FF) // Latin‑1 Supplement (graphical characters)
+	// 0x0000..0x007F: Basic Latin (includes control characters)
+	// 0x0080..0x009F: C1 Controls (rarely printable but part of the charset)
+	// 0x00A0..0x00FF: Latin‑1 Supplement (graphical characters)
+	set(0x0000, 0x00FF)
 }

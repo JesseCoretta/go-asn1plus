@@ -6,9 +6,6 @@ import (
 )
 
 func TestCommon_codecov(_ *testing.T) {
-	strs1 := []string{"1", "2", "3"}
-	strs2 := []string{"3", "4", "5"}
-	strInSlice(strs1, strs2, true)
 	sizeOfInt(-1)
 	sizeOfInt(3)
 	sizeOfInt(33333)

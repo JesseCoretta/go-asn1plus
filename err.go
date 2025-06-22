@@ -34,6 +34,14 @@ func errorNoChoiceMatched(name string) (err error) {
 	return mkerrf(errorNoChoiceForType.Error() + " " + name)
 }
 
+func errorNullLengthNonZero(length int) (err error) {
+	if length > 0 {
+		err = mkerrf("NULL: content length must be 0, got ", itoa(length))
+	}
+
+	return
+}
+
 func errorASN1Expect(a, b any, typ string) (err error) {
 	switch typ {
 	case "Tag":

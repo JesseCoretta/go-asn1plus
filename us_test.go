@@ -152,6 +152,27 @@ func TestUniversalString_codecov(_ *testing.T) {
 
 	var us2 UniversalString
 	_ = Unmarshal(pkt, &us2)
+
+	var us3 UniversalString = UniversalString(string([]rune{0xD800}))
+	encodeUniversalString(us3)
+	universalStringDecoderVerify([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+	universalStringDecoderVerify([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+	universalStringCharacterOutOfBounds(0xFFFFFFA)
+
+	us3 = UniversalString(string([]rune{0xFF, 0xFF, 0xFF, 0xFF}))
+	_ = us3.String()
+
+	us3 = UniversalString(string([]rune{0x0E, 0x1A, 0x81, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}))
+	_ = us3.String()
+
+	badRune := uint32(0xD800)
+	b := []byte{
+		byte(badRune >> 24),
+		byte(badRune >> 16),
+		byte(badRune >> 8),
+		byte(badRune),
+	}
+	_ = UniversalString(b).String()
 }
 
 func ExampleUniversalString_withConstraints() {

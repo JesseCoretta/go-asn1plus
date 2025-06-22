@@ -16,7 +16,6 @@ import (
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
-	"unsafe"
 )
 
 /*
@@ -58,33 +57,9 @@ var (
 	utf16Enc   func([]rune) []uint16                    = utf16.Encode
 	utf8OK     func(string) bool                        = utf8.ValidString
 	newBigInt  func(int64) *big.Int                     = big.NewInt
+	refTypeOf  func(any) reflect.Type                   = reflect.TypeOf
+	refValueOf func(any) reflect.Value                  = reflect.ValueOf
 )
-
-func strInSlice(r any, slice []string, cEM ...bool) (match bool) {
-	// assume caseIgnoreMatch by default
-	funk := streqf
-	if len(cEM) > 0 {
-		if cEM[0] {
-			// use caseExactMatch
-			funk = streq
-		}
-	}
-
-	switch tv := r.(type) {
-	case string:
-		for i := 0; i < len(slice) && !match; i++ {
-			match = funk(tv, slice[i])
-		}
-	case []string:
-		for i := 0; i < len(tv) && !match; i++ {
-			for j := 0; j < len(slice) && !match; j++ {
-				match = funk(tv[i], slice[j])
-			}
-		}
-	}
-
-	return
-}
 
 /*
 sizeOfInt returns the byte size of i based on its magnitude.
@@ -182,7 +157,7 @@ func toPtr(rv reflect.Value) (ptr reflect.Value) {
 }
 
 func getTagMethod(x any) (func() int, bool) {
-	v := reflect.ValueOf(x)
+	v := refValueOf(x)
 	method := v.MethodByName("Tag")
 	if !method.IsValid() {
 		// Might be a SET or SEQUENCE.
@@ -199,7 +174,7 @@ func getTagMethod(x any) (func() int, bool) {
 		return nil, false
 	}
 
-	tagType := reflect.TypeOf(int(0))
+	tagType := refTypeOf(0)
 	if !mType.Out(0).AssignableTo(tagType) {
 		return nil, false
 	}
@@ -210,11 +185,6 @@ func getTagMethod(x any) (func() int, bool) {
 	}
 
 	return tagFunc, true
-}
-
-func stringBytes(s string) []byte {
-	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	return unsafe.Slice((*byte)(unsafe.Pointer(sh.Data)), sh.Len)
 }
 
 func effectiveTag(baseTag, baseClass int, o *Options) (int, int) {

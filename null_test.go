@@ -30,4 +30,55 @@ func TestNull_codecov(t *testing.T) {
 	null.Len()
 	null.IsPrimitive()
 	_ = null.String()
+	errorNullLengthNonZero(1)
+
+	nc := new(nullCodec[Null])
+	nc.encodeHook = func(b Null) ([]byte, error) {
+		return []byte{}, nil
+	}
+	nc.decodeHook = func(b []byte) (Null, error) {
+		return Null{}, nil
+	}
+	nc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+	nc.Tag()
+	nc.IsPrimitive()
+	_ = nc.String()
+	tpkt := &testPacket{}
+	bpkt := &BERPacket{}
+	_, _ = nc.write(tpkt, nil)
+	_, _ = nc.write(bpkt, nil)
+	nc.read(tpkt, TLV{}, nil)
+	bpkt.data = []byte{0x1, 0x1, 0xFF, 0xFF}
+	nc.read(tpkt, TLV{}, nil)
+	nc.read(bpkt, TLV{}, nil)
+
+	if f, ok := master[refTypeOf(Null{})]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(Null{}).(box)
+	}
+
+}
+
+func TestNull_customType(t *testing.T) {
+	type customNull Null
+	RegisterNullAlias[customNull](TagNull,
+		func([]byte) error { return nil },
+		func(customNull) ([]byte, error) { return nil, nil },
+		func([]byte) (customNull, error) { return customNull{}, nil },
+		func(customNull) error { return nil })
+
+	// We cheat here rather than writing a separate
+	// constructor merely for testing.
+	cust := customNull{}
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var out customNull
+	if err = Unmarshal(pkt, &out); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(refTypeOf(cust))
 }

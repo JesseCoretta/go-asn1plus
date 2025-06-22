@@ -509,10 +509,8 @@ func bcdRealRead[T any](c *realCodec[T], pkt Packet, tlv TLV, o *Options) (err e
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return

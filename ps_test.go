@@ -1,28 +1,9 @@
 package asn1plus
 
-import "testing"
-
-func TestPrintableString_customType(t *testing.T) {
-	type CustomPrintable PrintableString
-	RegisterTextAlias[CustomPrintable](TagPrintableString, nil, nil, nil, nil)
-
-	cust := CustomPrintable(`Testing`)
-
-	pkt, err := Marshal(cust, With(DER))
-	if err != nil {
-		t.Fatalf("%s failed [DER encoding]: %v", t.Name(), err)
-	}
-
-	var out CustomPrintable
-	if err = Unmarshal(pkt, &out); err != nil {
-		t.Fatalf("%s failed [DER decoding]: %v", t.Name(), err)
-	}
-
-	if string(out) != "Testing" {
-		t.Fatalf("%s failed [string cmp.]:\n\twant: Testing\n\tgot:  %s",
-			t.Name(), out)
-	}
-}
+import (
+	"fmt"
+	"testing"
+)
 
 func TestNewPrintableStringValid(t *testing.T) {
 	// Build a string that uses allowed characters.
@@ -32,7 +13,7 @@ func TestNewPrintableStringValid(t *testing.T) {
 		t.Fatalf("NewPrintableString(%q) returned error: %v", valid, err)
 	}
 	if ps.String() != valid {
-		t.Errorf("Expected PrintableString.String() = %q, got %q", valid, ps.String())
+		t.Fatalf("Expected PrintableString.String() = %q, got %q", valid, ps.String())
 	}
 }
 
@@ -44,21 +25,21 @@ func TestNewPrintableStringByteSlice(t *testing.T) {
 		t.Fatalf("NewPrintableString([]byte(%q)) returned error: %v", validStr, err)
 	}
 	if ps.String() != validStr {
-		t.Errorf("Expected PrintableString.String() = %q, got %q", validStr, ps.String())
+		t.Fatalf("Expected PrintableString.String() = %q, got %q", validStr, ps.String())
 	}
 }
 
 func TestNewPrintableStringEmpty(t *testing.T) {
 	_, err := NewPrintableString("")
 	if err == nil {
-		t.Error("Expected error for empty PrintableString input, got nil")
+		t.Fatalf("Expected error for empty PrintableString input, got nil")
 	}
 }
 
 func TestNewPrintableStringInvalidType(t *testing.T) {
 	_, err := NewPrintableString(12345)
 	if err == nil {
-		t.Error("Expected error for invalid type (int) for PrintableString, got nil")
+		t.Fatalf("Expected error for invalid type (int) for PrintableString, got nil")
 	}
 }
 
@@ -66,7 +47,7 @@ func TestNewPrintableStringInvalidCharacter(t *testing.T) {
 	invalid := "ABC@DEF"
 	_, err := NewPrintableString(invalid)
 	if err == nil {
-		t.Errorf("Expected error for PrintableString input %q with invalid character, got nil", invalid)
+		t.Fatalf("Expected error for PrintableString input %q with invalid character, got nil", invalid)
 	}
 }
 
@@ -78,16 +59,16 @@ func TestPrintableStringMethods(t *testing.T) {
 	}
 
 	if ps.String() != input {
-		t.Errorf("Expected PrintableString.String() to return %q, got %q", input, ps.String())
+		t.Fatalf("Expected PrintableString.String() to return %q, got %q", input, ps.String())
 	}
 
 	if ps.IsZero() {
-		t.Error("Expected IsZero() to return false for a non-empty PrintableString")
+		t.Fatal("Expected IsZero() to return false for a non-empty PrintableString")
 	}
 
 	var emptyPS PrintableString = ""
 	if !emptyPS.IsZero() {
-		t.Error("Expected IsZero() to return true for an empty PrintableString")
+		t.Fatal("Expected IsZero() to return true for an empty PrintableString")
 	}
 }
 
@@ -119,7 +100,107 @@ func TestPrintableString_encodingRules(t *testing.T) {
 }
 
 func TestPrintableString_codecov(_ *testing.T) {
-	ps, _ := NewPrintableString(`Hello.`)
+	ps, _ := NewPrintableString(`Hello`)
+	ps.Tag()
+	ps.Len()
 	ps.IsZero()
-	_, _ = NewPrintableString(ps)
+	ps.IsPrimitive()
+	_ = ps.String()
+	NewPrintableString(ps)
+	NewPrintableString(string(rune(0xFFFFF)))
+
+	badRune := uint32(0xD800)
+	b := []byte{
+		byte(badRune >> 24),
+		byte(badRune >> 16),
+		byte(badRune >> 8),
+		byte(badRune),
+	}
+	PrintableSpec(PrintableString(b))
+}
+
+type customPrintable PrintableString
+
+func (_ customPrintable) Tag() int          { return TagPrintableString }
+func (_ customPrintable) String() string    { return `` }
+func (_ customPrintable) IsPrimitive() bool { return true }
+
+func TestCustomPrintableString_withControls(t *testing.T) {
+	RegisterTextAlias[customPrintable](TagPrintableString, // any <X>String tag would do (except BitString)
+		// dummy decoding verifier -- nil is sufficient in most cases
+		func([]byte) error { return nil }, // verify decoder
+		// dummy decoder -- nil is sufficient in most cases
+		func(b []byte) (customPrintable, error) { return customPrintable(b), nil }, // custom decoder
+		// dummy encoder -- nil is sufficient in most cases
+		func(p customPrintable) ([]byte, error) { return []byte{0x48, 0x65, 0x6c, 0x6c, 0x6f}, nil }, // custom encoder
+		// asn1plus built-in PrintableString specification constraint
+		func(p customPrintable) error { return PrintableSpec(PrintableString(p)) },
+		// user-provided constraint(s) -- provide as many as
+		// desired, ordered in the most logical way. Leave
+		// empty if no custom constraints are needed.
+		LiftConstraint(func(o customPrintable) customPrintable { return o },
+			func(o customPrintable) (err error) {
+				for i := 0; i < len(o); i++ {
+					if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+						err = fmt.Errorf("Constraint violation: policy prohibits digits")
+						break
+					}
+				}
+				return
+			}),
+	)
+
+	var cust customPrintable = customPrintable("Hello")
+	cust.Tag()
+	cust.IsPrimitive()
+	_ = cust.String()
+
+	pkt, err := Marshal(cust, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var next customPrintable
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(refTypeOf(cust))
+}
+
+func ExamplePrintableString_withConstraints() {
+	// Prohibit use of any digit characters
+	digitConstraint := LiftConstraint(func(o PrintableString) PrintableString { return o },
+		func(o PrintableString) (err error) {
+			for i := 0; i < len(o); i++ {
+				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+					err = fmt.Errorf("Constraint violation: policy prohibits digits")
+					break
+				}
+			}
+			return
+		})
+
+	// Prohibit any lower-case ASCII letters
+	caseConstraint := LiftConstraint(func(o PrintableString) PrintableString { return o },
+		func(o PrintableString) (err error) {
+			for i := 0; i < len(o); i++ {
+				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+					break
+				}
+			}
+			return
+		})
+
+	// First try trips on a digit violation, so caseConstraint is never reached.
+	_, err := NewPrintableString(`A0B876EFFFF0`, digitConstraint, caseConstraint)
+	fmt.Println(err)
+
+	// Second try honors the digit policy, but fails on case folding.
+	_, err = NewPrintableString(`ABACFFfBECD`, digitConstraint, caseConstraint)
+	fmt.Println(err)
+
+	// Output:
+	// Constraint violation: policy prohibits digits
+	// Constraint violation: policy prohibits lower-case ASCII
 }

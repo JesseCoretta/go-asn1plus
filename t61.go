@@ -100,13 +100,13 @@ func init() {
 			return
 		}
 
-		isT61Char := func(ch rune) bool {
-			if ch < 0 || ch > 0xFFFF {
-				return false
+		isT61Char := func(ch rune) (is bool) {
+			if !(ch < 0 || ch > 0xFFFF) {
+				word := ch >> 6
+				bit := ch & 63
+				is = (t61Bitmap[word]>>bit)&1 != 0
 			}
-			word := ch >> 6
-			bit := ch & 63
-			return (t61Bitmap[word]>>bit)&1 != 0
+			return
 		}
 
 		for _, r := range []rune(o.String()) {

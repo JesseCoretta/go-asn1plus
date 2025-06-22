@@ -214,12 +214,18 @@ func tlvVerifyLengthState(r Packet, d []byte) (length, lenLen int, err error) {
 	return
 }
 
-func writeTLV(pkt Packet, t TLV, opts *Options) error {
-	if !pkt.Type().allowsIndefinite() && opts != nil && opts.Indefinite {
-		return mkerrf(pkt.Type().String(), " forbids indefinite length")
-	} else if !t.Type().isAnyOf(encodingRules...) && t.Type() != CER {
-		return mkerrf(pkt.Type().String(), " Packet.WriteTLV: expected ",
+func writeTLV(pkt Packet, t TLV, opts *Options) (err error) {
+	var indefBytes []byte
+	if (opts != nil && opts.Indefinite) || t.Length < 0 {
+		if !pkt.Type().allowsIndefinite() {
+			err = mkerrf(pkt.Type().String(), " forbids indefinite length")
+			return
+		}
+		indefBytes = []byte{0x00, 0x00}
+	} else if !t.Type().In(encodingRules...) {
+		err = mkerrf(pkt.Type().String(), " Packet.WriteTLV: expected ",
 			pkt.Type().String(), ", got ", t.Type().String())
+		return
 	}
 
 	encoded := encodeTLV(t, opts)
@@ -227,11 +233,10 @@ func writeTLV(pkt Packet, t TLV, opts *Options) error {
 
 	// Add end-of-contents for encoding rules that
 	// permit indefinite value lengths if present.
-	if t.Type().allowsIndefinite() && opts != nil && opts.Indefinite {
-		pkt.Append(0x00, 0x00)
-	}
+	pkt.Append(indefBytes...)
 	pkt.SetOffset(pkt.Len())
-	return nil
+
+	return
 }
 
 func sizeTLV(tag int, length int) (size int) {

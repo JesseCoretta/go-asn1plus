@@ -98,6 +98,39 @@ func TestMarshal_SequenceNested(t *testing.T) {
 
 func TestSequence_codecov(_ *testing.T) {
 	unmarshalSequence(reflect.ValueOf(struct{}{}), &BERPacket{}, nil)
+
+	type badSequence struct {
+		PrintableString `asn1:"AUTOMATIC,EXPLICIT"`
+	}
+	marshalSequence(refValueOf(badSequence{PrintableString("Yo")}), &BERPacket{}, &Options{Automatic: true, Explicit: true}, 0)
+
+	type choiceSequence struct {
+		PrintableString `asn1:"AUTOMATIC,EXPLICIT"`
+		Choice          `asn1:"EXPLICIT,choices:missingChoices"`
+	}
+
+	checkSequenceFieldCriticality("bogus", refValueOf(nil), false)
+
+	marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: OctetString(`theChosenOne`)}, &BERPacket{})
+	marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: `theChosenOne`}, &BERPacket{})
+
+	dat := []byte{
+		0x30, 0x1a, 0x04, 0x06, 0x48, 0x65, 0x6c, 0x6c,
+		0x6f, 0x30, 0x13, 0x06, 0x48, 0x65, 0x6c, 0x6c,
+		0x6f, 0x31, 0x30, 0x08, 0x0c, 0x06, 0x48, 0x65,
+		0x6c, 0x6c, 0x6f, 0x32,
+	}
+
+	unmarshalSequence(refValueOf(struct{}{}), &BERPacket{offset: 100, data: []byte{0x30, 0x1, 0x5}}, nil)
+	unmarshalSequence(refValueOf(struct{}{}), &BERPacket{offset: 21, data: dat}, nil)
+	type privateFields struct {
+		private OctetString
+	}
+	Unmarshal(&BERPacket{data: []byte{0x30, 0x1, 0x5}}, &privateFields{})
+	type bogusFieldTag struct {
+		PrintableString `asn1:"AUTOMATIC,EXPLICIT"`
+	}
+	Unmarshal(&BERPacket{data: []byte{0x30, 0x1, 0x5}}, &bogusFieldTag{})
 }
 
 func ExamplePacket_automaticTaggingBER() {

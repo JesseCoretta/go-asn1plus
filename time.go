@@ -486,40 +486,17 @@ func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
 		datePart = s
 	}
 
-	if err = _r.parseDuration(datePart, timePart); err != nil {
-		return Duration{}, err
-	}
-
-	// Helper to parse a numeric value ending with a given suffix.
-	//parseNumber := func(str string, suffix byte) (float64, string, error) {
-	//	idx := stridxb(str, suffix)
-	//	if idx < 0 {
-	//		return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
-	//	}
-	//	numStr := str[:idx]
-	//	// Replace comma with dot if necessary.
-	//	numStr = replace(numStr, ",", ".", 1)
-	//	num, err := pfloat(numStr, 64)
-	//	if err != nil {
-	//		return 0, str, mkerrf("error parsing number ", numStr, ": ", err.Error())
-	//	}
-	//	return num, str[idx+1:], nil
-	//}
-
-	//// Parse the date portion for Years, Months, Days.
-	//if err = _r.marshalYMD(datePart, parseNumber); err == nil {
-	//	err = _r.marshalHMS(timePart, parseNumber)
-	//}
-
-	err = checkDurationEmpty(_r, err)
-	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Duration] = constraints
-		err = group.Constrain(_r)
-	}
-
 	var r Duration
-	if err == nil {
-		r = _r
+	if err = _r.parseDuration(datePart, timePart); err == nil {
+		err = checkDurationEmpty(_r, err)
+		if len(constraints) > 0 && err == nil {
+			var group ConstraintGroup[Duration] = constraints
+			err = group.Constrain(_r)
+		}
+
+		if err == nil {
+			r = _r
+		}
 	}
 
 	return r, err
@@ -564,9 +541,12 @@ func (r *Duration) parseDuration(datePart, timePart string) (err error) {
 	// Helper to parse a numeric value ending with a given suffix.
 	parseNumber := func(str string, suffix byte) (float64, string, error) {
 		idx := stridxb(str, suffix)
-		if idx < 0 {
-			return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
-		}
+		/*
+			// COVERAGE: unreachable
+			if idx < 0 {
+				return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
+			}
+		*/
 		numStr := str[:idx]
 		// Replace comma with dot if necessary.
 		numStr = replace(numStr, ",", ".", 1)
@@ -709,8 +689,10 @@ ASN.1 primitive.
 */
 func (r Duration) IsPrimitive() bool { return true }
 
-// LessThan returns true if d is strictly less than other.
-func (r Duration) LessThan(other Duration) bool {
+/*
+Lt returns true if d is strictly less than other.
+*/
+func (r Duration) Lt(other Duration) bool {
 	if r.Years != other.Years {
 		return r.Years < other.Years
 	}
@@ -729,6 +711,11 @@ func (r Duration) LessThan(other Duration) bool {
 	return r.Seconds < other.Seconds
 }
 
+/*
+AddTo returns a new instance of [time.Time] following a call to
+[time.Time.Add] for the purpose of adding the receiver instance
+to ref.
+*/
 func (r Duration) AddTo(ref time.Time) time.Time {
 	t := ref.AddDate(r.Years, r.Months, r.Days)
 	additional := time.Duration(r.Hours)*time.Hour +
@@ -737,6 +724,9 @@ func (r Duration) AddTo(ref time.Time) time.Time {
 	return t.Add(additional)
 }
 
+/*
+String returns the string representation of the receiver instance.
+*/
 func (r Duration) String() string {
 	bld := newStrBuilder()
 	bld.WriteString("P")
@@ -954,14 +944,19 @@ func parseGeneralizedTime(s string) (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	loc, i, err := parseGTTimezone(s, i)
-	if err != nil {
-		return time.Time{}, err
+	/*
+		// COVERAGE: unreachable
+		if i != len(s) {
+			return time.Time{}, mkerr("Invalid ASN.1 GENERALIZED TIME")
+		}
+	*/
+
+	var loc *time.Location
+	var t time.Time
+	if loc, _, err = parseGTTimezone(s, i); err == nil {
+		t = time.Date(year, time.Month(mon), day, hr, min, sec, nsec, loc)
 	}
-	if i != len(s) {
-		return time.Time{}, mkerr("Invalid ASN.1 GENERALIZED TIME")
-	}
-	return time.Date(year, time.Month(mon), day, hr, min, sec, nsec, loc), nil
+	return t, err
 }
 
 func formatGeneralizedTime(t time.Time) string {
@@ -1144,28 +1139,29 @@ func parseUTCCore(s string) (yy, mm, dd, hr, mn, sc, next int, err error) {
 		}
 	}
 
-	hasSec := utcDigit(s[10])
-	if hasSec && len(s) < 13 {
-		err = mkerr("Invalid ASN.1 UTC TIME")
-		return
-	}
-	if hasSec && !utcDigit(s[11]) {
+	if len(s) >= 12 && utcDigit(s[11]) {
 		err = mkerr("Invalid ASN.1 UTC TIME")
 		return
 	}
 
+	hasSec := utcDigit(s[10])
 	yy = utcToInt(s[0], s[1])
 	mm = utcToInt(s[2], s[3])
 	dd = utcToInt(s[4], s[5])
 	hr = utcToInt(s[6], s[7])
 	mn = utcToInt(s[8], s[9])
-	sc = 0
-	next = 10
 
 	if hasSec {
 		sc = utcToInt(s[10], s[11])
 		next = 12
+		if len(s) < 13 {
+			err = mkerr("Invalid ASN.1 UTC TIME")
+		}
+	} else {
+		sc = 0
+		next = 10
 	}
+
 	return
 }
 
@@ -1205,25 +1201,23 @@ func parseUTCTimezone(s string, idx int) (loc *time.Location, err error) {
 	}
 }
 
-func parseUTCTime(s string) (time.Time, error) {
-	yy, mo, dd, hr, mn, sc, i, err := parseUTCCore(s)
-	if err != nil {
-		return time.Time{}, err
+func parseUTCTime(s string) (utc time.Time, err error) {
+	var yy, mo, dd, hr, mn, sc, i int
+	if yy, mo, dd, hr, mn, sc, i, err = parseUTCCore(s); err == nil {
+		var loc *time.Location
+		if loc, err = parseUTCTimezone(s, i); err == nil {
+			// two-digit year mapping (50-99 ⇒ 19xx, 00-49 ⇒ 20xx)
+			if yy < 50 {
+				yy += 2000
+			} else {
+				yy += 1900
+			}
+
+			utc = time.Date(yy, time.Month(mo), dd, hr, mn, sc, 0, loc)
+		}
 	}
 
-	loc, err := parseUTCTimezone(s, i)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// two-digit year mapping (50-99 ⇒ 19xx, 00-49 ⇒ 20xx)
-	if yy < 50 {
-		yy += 2000
-	} else {
-		yy += 1900
-	}
-
-	return time.Date(yy, time.Month(mo), dd, hr, mn, sc, 0, loc), nil
+	return
 }
 
 func formatUTCTime(t time.Time) string {
@@ -1342,10 +1336,8 @@ func bcdTemporalRead[T Temporal](c *temporalCodec[T], pkt Packet, tlv TLV, o *Op
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
@@ -1467,12 +1459,13 @@ func attachDefaults[Canon any, T Temporal](
 	// wrap decoder if the caller left it nil
 	if *dec == nil {
 		*dec = func(b []byte) (T, error) {
-			cVal, err := canonDec(b)
-			if err != nil {
-				var zero T
-				return zero, err
+			var cVal any
+			var val T
+			var err error
+			if cVal, err = canonDec(b); err == nil {
+				val = any(cVal).(T)
 			}
-			return any(cVal).(T), nil
+			return val, err
 		}
 	}
 	return true
@@ -1571,10 +1564,8 @@ func bcdDurationRead[T any](c *durationCodec[T], pkt Packet, tlv TLV, o *Options
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
@@ -1585,12 +1576,13 @@ func bcdDurationRead[T any](c *durationCodec[T], pkt Packet, tlv TLV, o *Options
 			if c.decodeHook != nil {
 				out, err = c.decodeHook(wire)
 			} else {
-				var datePart, timePart string
+				var (
+					datePart string = string(wire)
+					timePart string
+				)
 				if idx := idxr(string(wire), 'T'); idx != -1 {
 					datePart = string(wire)[:idx]
 					timePart = string(wire)[idx+1:]
-				} else {
-					datePart = string(wire)
 				}
 
 				var dur Duration
@@ -1612,8 +1604,7 @@ func bcdDurationRead[T any](c *durationCodec[T], pkt Packet, tlv TLV, o *Options
 }
 
 /*
-RegisterDurationAlias registers a custom alias of [Duration] for use in
-codec operations.
+RegisterDurationAlias registers a custom alias of [Duration] for use in codec operations.
 
 	// Create a custom type called Lease.
 	type Lease Duration

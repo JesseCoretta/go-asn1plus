@@ -100,7 +100,7 @@ func TimePointRangeConstraint[T Temporal](min, max T) Constraint[T] {
 func DurationRangeConstraint(min, max Duration) Constraint[Duration] {
 	return func(val Duration) error {
 		// If val is less than min or greater than max, reject.
-		if val.LessThan(min) || max.LessThan(val) {
+		if val.Lt(min) || max.Lt(val) {
 			return mkerrf("duration ", val.String(), " is not in the allowed range [",
 				min.String(), ", ", max.String(), "]")
 		}
@@ -188,7 +188,7 @@ func Ancestor[T any]() AncestralConstraint[T] {
 		return a == b
 	}
 
-	return func(ancestor, descendant []T) bool {
+	return func(ancestor, descendant []T) (ok bool) {
 		// If the candidate ancestor is longer than the descendant,
 		// it cannot be a prefix.
 		if len(ancestor) > len(descendant) {

@@ -13,7 +13,7 @@ import (
 
 // isSet returns true if the target's type is a slice.
 func isSet(target any, opts *Options) (set bool) {
-	t := derefTypePtr(reflect.TypeOf(target))
+	t := derefTypePtr(refTypeOf(target))
 	if t.Kind() == reflect.Slice {
 		var tag int = -1
 		if opts != nil {
@@ -39,16 +39,14 @@ func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) error {
 		found := false
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Type().Field(i)
-			if field.PkgPath != "" {
-				continue
-			}
-
-			// Dereference the field if needed.
-			f := derefValuePtr(v.Field(i))
-			if f.Kind() == reflect.Slice {
-				v = f
-				found = true
-				break
+			if field.PkgPath == "" {
+				// Dereference the field if needed.
+				f := derefValuePtr(v.Field(i))
+				if f.Kind() == reflect.Slice {
+					v = f
+					found = true
+					break
+				}
 			}
 		}
 		if !found {
@@ -110,17 +108,16 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts *Options) error {
 		found := false
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Type().Field(i)
-			if field.PkgPath != "" {
-				continue
-			}
-			f := derefValuePtr(v.Field(i))
-			if f.Kind() == reflect.Slice {
-				v = f
-				found = true
-				break
-			} else {
-				return mkerrf("unmarshalSet: struct field ", field.Name,
-					" is not a slice; got ", f.Kind().String())
+			if field.PkgPath == "" {
+				f := derefValuePtr(v.Field(i))
+				if f.Kind() == reflect.Slice {
+					v = f
+					found = true
+					break
+				} else {
+					return mkerrf("unmarshalSet: struct field ", field.Name,
+						" is not a slice; got ", f.Kind().String())
+				}
 			}
 		}
 		if !found {

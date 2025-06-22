@@ -2,9 +2,85 @@ package asn1plus
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
+
+func ExampleDate_withConstraint() {
+	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
+		func(o Temporal) (err error) {
+			deadline, _ := NewDate(`2014-12-31`)
+			if o.Cast().After(deadline.Cast()) {
+				err = fmt.Errorf("Constraint violation: you're late!")
+			}
+			return
+		})
+
+	_, err := NewDate(`2015-04-19`, deadlineConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: you're late!
+}
+
+func ExampleDateTime_withConstraint() {
+	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
+		func(o Temporal) (err error) {
+			deadline, _ := NewDateTime(`2014-12-31T23:59:59`)
+			if o.Cast().After(deadline.Cast()) {
+				err = fmt.Errorf("Constraint violation: you're late!")
+			}
+			return
+		})
+
+	_, err := NewDateTime(`2015-04-19T13:44:13`, deadlineConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: you're late!
+}
+
+func ExampleTimeOfDay_withConstraint() {
+	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
+		func(o Temporal) (err error) {
+			deadline, _ := NewTimeOfDay(`20:30:00`)
+			if o.Cast().After(deadline.Cast()) {
+				err = fmt.Errorf("Constraint violation: you're late!")
+			}
+			return
+		})
+
+	_, err := NewTimeOfDay(`22:44:13`, deadlineConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: you're late!
+}
+
+func ExampleGeneralizedTime_withConstraint() {
+	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
+		func(o Temporal) (err error) {
+			deadline, _ := NewGeneralizedTime(`20141231110451Z`)
+			if o.Cast().After(deadline.Cast()) {
+				err = fmt.Errorf("Constraint violation: you're late!")
+			}
+			return
+		})
+
+	_, err := NewGeneralizedTime(`20250620171207Z`, deadlineConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: you're late!
+}
+
+func ExampleUTCTime_withConstraint() {
+	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
+		func(o Temporal) (err error) {
+			deadline, _ := NewUTCTime(`6810310904Z`)
+			if o.Cast().After(deadline.Cast()) {
+				err = fmt.Errorf("Constraint violation: you're late!")
+			}
+			return
+		})
+
+	_, err := NewUTCTime(`9104051614Z`, deadlineConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: you're late!
+}
 
 func TestDuration_customType(t *testing.T) {
 	type CustomDur Duration
@@ -105,6 +181,17 @@ func ExampleDuration_AddTo() {
 	t := d1.AddTo(gt)
 	fmt.Printf("Time %s", t)
 	// Output: Time 2026-06-04 19:08:37 +0000 UTC
+}
+
+func ExampleDuration_Duration() {
+	d1, err := NewDuration("P1Y2M3DT4H5M30S")
+	if err != nil {
+		fmt.Println("Duration error:", err)
+		return
+	}
+	dur := d1.Duration()
+	fmt.Printf("%T: %s", dur, dur)
+	// Output: time.Duration: 10276h5m30s
 }
 
 func ExampleDuration_secondsMustBe30() {
@@ -581,6 +668,244 @@ func TestGeneralizedTime(t *testing.T) {
 	}
 }
 
+func TestFormatGeneralizedTime_FractionalSeconds(t *testing.T) {
+	cases := []struct {
+		nanos    int
+		expected string
+	}{
+		{999_999_000, ".999999"},
+		{123_450_000, ".12345"},
+		{100_000_000, ".1"},
+		{1_000_000, ".001"},
+		{1_000, ".000001"},
+		{999_999_999, ".999999"}, // because only µs precision used
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("nanos=%d", tc.nanos), func(t *testing.T) {
+			base := time.Date(2025, 6, 20, 15, 4, 5, tc.nanos, time.UTC)
+			got := formatGeneralizedTime(base)
+			suffix := tc.expected + "Z"
+			if !hasSfx(got, suffix) {
+				t.Errorf("expected suffix %q, got %q", suffix, got)
+			}
+		})
+	}
+}
+
+func TestParseTimeDuration_NegativeDuration(t *testing.T) {
+	// Example duration: -1 year, -2 months, -3 days, -4 hours, -5 minutes, -6.5 seconds
+	td := -(year*time.Duration(1) +
+		mon*time.Duration(2) +
+		day*time.Duration(3) +
+		4*time.Hour +
+		5*time.Minute +
+		time.Duration(6500)*time.Millisecond)
+
+	d := parseTimeDuration(td)
+
+	if d.Years != -1 || d.Months != -2 || d.Days != -3 ||
+		d.Hours != -4 || d.Minutes != -5 || int(d.Seconds) != -6 {
+		t.Errorf("parsed duration incorrect: %+v", d)
+	}
+
+	if d.Seconds > 0 {
+		t.Errorf("expected negative seconds, got %v", d.Seconds)
+	}
+}
+
+func TestDuration_Lt_FieldComparisons(t *testing.T) {
+	base := Duration{
+		Years:   1,
+		Months:  2,
+		Days:    3,
+		Hours:   4,
+		Minutes: 5,
+		Seconds: 6.7,
+	}
+
+	cases := []struct {
+		name     string
+		other    Duration
+		expected bool
+	}{
+		{
+			name: "Different Months",
+			other: Duration{
+				Years:   1,
+				Months:  3,
+				Days:    3,
+				Hours:   4,
+				Minutes: 5,
+				Seconds: 6.7,
+			},
+			expected: true,
+		},
+		{
+			name: "Different Minutes",
+			other: Duration{
+				Years:   1,
+				Months:  2,
+				Days:    3,
+				Hours:   4,
+				Minutes: 6,
+				Seconds: 6.7,
+			},
+			expected: true,
+		},
+		{
+			name:     "Same Duration",
+			other:    base,
+			expected: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := base.Lt(tc.other)
+			if got != tc.expected {
+				t.Errorf("%s: expected %v, got %v", tc.name, tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestParseNumber_MissingSuffix(t *testing.T) {
+	parseNumber := func(str string, suffix byte) (float64, string, error) {
+		idx := idxr(str, rune(suffix))
+		if idx < 0 {
+			return 0, str, fmt.Errorf("expected suffix %q not found in %q", suffix, str)
+		}
+		return 0, "", nil
+	}
+
+	_, _, err := parseNumber("123.45", 'X') // 'X' is not present
+	if err == nil || !cntns(err.Error(), "expected suffix") {
+		t.Errorf("expected missing suffix error, got: %v", err)
+	}
+}
+
+func Test_UTCHandler_WithOffset(t *testing.T) {
+	raw := "250101123045+0200"
+	sec := "05"
+	diff := "-0700"
+	format := "0601021504"
+
+	utc, err := uTCHandler(raw, sec, diff, format)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if time.Time(utc).Hour() != 12 {
+		t.Errorf("unexpected UTC hour: %v", utc)
+	}
+}
+
+func Test_parseUTCCore_InvalidDigits(t *testing.T) {
+	cases := []struct {
+		input string
+	}{
+		{"25A1011230Z"},
+		{"25010112A0Z"},
+		{"25010112304X"},
+		{"25010112304X"},
+		{"25010112307?"},
+		{"970104123455Z"},
+		{"9701041234554783957349Z"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.input, func(t *testing.T) {
+			_, _, _, _, _, _, _, err := parseUTCCore(c.input)
+			if err == nil {
+				t.Errorf("expected error for input %q, got nil", c.input)
+			}
+		})
+	}
+}
+
+func Test_parseUTCTimezone_OffsetConstruction(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		idx      int
+		expected int // offset in seconds
+	}{
+		{"PositiveOffset", "+0230", 0, (2*60 + 30) * 60},
+		{"NegativeOffset", "-0500", 0, -(5 * 60 * 60)},
+		{"MidnightOffset", "+0000", 0, 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			loc, err := parseUTCTimezone(c.input, c.idx)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if loc == nil || loc.String() != time.FixedZone("", c.expected).String() {
+				t.Errorf("unexpected zone: got %v, want offset %d", loc, c.expected)
+			}
+		})
+	}
+}
+
+func Test_parseUTCTime_ErrorsAndYearMapping(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		wantYear int
+		wantErr  bool
+	}{
+		{"InvalidCore", "25010A1230Z", 0, true},   // parseUTCCore fails
+		{"InvalidTZ", "2501011230X5", 0, true},    // parseUTCTimezone fails
+		{"Year2000s", "2401011230Z", 2024, false}, // yy = 24 → 2024
+		{"Year1900s", "7501011230Z", 1975, false}, // yy = 75 → 1975
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := parseUTCTime(c.input)
+			if c.wantErr {
+				if err == nil {
+					t.Errorf("expected error for input %q, got nil", c.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error for input %q: %v", c.input, err)
+				return
+			}
+			if got.Year() != c.wantYear {
+				t.Errorf("expected year %d, got %d", c.wantYear, got.Year())
+			}
+		})
+	}
+}
+
+func Test_parseUTCTimezone_InvalidCases(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		idx   int
+	}{
+		{"Empty input", "", 0},
+		{"Z not at end", "Z123", 0},
+		{"Offset too short", "+120", 0},
+		{"Offset non-digit", "+1X00", 0},
+		{"Offset overflow", "+2460", 0},
+		{"Invalid indicator", "*0000", 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			loc, err := parseUTCTimezone(c.input, c.idx)
+			if err == nil || loc != nil {
+				t.Errorf("expected error for input %q at idx %d, got loc=%v, err=%v",
+					c.input, c.idx, loc, err)
+			}
+		})
+	}
+}
+
 func TestTime_codecov(_ *testing.T) {
 	var t Time
 	t.Tag()
@@ -635,4 +960,120 @@ func TestTime_codecov(_ *testing.T) {
 	NewUTCTime(`9908041543`)
 	NewUTCTime(`990804154300`)
 	NewUTCTime(`990804154300-0700`)
+	parseCoreGTDateTime(`1`)
+	parseGTTimezone(`blarg`, 444)
+	parseGTTimezone("20250101123000Z1", 14)
+	parseGTTimezone("20250101123000+00", 14)
+	parseGTTimezone("20250101123000+0X30", 14)
+	parseGTTimezone("20250101123000+2460", 14)
+	parseGTTimezone("20250101123000X0000", 14)
+	parseGeneralizedTime("20250101123000+2X30")
+	parseGeneralizedTime("20250101123000ZEXTRA")
+	parseGeneralizedTime("20250101123000.123456ZEXTRA")
+
+	tc := new(temporalCodec[GeneralizedTime])
+	tc.write(&testPacket{}, nil)
+	tc.read(&testPacket{}, TLV{}, nil)
+	tc.Tag()
+	tc.IsPrimitive()
+	_ = tc.String()
+
+	if f, ok := master[reflect.TypeOf(GeneralizedTime(time.Time{}))]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(gt).(box)
+	}
+
+	dc := new(durationCodec[Duration])
+	dc.write(&testPacket{}, nil)
+	dc.read(&testPacket{}, TLV{}, nil)
+	dc.Tag()
+	dc.IsPrimitive()
+	_ = dc.String()
+
+	if f, ok := master[reflect.TypeOf(Duration{})]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(dur).(box)
+	}
+}
+
+type customGT GeneralizedTime
+
+func (_ customGT) Tag() int          { return TagGeneralizedTime }
+func (_ customGT) String() string    { return `` }
+func (_ customGT) IsPrimitive() bool { return true }
+func (r customGT) Cast() time.Time   { return time.Time(r) }
+
+func TestCustomTemporal_withControls(t *testing.T) {
+	RegisterTemporalAlias[customGT](TagGeneralizedTime,
+		func([]byte) error {
+			return nil
+		},
+		func(customGT) ([]byte, error) {
+			return []byte{0x1, 0x1, 0xFF}, nil
+		},
+		func([]byte) (customGT, error) {
+			return customGT(time.Now()), nil
+		},
+		nil)
+
+	var cust customGT = customGT(time.Now())
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var next customGT
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(reflect.TypeOf(cust))
+}
+
+type customD Duration
+
+func (_ customD) Tag() int          { return TagDuration }
+func (_ customD) String() string    { return `` }
+func (_ customD) IsPrimitive() bool { return true }
+
+func TestCustomDuration_withControls(t *testing.T) {
+	RegisterDurationAlias[customD](TagDuration,
+		func([]byte) error {
+			return nil
+		},
+		func(customD) ([]byte, error) {
+			return []byte{0x1, 0x1, 0xFF}, nil
+		},
+		func([]byte) (customD, error) {
+			return customD{}, nil
+		},
+		nil)
+
+	var cust customD
+
+	pkt, err := Marshal(cust, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var next customD
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(reflect.TypeOf(cust))
+}
+
+func Test_fillTemporalHooks_PanicsOnUnknownType(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+
+	// Define a dummy type not covered by the switch
+	var enc EncodeOverride[customGT]
+	var dec DecodeOverride[customGT]
+
+	// This should panic
+	fillTemporalHooks(enc, dec)
 }

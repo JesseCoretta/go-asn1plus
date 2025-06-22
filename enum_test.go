@@ -5,6 +5,37 @@ import (
 	"testing"
 )
 
+func TestCustomEnumerated_withControls(t *testing.T) {
+	orig, _ := NewEnumerated(123456, func(Enumerated) error {
+		return nil
+	})
+	var cust enum = enum(orig) // cheat
+
+	RegisterEnumeratedAlias[enum](TagEnum,
+		func([]byte) error {
+			return nil
+		},
+		func(enum) ([]byte, error) {
+			return []byte{0x9, 0x5, 0xc1, 0x3, 0x12, 0xd6, 0x87}, nil
+		},
+		func([]byte) (enum, error) {
+			return cust, nil
+		},
+		func(enum) error { return nil },
+		func(enum) error { return nil })
+
+	pkt, err := Marshal(cust, With(CER))
+	if err != nil {
+		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+	}
+
+	var next enum
+	if err = Unmarshal(pkt, &next); err != nil {
+		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+	}
+	unregisterType(refTypeOf(cust))
+}
+
 func ExampleEnumerated_roundTripBER() {
 	var e Enumerated = 3
 	pkt, err := Marshal(e, With(BER))
@@ -49,14 +80,59 @@ func ExampleEnumerated_roundTripDER() {
 	// Output: Known Enumerated: three (3)
 }
 
+type enum int
+
+func (_ enum) Tag() int          { return TagEnum }
+func (_ enum) String() string    { return `` }
+func (_ enum) IsPrimitive() bool { return true }
+
 func TestEnumerated_codecov(t *testing.T) {
+
+	RegisterEnumeratedAlias[enum](TagEnum,
+		func(b []byte) error { return nil },
+		func(b enum) ([]byte, error) {
+			return []byte{0x00}, nil
+		},
+		func(b []byte) (enum, error) {
+			return enum(3), nil
+		},
+		nil)
+
 	_, _ = NewEnumerated(struct{}{})
 	_, _ = NewEnumerated(Enumerated(3))
 	e, _ := NewEnumerated(3)
 	e.Tag()
+	_ = e.String()
 	e.IsPrimitive()
 	opts := &Options{}
 	opts.SetTag(4)
+
+	three, _ := NewInteger(3)
+	ec := new(enumeratedCodec[Enumerated])
+	ec.base = new(integerCodec[Integer])
+	ec.base.encodeHook = func(b Integer) ([]byte, error) {
+		return []byte{0x00}, nil
+	}
+	ec.base.decodeHook = func(b []byte) (Integer, error) {
+		return three, nil
+	}
+	ec.base.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+	ec.IsPrimitive()
+	ec.Tag()
+	_ = ec.String()
+	tpkt := &testPacket{}
+	bpkt := &BERPacket{}
+	_, _ = ec.write(tpkt, nil)
+	_, _ = ec.write(bpkt, nil)
+	ec.read(tpkt, TLV{}, nil)
+	bpkt.data = []byte{0x1, 0x1, 0xFF, 0xFF}
+	ec.read(tpkt, TLV{}, nil)
+	ec.read(bpkt, TLV{}, nil)
+
+	if f, ok := master[refTypeOf(Enumerated(3))]; ok {
+		_ = f.newEmpty().(box)
+		_ = f.newWith(Enumerated(3)).(box)
+	}
 
 	for _, rule := range encodingRules {
 		var pkt Packet

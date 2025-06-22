@@ -36,40 +36,44 @@ func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int
 
 	typ := v.Type()
 
-	for i := 0; i < v.NumField(); i++ {
+	for i := 0; i < v.NumField() && err == nil; i++ {
 		field := typ.Field(i)
-		// Skip unexported fields.
-		if field.PkgPath != "" {
-			continue
-		}
+		if field.PkgPath == "" {
 
-		// Begin with the implicit options for this field.
-		var fieldOpts *Options
-		if fieldOpts, err = extractOptions(field, i, auto); err != nil {
-			return
-		}
-
-		fv := v.Field(i)
-
-		// If the field is of type Choice, do our explicit CHOICE handling.
-		if ch, ok := fv.Interface().(Choice); ok {
-			if err = marshalSequenceChoiceField(fieldOpts, ch, pkt, sub, depth); err != nil {
-				err = mkerrf("marshalValue failed for CHOICE field ", field.Name, ": ", err.Error())
+			// Begin with the implicit options for this field.
+			var fieldOpts *Options
+			if fieldOpts, err = extractOptions(field, i, auto); err != nil {
 				return
 			}
-		} else {
-			// For all non-CHOICE fields, encode using fieldOpts.
-			if err = marshalValue(fv, sub, fieldOpts, depth+1); err != nil {
-				if !fieldOpts.Optional {
-					err = mkerrf("marshalValue failed for field ", field.Name, ": ", err.Error())
-					return
+
+			fv := v.Field(i)
+
+			if err = checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional); err == nil {
+				if ch, ok := fv.Interface().(Choice); ok {
+					// CHOICE field: do our explicit CHOICE handling.
+					err = marshalSequenceChoiceField(fieldOpts, ch, sub, depth)
+				} else {
+					// For all non-CHOICE fields, recurse marshalSequence
+					err = marshalValue(fv, sub, fieldOpts, depth+1)
 				}
 			}
 		}
 	}
 
-	// wrap the entire sequence from the sub-packet.
-	err = marshalSequenceWrap(sub, pkt, globalOpts, depth, seqTag)
+	if err == nil {
+		// wrap the entire sequence from the sub-packet.
+		err = marshalSequenceWrap(sub, pkt, globalOpts, depth, seqTag)
+	}
+
+	return
+}
+
+func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool) (err error) {
+	if !optional {
+		if fv.Kind() == reflect.Invalid || fv.Interface() == nil {
+			err = mkerrf("marshalSequence: missing required value for field ", name)
+		}
+	}
 
 	return
 }
@@ -97,68 +101,78 @@ func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err
 	return
 }
 
-func marshalSequenceChoiceField(opts *Options, ch Choice, pkt, sub Packet, depth int) (err error) {
+func marshalSequenceChoiceField(opts *Options, ch Choice, sub Packet, depth int) (err error) {
 	if ch.Tag != nil {
 		opts.choiceTag = ch.Tag
 		opts.SetClass(ClassContextSpecific)
 	}
 
 	if isPrimitive(ch.Value) {
-		if c, ok := toPtr(reflect.ValueOf(ch.Value)).Interface().(codecRW); ok {
-			_, err = c.write(sub, opts)
-		} else if bx, ok := createCodecForPrimitive(ch.Value); ok {
-			_, err = bx.write(sub, opts)
-		} else {
-			err = mkerr("no codec for CHOICE primitive")
-			return
-		}
-
-		if err == nil && ch.Explicit {
-			inner := sub.Data()[sub.Offset():] // bytes we just wrote
-			// rebuild the sub-packet to insert the wrapper
-			wrapped := pkt.Type().New()
-
-			var id byte
-			if ch.Tag != nil {
-				id = byte(ClassContextSpecific<<6) | 0x20 | byte(*ch.Tag)
-			} else {
-				id = byte(ClassContextSpecific<<6) | 0x20
-			}
-			wrapped.Append(id)
-			bufPtr := getBuf()
-			encodeLengthInto(pkt.Type(), bufPtr, len(inner))
-			wrapped.Append(*bufPtr...)
-			putBuf(bufPtr)
-			wrapped.Append(inner...)
-
-			// replace the old bytes in ‘sub’
-			nsub := pkt.Type().New(sub.Data()[:sub.Offset()]...)
-			nsub.Append(wrapped.Data()...)
-			sub = nsub
-		}
+		err = marshalSequenceChoiceFieldPrimitive(opts, ch, sub)
 	} else {
-		tmp := pkt.Type().New()
-		defer tmp.Free()
-		if err = marshalValue(reflect.ValueOf(ch.Value), tmp, opts, depth+1); err == nil {
-			innerEnc := tmp.Data()
-
-			// Now build an explicit wrapper using opts.
-			// The identifier for an explicit context-specific tag is computed as:
-			//    (opts.Class << 6) | 0x20 | byte((*opts.choiceTag))
-			// use context tag [N] (opts.choiceTag), and **NOT** the type tag
-			var explicitID byte
-			if opts.choiceTag != nil {
-				explicitID = byte(opts.Class()<<6) | 0x20 | byte((*opts.choiceTag))
-			}
-			sub.Append(explicitID)
-			bufPtr := getBuf()
-			encodeLengthInto(pkt.Type(), bufPtr, len(innerEnc))
-			sub.Append(*bufPtr...)
-			putBuf(bufPtr)
-			sub.Append(innerEnc...)
-		}
+		err = marshalSequenceChoiceFieldNonPrimitive(opts, ch, sub, depth)
 	}
 
+	return
+}
+
+func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub Packet, depth int) (err error) {
+	tmp := sub.Type().New()
+	defer tmp.Free()
+	if err = marshalValue(refValueOf(ch.Value), tmp, opts, depth+1); err == nil {
+		innerEnc := tmp.Data()
+
+		// Now build an explicit wrapper using opts.
+		// The identifier for an explicit context-specific tag is computed as:
+		//    (opts.Class << 6) | 0x20 | byte((*opts.choiceTag))
+		// use context tag [N] (opts.choiceTag), and **NOT** the type tag
+		id := marshalSequenceSetChoiceTag(opts.Class(), opts.choiceTag)
+		sub.Append(id)
+		bufPtr := getBuf()
+		encodeLengthInto(sub.Type(), bufPtr, len(innerEnc))
+		sub.Append(*bufPtr...)
+		putBuf(bufPtr)
+		sub.Append(innerEnc...)
+	}
+
+	return
+}
+
+func marshalSequenceChoiceFieldPrimitive(opts *Options, ch Choice, sub Packet) (err error) {
+	// COVERAGE: unreachable
+	//if c, ok := toPtr(refValueOf(ch.Value)).Interface().(codecRW); ok {
+	//_, err = c.write(sub, opts)
+	if bx, ok := createCodecForPrimitive(ch.Value); ok {
+		_, err = bx.write(sub, opts)
+	} else {
+		err = mkerr("marshalSequence: no codec for CHOICE primitive")
+	}
+
+	if err == nil && ch.Explicit {
+		inner := sub.Data()[sub.Offset():]
+		// rebuild the sub-packet to insert the wrapper
+		wrapped := sub.Type().New()
+		wrapped.Append(marshalSequenceSetChoiceTag(ClassContextSpecific, ch.Tag))
+		bufPtr := getBuf()
+		encodeLengthInto(sub.Type(), bufPtr, len(inner))
+		wrapped.Append(*bufPtr...)
+		putBuf(bufPtr)
+		wrapped.Append(inner...)
+
+		// replace the old bytes in sub
+		nsub := sub.Type().New(sub.Data()[:sub.Offset()]...)
+		nsub.Append(wrapped.Data()...)
+		sub = nsub
+	}
+
+	return
+}
+
+func marshalSequenceSetChoiceTag(class int, tag *int) (id byte) {
+	if tag == nil {
+		tag = new(int)
+	}
+	id = byte(class<<6) | 0x20 | byte(*tag)
 	return
 }
 
@@ -175,7 +189,7 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options *Options) (err error
 
 	start := pkt.Offset()
 	end := start + tlv.Length
-	if end > len(pkt.Data()) {
+	if end > pkt.Len() {
 		err = mkerr("unmarshalValue: insufficient data for SEQUENCE content")
 		return
 	}
@@ -203,30 +217,25 @@ func unmarshalSequence(v reflect.Value, pkt Packet, options *Options) (err error
 
 		opts := implicitOptions()
 		if field.Tag != "" {
-			if opts, err = extractOptions(field, i, auto); err != nil {
-				return
-			}
+			opts, err = extractOptions(field, i, auto)
 		}
-		opts.ChoicesMap = choicesMap
 
-		fv := v.Field(i)
-		switch fv.Interface().(type) {
-		case Choice, *Choice:
-			var alt Choice
-			if alt, err = selectFieldChoice(field.Name, v.Interface(), sub, opts); err == nil {
-				fv.Set(reflect.ValueOf(Choice{Value: alt.Value}))
-			}
-		default:
-			if err = unmarshalValue(sub, fv, opts); err != nil {
-				if !opts.Optional {
+		if err == nil {
+			opts.ChoicesMap = choicesMap
+
+			fv := v.Field(i)
+			switch fv.Interface().(type) {
+			case Choice, *Choice:
+				var alt Choice
+				if alt, err = selectFieldChoice(field.Name, v.Interface(), sub, opts); err == nil {
+					fv.Set(refValueOf(Choice{Value: alt.Value}))
+				}
+			default:
+				if err = unmarshalValue(sub, fv, opts); err != nil {
 					err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
-				} else {
-					// TODO: change this so that this is
-					// ignored ONLY if there was NO error
-					// **AND** no data. Optional should
-					// not "mask" a problem with (bogus)
-					// content assigned to the field.
-					err = nil
+					if berr := checkSequenceFieldCriticality(field.Name, fv, opts.Optional); berr == nil {
+						err = berr
+					}
 				}
 			}
 		}

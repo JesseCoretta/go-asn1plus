@@ -74,12 +74,12 @@ func ExampleListAdapters() {
 	// 2. Enumerate and filter for that keyword.
 	for _, ai := range ListAdapters() {
 		if ai.Keyword == "example" {
-			fmt.Printf("%s → %s  (keyword %q)\n", ai.GoType, ai.Primitive, ai.Keyword)
+			fmt.Printf("%s: %s  (keyword %q)\n", ai.GoType, ai.Primitive, ai.Keyword)
 		}
 	}
 
 	// Output:
-	// string → asn1plus.textCodec[github.com/JesseCoretta/go-asn1plus.UTF8String]  (keyword "example")
+	// string: asn1plus.textCodec[github.com/JesseCoretta/go-asn1plus.UTF8String]  (keyword "example")
 }
 
 func testMust[T any](v T, err error) T {

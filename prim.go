@@ -205,22 +205,20 @@ func isPrimitive(target any) (primitive bool) {
 	return
 }
 
-func createCodecForPrimitive(val any) (box, bool) {
-	// Already a codec?
-	if c, ok := val.(box); ok {
-		return c, true
+func createCodecForPrimitive(val any) (c box, ok bool) {
+	if c, ok = val.(box); !ok {
+		rt := reflect.TypeOf(val)
+		if rt.Kind() == reflect.Ptr {
+			rt = rt.Elem()
+		}
+
+		// Does the generic factory know this primitive?
+		var f factories
+		if f, ok = master[rt]; ok {
+			c = f.newEmpty().(box)
+			c.setVal(val)
+		}
 	}
 
-	rt := reflect.TypeOf(val)
-	if rt.Kind() == reflect.Ptr {
-		rt = rt.Elem() // factories keyed by non-pointer concrete type
-	}
-
-	// Does the generic factory know this primitive?
-	if f, ok := master[rt]; ok {
-		c := f.newEmpty().(box)
-		c.setVal(val)
-		return c, true
-	}
-	return nil, false
+	return
 }

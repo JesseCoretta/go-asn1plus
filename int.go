@@ -293,8 +293,8 @@ type integerCodec[T any] struct {
 	cg  ConstraintGroup[Integer]
 
 	decodeVerify []DecodeVerifier
-	encodeHook   EncodeOverride[Integer]
-	decodeHook   DecodeOverride[Integer]
+	encodeHook   EncodeOverride[T]
+	decodeHook   DecodeOverride[T]
 }
 
 func toInt[T any](v T) Integer   { return *(*Integer)(unsafe.Pointer(&v)) }
@@ -324,7 +324,7 @@ func bcdIntegerWrite[T any](c *integerCodec[T], pkt Packet, o *Options) (off int
 	if err = c.cg.Constrain(intVal); err == nil {
 		var wire []byte
 		if c.encodeHook != nil {
-			wire, err = c.encodeHook(intVal)
+			wire, err = c.encodeHook(c.val)
 		} else {
 			var bi *big.Int
 			if intVal.big {
@@ -367,10 +367,8 @@ func bcdIntegerRead[T any](c *integerCodec[T], pkt Packet, tlv TLV, o *Options) 
 	if err == nil {
 
 		decodeVerify := func() (err error) {
-			for _, vfn := range c.decodeVerify {
-				if err = vfn(wire); err != nil {
-					break
-				}
+			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+				err = c.decodeVerify[i](wire)
 			}
 
 			return
@@ -379,7 +377,9 @@ func bcdIntegerRead[T any](c *integerCodec[T], pkt Packet, tlv TLV, o *Options) 
 		if err = decodeVerify(); err == nil {
 			var out Integer
 			if c.decodeHook != nil {
-				out, err = c.decodeHook(wire)
+				var t T
+				t, err = c.decodeHook(wire)
+				out = toInt(t)
 			} else {
 				bi := decodeIntegerContent(wire)
 				if bi.IsInt64() {
@@ -404,8 +404,8 @@ func bcdIntegerRead[T any](c *integerCodec[T], pkt Packet, tlv TLV, o *Options) 
 func RegisterIntegerAlias[T any](
 	tag int,
 	verify DecodeVerifier,
-	encoder EncodeOverride[Integer],
-	decoder DecodeOverride[Integer],
+	encoder EncodeOverride[T],
+	decoder DecodeOverride[T],
 	spec Constraint[Integer],
 	user ...Constraint[Integer],
 ) {

@@ -112,10 +112,6 @@ func (k ClassFieldKind) NewField(
 	}
 
 	rt := reflect.TypeOf(prototype)
-	if rt == nil {
-		return ClassField{}, mkerrf("ClassField ", label, ": reflect.TypeOf returned nil")
-	}
-
 	return ClassField{
 		Label: label,
 		Kind:  k,

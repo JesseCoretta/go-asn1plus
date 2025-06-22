@@ -150,7 +150,7 @@ func TestSequence_choiceAutomaticTagging(t *testing.T) {
 	//t.Logf("%s\n", mine2.Field2.Value.(ObjectIdentifier))
 
 	// coverage
-	marshalSequenceChoiceField(&Options{}, Choice{Value: OctetString("hi"), Explicit: true}, pkt, pkt, 1)
+	marshalSequenceChoiceField(&Options{}, Choice{Value: OctetString("hi"), Explicit: true}, pkt, 1)
 }
 
 func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
