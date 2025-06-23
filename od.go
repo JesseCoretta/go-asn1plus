@@ -28,7 +28,7 @@ func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (Ob
 		str = tv
 	case []byte:
 		str = string(tv)
-	case ObjectDescriptor:
+	case Primitive:
 		str = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 OBJECT DESCRIPTOR")

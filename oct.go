@@ -19,7 +19,7 @@ func NewOctetString(x any, constraints ...Constraint[OctetString]) (oct OctetStr
 		str = string(tv)
 	case string:
 		str = tv
-	case OctetString:
+	case Primitive:
 		str = tv.String()
 	default:
 		err = mkerr("Invalid type for ASN.1 OCTET STRING")
