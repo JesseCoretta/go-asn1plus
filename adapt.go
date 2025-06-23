@@ -874,10 +874,10 @@ func registerMiscAdapters() {
 	)
 
 	RegisterAdapter[Boolean, bool](
-		func (b bool, cs ...Constraint[Boolean]) (Boolean, error) {
+		func(b bool, cs ...Constraint[Boolean]) (Boolean, error) {
 			return NewBoolean(b, cs...)
 		},
-		func (p *Boolean) bool { return bool(*p) },
+		func(p *Boolean) bool { return bool(*p) },
 		"", "boolean", "bool",
 	)
 }

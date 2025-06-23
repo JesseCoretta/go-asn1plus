@@ -6,25 +6,25 @@ import (
 )
 
 func ExampleBoolean_viaGoBool() {
-        pkt, err := Marshal(true, With(BER))
+	pkt, err := Marshal(true, With(BER))
 
-        if err != nil {
-                fmt.Println(err)
-                return
-        }
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-        fmt.Printf("Boolean encoding: %s\n", pkt.Hex())
+	fmt.Printf("Boolean encoding: %s\n", pkt.Hex())
 
-        var b bool
-        if err = Unmarshal(pkt, &b); err != nil {
-                fmt.Println(err)
-                return
-        }
+	var b bool
+	if err = Unmarshal(pkt, &b); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-        fmt.Printf("Boolean: %t", b)
-        // Output:
-        // Boolean encoding: 01 01 FF
-        // Boolean: true
+	fmt.Printf("Boolean: %t", b)
+	// Output:
+	// Boolean encoding: 01 01 FF
+	// Boolean: true
 }
 
 func TestNewBoolean(t *testing.T) {
