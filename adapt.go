@@ -870,7 +870,15 @@ func registerMiscAdapters() {
 			return NewObjectDescriptor(s, cs...)
 		},
 		func(p *ObjectDescriptor) string { return string(*p) },
-		"descriptor", "objectdescriptor",
+		"descriptor", "objectdescriptor", "object-descriptor",
+	)
+
+	RegisterAdapter[Boolean, bool](
+		func (b bool, cs ...Constraint[Boolean]) (Boolean, error) {
+			return NewBoolean(b, cs...)
+		},
+		func (p *Boolean) bool { return bool(*p) },
+		"", "boolean", "bool",
 	)
 }
 
