@@ -14,7 +14,10 @@ interface.
 Instances of this type may be created using [Marshal] with the [BER]
 encoding rule constant.
 
-See also [DERPacket], which extends from this type.
+See also [CERPacket] and [DERPacket], both of which extend from this
+type.
+
+[ITU-T Rec. X.690]: https://www.itu.int/rec/T-REC-X.690
 */
 type BERPacket struct {
 	data   []byte
