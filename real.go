@@ -47,8 +47,8 @@ type Real struct {
 	Special RealSpecial
 
 	// If Special == RealNormal, then the REAL’s value will be Mantissa × Base^Exponent
-	Mantissa Integer // The integer m; may be negative; use a *big.Int for arbitrary precision
-	Base     int     // The base (typically 2 or 10)
+	Mantissa Integer // The integer m; may be negative
+	Base     int     // The base (typically 2, 8, 10 or 16)
 	Exponent int     // The exponent
 }
 

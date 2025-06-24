@@ -743,6 +743,12 @@ func registerNumericalAdapters() {
 		"", "real10", "real",
 	)
 
+	RegisterAdapter[Real, float64](
+		wrapRealCtor(16, float64ToRealParts),
+		func(p *Real) float64 { return p.Float() },
+		"real16",
+	)
+
 	RegisterAdapter[Real, *big.Float](
 		wrapRealCtor(2, bigFloatToRealParts),
 		func(p *Real) *big.Float { return p.Big() },
@@ -759,6 +765,12 @@ func registerNumericalAdapters() {
 		wrapRealCtor(10, bigFloatToRealParts),
 		func(p *Real) *big.Float { return p.Big() },
 		"real10",
+	)
+
+	RegisterAdapter[Real, *big.Float](
+		wrapRealCtor(16, bigFloatToRealParts),
+		func(p *Real) *big.Float { return p.Big() },
+		"real16",
 	)
 }
 
