@@ -272,8 +272,18 @@ func unmarshalValue(pkt Packet, v reflect.Value, opts *Options) (err error) {
 		v = v.Elem()
 	}
 
+	v = unwrapInterface(v)
+
 	opts = deferImplicit(opts)
 	kw := opts.Identifier
+
+	if v.Type() == reflect.TypeOf(Choice{}) {
+		var alt Choice
+		if alt, err = selectFieldChoice("", struct{}{}, pkt, opts); err == nil {
+			v.Set(reflect.ValueOf(alt))
+		}
+		return
+	}
 
 	if ad, ok := adapterForValue(v, kw); ok {
 		codec := ad.newCodec()

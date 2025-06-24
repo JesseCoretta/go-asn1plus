@@ -271,6 +271,13 @@ there needed to be a way to differentiate them.
 */
 func getChoicesMethod(field string, x any) (func() Choices, bool) {
 	v := refValueOf(x)
+	if !v.IsValid() {
+		return nil, false
+	}
+	if field == "" {
+		return nil, false
+	}
+
 	method := v.MethodByName(field + "Choices")
 	if !method.IsValid() {
 		return nil, false
@@ -330,6 +337,9 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 			// IMPORTANT: Extract the explicit context tag from the outer TLV.
 			// This ensures that the opts used for choosing the candidate get a valid tag.
 			extractedTag := tlv.Tag // For example, if identifier is 0xA4, then extractedTag will be 4.
+			if tlv.Class == ClassUniversal && opts.HasTag() {
+				extractedTag = opts.Tag()
+			}
 			// Build a structTag string that will be used for candidate matching.
 			opts.choiceTag = &extractedTag // Now opts.Tag is properly set (instead of -1).
 			structTag = "choice:tag:" + itoa((*opts.choiceTag))

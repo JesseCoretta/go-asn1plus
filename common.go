@@ -98,6 +98,14 @@ func derefValuePtr(v reflect.Value) reflect.Value {
 	return v
 }
 
+func unwrapInterface(val reflect.Value) reflect.Value {
+	// Loop until val is neither an interface nor a pointer.
+	for (val.Kind() == reflect.Interface || val.Kind() == reflect.Ptr) && !val.IsNil() {
+		val = val.Elem()
+	}
+	return val
+}
+
 func isBool(x string) bool {
 	_, err := pbool(x)
 	return err == nil

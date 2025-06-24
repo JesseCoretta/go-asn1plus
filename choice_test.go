@@ -6,6 +6,68 @@ import (
 	"testing"
 )
 
+var testFilterChoices Choices
+
+type testAttributeValueAssertion struct {
+	Desc  OctetString
+	Value OctetString
+}
+
+type testFilterPresent struct {
+	Desc OctetString
+}
+
+type testEqualityMatch testAttributeValueAssertion
+type testFilter = Choice
+
+func TestChoice_SetOfChoice(t *testing.T) {
+
+	// Construct the inner filter elements:
+	// A testFilterPresent instance for (objectClass=*)
+	present := &Choice{
+		Value:    testFilterPresent{Desc: OctetString("objectClass")},
+		Explicit: true,
+	}
+	present.SetTag(7)
+
+	// An testEqualityMatch instance for (cn=Bill Smith)
+	eqMatch := &Choice{
+		Value:    testEqualityMatch(testAttributeValueAssertion{Desc: OctetString("cn"), Value: OctetString("Bill Smith")}),
+		Explicit: true,
+	}
+	eqMatch.SetTag(3)
+
+	// The outer filter is an "and" (registered as a slice of *filter with tag 0)
+	// Since filter is an alias for Choice, the Value must be a slice of *filter.
+	// Note: We take the addresses of our inner elements.
+	var F testFilter = Choice{
+		Value:    []*testFilter{(*testFilter)(present), (*testFilter)(eqMatch)},
+		Explicit: true,
+	}
+	F.SetTag(0)
+
+	opts := Options{
+		Choices: "filter",
+		ChoicesMap: map[string]Choices{
+			"filter": testFilterChoices,
+		},
+	}
+
+	pkt, err := Marshal(F, With(BER, opts))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	//t.Logf("Encoding: %s\n", pkt.Hex())
+
+	var F2 testFilter
+	if err = Unmarshal(pkt, &F2, With(opts)); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	//t.Logf("%#v\n", F2)
+}
+
 func TestChoice_ContextTagging(t *testing.T) {
 	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
 	tagVal := "choice:tag:3"
@@ -402,4 +464,12 @@ func TestChoice_ConcurrentUseDataRace(t *testing.T) {
 	wg.Wait()
 	// With current mutable slice, the -race tool reports:
 	// "WARNING: DATA RACE" (append while readers iterate).
+}
+
+func init() {
+	testFilterChoices = NewChoices()
+	testFilterChoices.Register([]*testFilter(nil), `choice:tag:0`) // and
+	testFilterChoices.Register([]*testFilter(nil), `choice:tag:1`) // or
+	testFilterChoices.Register(&testEqualityMatch{}, `choice:tag:3`)
+	testFilterChoices.Register(&testFilterPresent{}, `choice:tag:7`)
 }
