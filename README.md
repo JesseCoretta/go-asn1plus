@@ -13,6 +13,8 @@ The `asn1plus` package is released under the terms of the MIT license. See the L
 
 This package is under heavy development and is **HIGHLY EXPERIMENTAL**. As such, it should NOT be used in a mission-critical capacity at this time.
 
+Go version 1.21 or later is required
+
 ## Help Wanted!
 
 As indicated by the above badge, I am actively looking for experienced open source volunteers who have a keen grasp of ASN.1, encoding rules and other relevant components.
@@ -46,7 +48,6 @@ This package relies upon the following packages from the standard library:
   - `math/bits`
   - `reflect`
   - `slices`
-  - `sort`
   - `strconv`
   - `strings`
   - `sync`
