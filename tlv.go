@@ -262,8 +262,9 @@ func sizeTLV(tag int, length int) (size int) {
 encodeBase128Int returns the []byte encoding of an integer
 as base-128 (for long-form tags).
 */
-func encodeBase128Int(value int) []byte {
-	var out []byte
+func encodeBase128Int(value int) (enc []byte) {
+	bufPtr := getBuf()
+	out := *bufPtr
 	for {
 		b := byte(value & 0x7f)
 		value >>= 7
@@ -276,7 +277,11 @@ func encodeBase128Int(value int) []byte {
 			break
 		}
 	}
-	return out
+
+	enc = append([]byte(nil), out...)
+	putBuf(bufPtr)
+
+	return
 }
 
 /*

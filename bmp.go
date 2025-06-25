@@ -96,22 +96,27 @@ need not be specified manually as a [Constraint] by the end user.
 var BMPSpec Constraint[BMPString]
 
 func buildBMP(e string) (out []byte, err error) {
-	out = []byte{byte(TagBMPString)}
+	bufPtr := getBuf()
+	_out := *bufPtr
+	_out = append(_out, byte(TagBMPString))
 
 	// empty string → tag, length 0
 	if len(e) == 0 {
-		out = append(out, 0)
+		_out = append(_out, 0)
 	} else {
 		encoded := utf16Enc([]rune(e))
 		if len(encoded) > 255 {
 			err = mkerr("input string too long for BMPString encoding")
 		} else {
-			out = append(out, byte(len(encoded)))
+			_out = append(_out, byte(len(encoded)))
 			for _, ch := range encoded {
-				out = append(out, byte(ch>>8), byte(ch&0xFF))
+				_out = append(_out, byte(ch>>8), byte(ch&0xFF))
 			}
 		}
 	}
+
+	out = _out
+	putBuf(bufPtr)
 
 	return
 }
