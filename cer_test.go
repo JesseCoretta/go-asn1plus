@@ -12,6 +12,8 @@ func TestCER_codecov(_ *testing.T) {
 	pkt.Type().OID()
 	bts := make([]byte, 4)
 	encodeCERLengthInto(&bts, -1)
+	decodeCERLength([]byte{}, 10)
+	decodeCERLength([]byte{0x82, 0x01}, 0)
 }
 
 func TestCERPacket_OutOfBoundsGuards(t *testing.T) {

@@ -25,6 +25,9 @@ func TestCommon_codecov(_ *testing.T) {
 	getTagMethod(pdv)
 	getTagMethod([]any{1, 2, 3})
 	getTagMethod(iface)
+
+	var wrapped any = &oct
+	unwrapInterface(refValueOf(wrapped))
 }
 
 type (

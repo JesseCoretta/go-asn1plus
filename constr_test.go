@@ -3,6 +3,7 @@ package asn1plus
 import (
 	"fmt"
 	"strings"
+	"testing"
 	"time"
 )
 
@@ -635,4 +636,24 @@ func ExampleLiftConstraint() {
 	constraint := LiftConstraint(func(i Integer) Integer { return i }, allowedRange)
 	fmt.Printf("%T\n", constraint)
 	// Output: asn1plus.Constraint[github.com/JesseCoretta/go-asn1plus.Integer]
+}
+
+func TestConstraint_codecov(t *testing.T) {
+	slice1 := []string{"1", "3", "6", "1", "4", "1", "1"}
+	slice2 := []string{"1", "3", "6", "1", "5", "1"}
+
+	ac := Ancestor[string]()
+	ac(slice1, slice2)
+
+	equality := Equality[int]()
+	equality(1, 2)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+
+	RegisterTaggedConstraintGroup("duplicateConstraints", ConstraintGroup[OctetString]{})
+	RegisterTaggedConstraintGroup("duplicateConstraints", ConstraintGroup[OctetString]{})
 }

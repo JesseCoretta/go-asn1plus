@@ -176,13 +176,12 @@ Ancestor returns an instance of [AncestralConstraint] that checks if two
 slice types are ancestrally linked.
 */
 func Ancestor[T any]() AncestralConstraint[T] {
-	isEqual := func(a, b any) bool {
+	isEqual := func(a, b any) (eq bool) {
 		if sa, ok := any(a).(interface{ String() string }); ok {
-			sb, ok := any(b).(interface{ String() string })
-			if !ok {
-				return false
+			if sb, ok := any(b).(interface{ String() string }); ok {
+				eq = sa.String() == sb.String()
 			}
-			return sa.String() == sb.String()
+			return
 		}
 		// Fallback: if T does not implement String, rely on direct equality.
 		return a == b
