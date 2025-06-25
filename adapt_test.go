@@ -135,7 +135,8 @@ func TestWrapOIDCtor(t *testing.T) {
 		t.Fatalf("returned OID mismatch: got %v want %v", oid, want)
 	}
 
-	if len(rawArgs) != 2 { // first arg + one constraint
+	if len(rawArgs) != 2 {
+		// first arg + one constraint
 		t.Fatalf("raw received %d args, want 2", len(rawArgs))
 	}
 	if rawArgs[0] != "1.2.840" {
@@ -195,4 +196,17 @@ func TestWrapTemporalCtor(t *testing.T) {
 	if !gotTime.Equal(now) || !csTouched {
 		t.Fatalf("temporal wrapper failed to forward parameters/constraints")
 	}
+}
+
+func TestAdapter_ValueOfShouldPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+
+	value := "badIdea"
+	wrapped := &value
+	badIdea := &wrapped
+	valueOf[string](badIdea)
 }

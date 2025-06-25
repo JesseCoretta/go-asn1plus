@@ -104,52 +104,42 @@ func RegisterAdapter[T any, GoT any](
 	var zero T
 	rt := refTypeOf(zero) // concrete T (value)
 
-	newCodec := func() Primitive {
+	newCodec := func() (p Primitive) {
+		p = any(&zero).(Primitive)   // placeholder fallback
 		if f, ok := master[rt]; ok { // generic codec exists
-			return f.newEmpty()
+			p = f.newEmpty()
 		}
-		// legacy fallback: assume *T still has read/write
-		return any(&zero).(Primitive)
+		return
 	}
 
 	// Build toGo / fromGo that work for BOTH cases
-	toGo := func(p Primitive) any {
+	toGo := func(p Primitive) (a any) {
 		// generic path
 		if bx, ok := p.(interface{ getVal() any }); ok {
 			val := bx.getVal().(T)
-			return asGo(&val)
+			a = asGo(&val)
 		}
-		// legacy pointer path
-		return asGo(any(p).(*T))
+		return
 	}
 
-	fromGo := func(g any, prim Primitive, opts *Options) error {
+	fromGo := func(g any, prim Primitive, opts *Options) (err error) {
 		cs, err := collectConstraint[T](opts.Constraints)
-		if err != nil {
-			return err
+		if err == nil {
+			if goVal, ok := g.(GoT); !ok {
+				err = mkerrf("adapter: expected ", refTypeOf(*new(GoT)).String(), " got ", refTypeOf(g).String())
+			} else {
+				var val T
+				if val, err = ctor(goVal, cs...); err == nil {
+					if bx, ok := prim.(interface{ setVal(any) }); ok {
+						bx.setVal(val)
+					} else {
+						err = errorCodecNotFound
+					}
+				}
+			}
 		}
 
-		goVal, ok := g.(GoT)
-		if !ok {
-			want := refTypeOf(*new(GoT)).String()
-			got := refTypeOf(g).String()
-			return mkerrf("adapter: expected ", want, " got ", got)
-		}
-
-		val, err := ctor(goVal, cs...)
-		if err != nil {
-			return err
-		}
-
-		// generic codec?
-		if bx, ok := prim.(interface{ setVal(any) }); ok {
-			bx.setVal(val)
-			return nil
-		}
-
-		// legacy pointer codec
-		*(any(prim).(*T)) = val
-		return nil
+		return
 	}
 
 	// Store the adapter under all requested aliases
@@ -529,12 +519,13 @@ func buildAdapter(f factories, seed any) adapter {
 	return adapter{
 		newCodec: func() Primitive { return f.newEmpty() },
 		toGo:     func(p Primitive) any { return p.(box).getVal() },
-		fromGo: func(g any, p Primitive, _ *Options) error {
+		fromGo: func(g any, p Primitive, _ *Options) (_ error) {
+			p.(box).setVal(seed)
 			if g == nil {
-				g = seed
-			} // encode path: seed is original value
-			p.(box).setVal(g)
-			return nil
+				// encode path: seed is original value
+				p.(box).setVal(g)
+			}
+			return
 		},
 	}
 }
@@ -778,13 +769,13 @@ func registerTemporalAliasAdapters() {
 	RegisterAdapter[GeneralizedTime, time.Time](
 		wrapTemporalCtor[GeneralizedTime](NewGeneralizedTime),
 		func(p *GeneralizedTime) time.Time { return time.Time(*p) },
-		"gt", "generalizedtime",
+		"gt", "generalizedtime", "generalized-time",
 	)
 
 	RegisterAdapter[UTCTime, time.Time](
 		wrapTemporalCtor[UTCTime](NewUTCTime),
 		func(p *UTCTime) time.Time { return time.Time(*p) },
-		"utc", "utctime",
+		"utc", "utctime", "utc-time",
 	)
 
 	RegisterAdapter[Date, time.Time](
@@ -803,6 +794,12 @@ func registerTemporalAliasAdapters() {
 		wrapTemporalCtor[TimeOfDay](NewTimeOfDay),
 		func(p *TimeOfDay) time.Time { return time.Time(*p) },
 		"time-of-day", "timeofday",
+	)
+
+	RegisterAdapter[Time, time.Time](
+		wrapTemporalCtor[Time](NewTime),
+		func(p *Time) time.Time { return time.Time(*p) },
+		"time",
 	)
 
 	RegisterAdapter[GeneralizedTime, string](
@@ -833,6 +830,12 @@ func registerTemporalAliasAdapters() {
 		wrapTemporalStringCtor[TimeOfDay](NewTimeOfDay, parseTimeOfDay),
 		func(p *TimeOfDay) string { return formatTimeOfDay(time.Time(*p)) },
 		"time-of-day", "timeofday",
+	)
+
+	RegisterAdapter[Time, string](
+		wrapTemporalStringCtor[Time](NewTime, parseTime),
+		func(p *Time) string { return formatTime(time.Time(*p)) },
+		"time",
 	)
 }
 
