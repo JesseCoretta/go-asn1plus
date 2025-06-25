@@ -28,6 +28,7 @@ var (
 	errorTruncatedLength       error = mkerr("packet length is truncated")
 	errorLengthTooLarge        error = mkerr("length bytes too large (>4 octets)")
 	errorRuleNotImplemented    error = mkerr("encoding rule not yet implemented")
+	errorCodecNotFound         error = mkerr("codec not found")
 )
 
 func errorBadTypeForConstructor(asn1Type string, inputType any) (err error) {
