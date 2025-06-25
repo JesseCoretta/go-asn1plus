@@ -147,7 +147,7 @@ type encodingConfig struct {
 /*
 With encapsulates instances of [EncodingRule] and [Options] into a single payload for
 submission to [Marshal] and [Unmarshal]. This function is intended to be executed
-in-line as a variadic input value to [Marshal] and [Unmarshal]
+in-line as a variadic input value to [Marshal] and [Unmarshal].
 
 It is unnecessary -- but harmless -- to include an [EncodingRule] when submitting to
 [Unmarshal], as the input [Packet] instance knows what [EncodingRule] it implements.
