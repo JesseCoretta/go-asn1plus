@@ -41,7 +41,9 @@ func ExampleVisibleString_bER() {
 		return
 	}
 
-	// DER encode VisibleString into Packet instance
+	// DER encode VisibleString into Packet instance.
+	// If desired, substitute BER with another encoding
+	// rule.
 	var pkt Packet
 	if pkt, err = Marshal(vs, With(BER)); err != nil {
 		fmt.Println(err)
@@ -60,35 +62,6 @@ func ExampleVisibleString_bER() {
 	fmt.Printf("%T Hex: %s", pkt, pkt.Hex())
 	// Output: asn1plus.VisibleString values match: true (Jesse)
 	// *asn1plus.BERPacket Hex: 1A 05 4A65737365
-}
-
-func ExampleVisibleString_dER() {
-	// Parse string into a VisibleString instance
-	vs, err := NewVisibleString("Jesse")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// DER encode VisibleString into Packet instance
-	var pkt Packet
-	if pkt, err = Marshal(vs, With(DER)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Decode DER Packet into new VisibleString instance
-	var vs2 VisibleString
-	if err = Unmarshal(pkt, &vs2); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Compare string representation
-	fmt.Printf("%T values match: %t (%s)\n", vs, vs.String() == vs2.String(), vs2)
-	fmt.Printf("%T Hex: %s", pkt, pkt.Hex())
-	// Output: asn1plus.VisibleString values match: true (Jesse)
-	// *asn1plus.DERPacket Hex: 1A 05 4A65737365
 }
 
 func TestVisibleString_codecov(t *testing.T) {

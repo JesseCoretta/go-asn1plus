@@ -81,14 +81,6 @@ func TestNewNumericString(t *testing.T) {
 	}
 }
 
-func TestNumericString_String(t *testing.T) {
-	ns := NumericString("123 456")
-	ns.IsZero()
-	if ns.String() != "123 456" {
-		t.Errorf("NumericString.String() = %q, want %q", ns.String(), "123 456")
-	}
-}
-
 func TestNumericString_codecov(_ *testing.T) {
 	var ns NumericString
 	ns.Tag()

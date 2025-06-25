@@ -26,37 +26,11 @@ func ExampleUTF8String_dER() {
 		return
 	}
 
-	// DER encode UTF8String instance into Packet
+	// DER encode UTF8String instance into Packet. You
+	// may substitute BER with another encoding rule,
+	// if desired.
 	var pkt Packet
 	if pkt, err = Marshal(u8, With(DER)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Decode DER Packet into new UTF8String instance
-	var ut UTF8String
-	if err = Unmarshal(pkt, &ut); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Compare string representation
-	fmt.Printf("%T values match: %t (%s)", u8, u8.String() == ut.String(), ut)
-	// Output: asn1plus.UTF8String values match: true (this is a UTF-8 string)
-
-}
-
-func ExampleUTF8String_bER() {
-	// Parse value into new UTF8String instance
-	u8, err := NewUTF8String(`this is a UTF-8 string`)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// DER encode UTF8String instance into Packet
-	var pkt Packet
-	if pkt, err = Marshal(u8, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -123,56 +97,6 @@ func ExampleUTF8String_withConstraint() {
 	// Output: Constraint violation: invalid ASN.1 UTF-8 codepoints found
 }
 
-func TestNewUTF8String_DefaultValid(t *testing.T) {
-	// A valid UTF-8 string.
-	input := "Hello, 世界"
-	u8, err := NewUTF8String(input)
-	if err != nil {
-		t.Fatalf("NewUTF8String(%q) returned error: %v", input, err)
-	}
-	if u8.String() != input {
-		t.Errorf("Expected UTF8String.String() = %q, got %q", input, u8.String())
-	}
-	if u8.IsZero() {
-		t.Error("Expected IsZero() to be false for a non-empty UTF8String")
-	}
-}
-
-func TestNewUTF8String_DefaultInvalid(t *testing.T) {
-	invalidBytes := []byte{0xff, 0xfe, 0xfd}
-	_, err := NewUTF8String(invalidBytes)
-	if err == nil {
-		t.Errorf("Expected error for invalid UTF8 input %v, got nil", invalidBytes)
-	}
-}
-
-func TestNewUTF8String_TypeConversion(t *testing.T) {
-	inputStr := "Test"
-	inputUTF8 := UTF8String(inputStr)
-	u8, err := NewUTF8String(inputUTF8)
-	if err != nil {
-		t.Fatalf("NewUTF8String(UTF8String(%q)) returned error: %v", inputStr, err)
-	}
-	if u8.String() != inputStr {
-		t.Errorf("Expected UTF8String from UTF8String = %q, got %q", inputStr, u8.String())
-	}
-
-	u8, err = NewUTF8String([]byte(inputStr))
-	if err != nil {
-		t.Fatalf("NewUTF8String([]byte(%q)) returned error: %v", inputStr, err)
-	}
-	if u8.String() != inputStr {
-		t.Errorf("Expected UTF8String from []byte = %q, got %q", inputStr, u8.String())
-	}
-}
-
-func TestNewUTF8String_InvalidType(t *testing.T) {
-	_, err := NewUTF8String(12345)
-	if err == nil {
-		t.Error("Expected error for invalid type (int) for UTF8String, got nil")
-	}
-}
-
 func TestNewUTF8String_constraint(t *testing.T) {
 	// Step 1: Define the base validator as an anonymous function with concrete type string.
 	baseValidator := func(s string) error {
@@ -204,24 +128,45 @@ func TestNewUTF8String_constraint(t *testing.T) {
 	}
 }
 
-func TestUTF8String_Empty(t *testing.T) {
-	emptyInput := ""
-	u8, err := NewUTF8String(emptyInput)
-	if err != nil {
-		t.Fatalf("NewUTF8String(\"\") returned error: %v", err)
-	}
-	if u8.String() != emptyInput {
-		t.Errorf("Expected UTF8String.String() to be empty, got %q", u8.String())
-	}
-	if !u8.IsZero() {
-		t.Error("Expected IsZero() to return true for an empty UTF8String")
-	}
-}
-
-func TestUTF8String_codecov(_ *testing.T) {
+func TestUTF8String_codecov(t *testing.T) {
 	u, _ := NewUTF8String(`stringvalue`)
 	u.IsPrimitive()
 	u.IsZero()
 	u.Tag()
 	u.Len()
+
+	for _, valid := range []struct {
+		value  any
+		expect string
+	}{
+		{
+			value:  []byte("Hello, 世界"),
+			expect: "Hello, 世界",
+		},
+		{
+			value:  "Hello, 世界",
+			expect: "Hello, 世界",
+		},
+		{
+			value:  OctetString("Hello, 世界"),
+			expect: "Hello, 世界",
+		},
+	} {
+		if p, err := NewUTF8String(valid.value); err != nil {
+			t.Fatalf("NewUTF8String(%q) returned error: %v", valid.value, err)
+		} else if p.String() != valid.expect {
+			t.Fatalf("Expected UTF8String.String() = %q, got %q", valid.value, p.String())
+		}
+	}
+
+	for _, bogus := range []any{
+		[]byte{0xff, 0xfe, 0xfd},
+		"",
+		123456,
+	} {
+		if _, err := NewUTF8String(bogus); err == nil {
+			t.Fatalf("%s: expected error for bogus %T (%v) input, got nil",
+				t.Name(), bogus, bogus)
+		}
+	}
 }

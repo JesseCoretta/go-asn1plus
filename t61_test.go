@@ -5,91 +5,50 @@ import (
 	"testing"
 )
 
-func TestNewT61String_Valid(t *testing.T) {
-	input := "HELLO 123" // H, E, L, L, O, space, 1,2,3 – all within allowed ranges.
-	t61, err := NewT61String(input)
-	if err != nil {
-		t.Fatalf("NewT61String(%q) unexpected error: %v", input, err)
-	}
-	if t61.String() != input {
-		t.Errorf("Expected T61String.String()=%q, got %q", input, t61.String())
-	}
-}
-
-func TestNewT61String_ByteSlice(t *testing.T) {
-	input := []byte("WORLD 456")
-	t61, err := NewT61String(input)
-	if err != nil {
-		t.Fatalf("NewT61String([]byte(%q)) unexpected error: %v", input, err)
-	}
-	if t61.String() != string(input) {
-		t.Errorf("Expected T61String.String()=%q, got %q", string(input), t61.String())
-	}
-}
-
-func TestNewT61String_Empty(t *testing.T) {
-	_, err := NewT61String("")
-	if err == nil {
-		t.Error("Expected error for empty T61String input, got nil")
-	}
-}
-
-func TestNewT61String_InvalidType(t *testing.T) {
-	_, err := NewT61String(12345)
-	if err == nil {
-		t.Error("Expected error for invalid type (int) for T61String, got nil")
-	}
-}
-
-func TestNewT61String_InvalidCharacter(t *testing.T) {
-	// Use a valid T.61 string and inject an illegal character.
-	invalid := "HELLO@WORLD"
-	_, err := NewT61String(invalid)
-	if err == nil {
-		t.Errorf("Expected error for T61String input %q with invalid character, got nil", invalid)
-	}
-}
-
-func TestT61String_StringAndIsZero(t *testing.T) {
-	valid := "TELETEX"
-	t61, err := NewT61String(valid)
-	if err != nil {
-		t.Fatalf("NewT61String(%q) unexpected error: %v", valid, err)
-	}
-	if t61.String() != valid {
-		t.Errorf("T61String.String() = %q, want %q", t61.String(), valid)
-	}
-	if t61.IsZero() {
-		t.Error("Expected IsZero() to return false for a non-empty T61String")
-	}
-
-	// Test an explicit empty conversion (should be considered zero).
-	var empty T61String = ""
-	if !empty.IsZero() {
-		t.Error("Expected IsZero() to return true for empty T61String")
-	}
-}
-
-func TestT61String_AllowedCharacters(t *testing.T) {
-	// Build a string from allowed ranges. We
-	// know that uppercase letters "A" (0x41)
-	// to "Z" (0x5A) are allowed as per t61Ranges.
-	s := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	t61, err := NewT61String(s)
-	if err != nil {
-		t.Fatalf("NewT61String(%q) returned error: %v", s, err)
-	}
-	if t61.String() != s {
-		t.Errorf("Expected T61String.String()=%q, got %q", s, t61.String())
-	}
-}
-
-func TestT61String_codecov(_ *testing.T) {
+func TestT61String_codecov(t *testing.T) {
 	t61, _ := NewT61String("HELLO")
 	t61.Tag()
 	pkt, _ := Marshal(t61)
 	var tt T61String
 	_ = Unmarshal(pkt, &tt)
+
+	for _, valid := range []struct {
+		value  any
+		expect string
+	}{
+		{
+			value:  "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+			expect: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		},
+		{
+			value:  "HELLO 123",
+			expect: "HELLO 123",
+		},
+		{
+			value:  []byte("HELLO 123"),
+			expect: "HELLO 123",
+		},
+	} {
+		var err error
+		if t61, err = NewT61String(valid.value); err != nil {
+			t.Fatalf("%s failed: %v", t.Name(), err)
+		} else if t61.String() != valid.expect {
+			t.Fatalf("%s failed: expected T61String.String()=%q, got %q",
+				t.Name(), valid.expect, t61.String())
+		}
+	}
+
+	for _, bogus := range []any{
+		"",
+		"HELLO@WORLD",
+		12345,
+		nil,
+	} {
+		if _, err := NewT61String(bogus); err == nil {
+			t.Fatalf("%s: expected error for bogus %T (%v) input, got nil",
+				t.Name(), bogus, bogus)
+		}
+	}
 }
 
 func TestT61String_encodingRules(t *testing.T) {

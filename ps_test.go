@@ -5,73 +5,6 @@ import (
 	"testing"
 )
 
-func TestNewPrintableStringValid(t *testing.T) {
-	// Build a string that uses allowed characters.
-	valid := "ABCabc0123 '()+,-./:?"
-	ps, err := NewPrintableString(valid)
-	if err != nil {
-		t.Fatalf("NewPrintableString(%q) returned error: %v", valid, err)
-	}
-	if ps.String() != valid {
-		t.Fatalf("Expected PrintableString.String() = %q, got %q", valid, ps.String())
-	}
-}
-
-func TestNewPrintableStringByteSlice(t *testing.T) {
-	// Use a valid printable string as bytes. (Note that the exclamation mark is not allowed.)
-	validStr := "Hello, World" // contains only allowed characters: letters, comma, and space.
-	ps, err := NewPrintableString([]byte(validStr))
-	if err != nil {
-		t.Fatalf("NewPrintableString([]byte(%q)) returned error: %v", validStr, err)
-	}
-	if ps.String() != validStr {
-		t.Fatalf("Expected PrintableString.String() = %q, got %q", validStr, ps.String())
-	}
-}
-
-func TestNewPrintableStringEmpty(t *testing.T) {
-	_, err := NewPrintableString("")
-	if err == nil {
-		t.Fatalf("Expected error for empty PrintableString input, got nil")
-	}
-}
-
-func TestNewPrintableStringInvalidType(t *testing.T) {
-	_, err := NewPrintableString(12345)
-	if err == nil {
-		t.Fatalf("Expected error for invalid type (int) for PrintableString, got nil")
-	}
-}
-
-func TestNewPrintableStringInvalidCharacter(t *testing.T) {
-	invalid := "ABC@DEF"
-	_, err := NewPrintableString(invalid)
-	if err == nil {
-		t.Fatalf("Expected error for PrintableString input %q with invalid character, got nil", invalid)
-	}
-}
-
-func TestPrintableStringMethods(t *testing.T) {
-	input := "PrintableTest"
-	ps, err := NewPrintableString(input)
-	if err != nil {
-		t.Fatalf("NewPrintableString(%q) returned error: %v", input, err)
-	}
-
-	if ps.String() != input {
-		t.Fatalf("Expected PrintableString.String() to return %q, got %q", input, ps.String())
-	}
-
-	if ps.IsZero() {
-		t.Fatal("Expected IsZero() to return false for a non-empty PrintableString")
-	}
-
-	var emptyPS PrintableString = ""
-	if !emptyPS.IsZero() {
-		t.Fatal("Expected IsZero() to return true for an empty PrintableString")
-	}
-}
-
 func TestPrintableString_encodingRules(t *testing.T) {
 	for _, input := range []any{
 		"PrintableTest",
@@ -99,11 +32,13 @@ func TestPrintableString_encodingRules(t *testing.T) {
 	}
 }
 
-func TestPrintableString_codecov(_ *testing.T) {
+func TestPrintableString_codecov(t *testing.T) {
 	ps, _ := NewPrintableString(`Hello`)
 	ps.Tag()
 	ps.Len()
-	ps.IsZero()
+	if ps.IsZero() {
+		t.Fatal("Expected IsZero() to return false for a non-empty PrintableString")
+	}
 	ps.IsPrimitive()
 	_ = ps.String()
 	NewPrintableString(ps)
@@ -117,6 +52,42 @@ func TestPrintableString_codecov(_ *testing.T) {
 		byte(badRune),
 	}
 	PrintableSpec(PrintableString(b))
+
+	for _, valid := range []struct {
+		value  any
+		expect string
+	}{
+		{
+			value:  "ABCabc0123 '()+,-./:?",
+			expect: "ABCabc0123 '()+,-./:?",
+		},
+		{
+			value:  "Hello, World",
+			expect: "Hello, World",
+		},
+		{
+			value:  []byte("ABCabc0123 '()+,-./:?"),
+			expect: "ABCabc0123 '()+,-./:?",
+		},
+	} {
+		if p, err := NewPrintableString(valid.value); err != nil {
+			t.Fatalf("NewPrintableString(%q) returned error: %v", valid.value, err)
+		} else if p.String() != valid.expect {
+			t.Fatalf("Expected PrintableString.String() = %q, got %q", valid.value, p.String())
+		}
+	}
+
+	for _, bogus := range []any{
+		"",        // Zero len
+		12345,     // Not a string
+		"ABC@DEF", // Illegal use of '@'
+	} {
+		if _, err := NewPrintableString(bogus); err == nil {
+			t.Fatalf("%s: expected error for bogus %T (%v) input, got nil",
+				t.Name(), bogus, bogus)
+		}
+	}
+
 }
 
 type customPrintable PrintableString

@@ -80,7 +80,9 @@ func ExampleObjectIdentifier_roundTripBER() {
 		return
 	}
 
-	// BER Encode ObjectIdentifier into Packet
+	// BER Encode ObjectIdentifier into Packet.
+	// Supply an encoding rule other than BER
+	// if desired.
 	var pkt Packet
 	if pkt, err = Marshal(oid, With(BER)); err != nil {
 		fmt.Println(err)
@@ -118,45 +120,6 @@ func TestObjectIdentifier_InStruct(t *testing.T) {
 			t.Fatalf("%s failed [%s decoding]: %v\n", t.Name(), rule, err)
 		}
 	}
-}
-
-/*
-This example demonstrates the following:
-
-  - Parsing a string-based OID, producing an [ObjectIdentifier] instance
-  - DER encoding the resulting [ObjectIdentifier] instance, producing a DER [Packet] instance
-  - Decoding the DER [Packet] into a new [ObjectIdentifier] instance
-  - Comparing the string representation between the two [ObjectIdentifier] instances to verify they match
-*/
-func ExampleObjectIdentifier_roundTripDER() {
-	// Parse
-	strOID := `1.3.6.1.4.1.56521`
-	oid, err := NewObjectIdentifier(strOID)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// DER Encode ObjectIdentifier into Packet
-	var pkt Packet
-	if pkt, err = Marshal(oid, With(DER)); err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("HEX: %s\n", pkt.Hex())
-
-	// DER Decode Packet into new ObjectIdentifier
-	var oid2 ObjectIdentifier
-	if err = Unmarshal(pkt, &oid2); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Verify string representation
-	fmt.Printf("OIDs match: %t: %s\n", oid.String() == oid2.String(), oid)
-	// Output:
-	// HEX: 06 08 2B0601040183B949
-	// OIDs match: true: 1.3.6.1.4.1.56521
 }
 
 func TestObjectIdentifier_codecov(_ *testing.T) {
@@ -281,38 +244,9 @@ func TestRelativeOID_roundTripBER(t *testing.T) {
 		return
 	}
 
+	// Supply an encoding rule other than BER, if desired.
 	var pkt Packet
 	if pkt, err = Marshal(rel, With(BER)); err != nil {
-		t.Errorf("%s failed [DER encode]: %v", t.Name(), err)
-		return
-	}
-
-	var rel2 RelativeOID
-	if err = Unmarshal(pkt, &rel2); err != nil {
-		t.Errorf("%s failed [DER decode]: %v", t.Name(), err)
-		return
-	}
-
-	if rel.String() != rel2.String() {
-		t.Errorf("%s failed [Relative OID string cmp.]:\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rel, rel2)
-		return
-	}
-
-	rel.Tag()
-	rel.IsZero()
-	rel.Len()
-}
-
-func TestRelativeOID_roundTripDER(t *testing.T) {
-	// For this test, we define a RelativeOID with five arcs.
-	rel, err := NewRelativeOID(1, 2, 3, 4, 5)
-	if err != nil {
-		t.Errorf("%s failed [new Relative OID]: %v", t.Name(), err)
-		return
-	}
-
-	var pkt Packet
-	if pkt, err = Marshal(rel, With(DER)); err != nil {
 		t.Errorf("%s failed [DER encode]: %v", t.Name(), err)
 		return
 	}

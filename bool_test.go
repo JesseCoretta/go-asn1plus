@@ -36,6 +36,8 @@ func TestNewBoolean(t *testing.T) {
 		`TRUE`,
 		byte(0xff),
 		0,
+		OctetString("true"),
+		Boolean(true),
 		1,
 	} {
 		if B, err := NewBoolean(boo); err != nil {

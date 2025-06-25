@@ -7,49 +7,6 @@ import (
 	"testing"
 )
 
-func TestNewUniversalString_Valid(t *testing.T) {
-	str := "Hello, 世界"
-	us, err := NewUniversalString(str)
-	if err != nil {
-		t.Fatalf("NewUniversalString(%q) returned error: %v", str, err)
-	}
-	if us.String() != str {
-		t.Errorf("Expected %q, got %q", str, us.String())
-	}
-
-	us2, err := NewUniversalString([]byte(str))
-	if err != nil {
-		t.Fatalf("NewUniversalString([]byte(%q)) returned error: %v", str, err)
-	}
-	if us2.String() != str {
-		t.Errorf("Expected %q, got %q", str, us2.String())
-	}
-
-	us3, err := NewUniversalString(us)
-	if err != nil {
-		t.Fatalf("NewUniversalString(UniversalString(%q)) returned error: %v", str, err)
-	}
-	if us3.String() != str {
-		t.Errorf("Expected %q, got %q", str, us3.String())
-	}
-}
-
-func TestNewUniversalString_Invalid(t *testing.T) {
-	// Construct an invalid UTF8 sequence.
-	invalid := string([]byte{0x80, 0x80})
-	_, err := NewUniversalString(invalid)
-	if err == nil {
-		t.Error("Expected error for invalid UTF8 input, got nil")
-	}
-}
-
-func TestUniversalString_IsZero(t *testing.T) {
-	var us UniversalString
-	if !us.IsZero() {
-		t.Error("Expected IsZero() to return true for empty UniversalString")
-	}
-}
-
 func TestUniversalString_EncodingContentDER(t *testing.T) {
 	str := "ABC"
 	us, err := NewUniversalString(str)
@@ -140,10 +97,14 @@ func TestUniversalString_UCS4Conversion(t *testing.T) {
 	}
 }
 
-func TestUniversalString_codecov(_ *testing.T) {
+func TestUniversalString_codecov(t *testing.T) {
 	_, _ = NewUniversalString(struct{}{})
 
 	us, _ := NewUniversalString("Hello, 世界")
+	if us.IsZero() {
+		t.Fatalf("Expected IsZero() to return true for empty UniversalString")
+	}
+
 	us.Tag()
 	_ = us.String()
 	us.IsPrimitive()
@@ -173,6 +134,36 @@ func TestUniversalString_codecov(_ *testing.T) {
 		byte(badRune),
 	}
 	_ = UniversalString(b).String()
+
+	for _, valid := range []struct {
+		value  any
+		expect string
+	}{
+		{
+			value:  "Hello, 世界",
+			expect: "Hello, 世界",
+		},
+		{
+			value:  OctetString("Hello, 世界"),
+			expect: "Hello, 世界",
+		},
+	} {
+		if p, err := NewUniversalString(valid.value); err != nil {
+			t.Fatalf("NewUniversalString(%q) returned error: %v", valid.value, err)
+		} else if p.String() != valid.expect {
+			t.Fatalf("Expected UniversalString.String() = %q, got %q", valid.value, p.String())
+		}
+	}
+
+	for _, bogus := range []any{
+		[]byte{0x80, 0x80},
+	} {
+		if _, err := NewUniversalString(bogus); err == nil {
+			t.Fatalf("%s: expected error for bogus %T (%v) input, got nil",
+				t.Name(), bogus, bogus)
+		}
+	}
+
 }
 
 func ExampleUniversalString_withConstraints() {

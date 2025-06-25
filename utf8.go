@@ -59,6 +59,11 @@ func NewUTF8String(x any, constraints ...Constraint[UTF8String]) (u8 UTF8String,
 		return
 	}
 
+	if len(raw) == 0 {
+		err = errorNilInput
+		return
+	}
+
 	_u8 := UTF8String(raw)
 	err = UTF8Spec(_u8)
 	if len(constraints) > 0 && err == nil {

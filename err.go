@@ -11,7 +11,7 @@ var (
 	errorAmbiguousChoice       error = mkerr("ambiguous alternative: multiple registered alternatives match the instance")
 	errorNoChoicesAvailable    error = mkerr("no CHOICE alternatives available")
 	errorNoChoiceForType       error = mkerr("no matching alternative found for input type")
-	errorNilInput              error = mkerr("nil input instance")
+	errorNilInput              error = mkerr("nil or zero input instance")
 	errorNilReceiver           error = mkerr("nil receiver instance")
 	errorNoPrimitiveRead       error = mkerr("type does not implement read method")
 	errorNoCompoundChoices     error = mkerr("no compound CHOICE alternatives available")

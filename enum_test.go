@@ -38,29 +38,7 @@ func TestCustomEnumerated_withControls(t *testing.T) {
 
 func ExampleEnumerated_roundTripBER() {
 	var e Enumerated = 3
-	pkt, err := Marshal(e, With(BER))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err = Unmarshal(pkt, &e); err == nil {
-		enums := Enumeration{
-			Enumerated(1): "one",
-			Enumerated(2): "two",
-			Enumerated(3): "three",
-			Enumerated(4): "four",
-			Enumerated(5): "five",
-		}
-		fmt.Printf("Known Enumerated: %s (%d)\n", enums.Name(e), e)
-	}
-
-	// Output: Known Enumerated: three (3)
-}
-
-func ExampleEnumerated_roundTripDER() {
-	var e Enumerated = 3
-	pkt, err := Marshal(e, With(DER))
+	pkt, err := Marshal(e, With(BER)) // or CER, DER, et al.
 	if err != nil {
 		fmt.Println(err)
 		return

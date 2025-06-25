@@ -34,6 +34,7 @@ func TestBitString_customType(t *testing.T) {
 		t.Fatalf("%s failed [BER bit string cmp.]:\n\twant: %s\n\tgot:  %s",
 			t.Name(), want, got)
 	}
+	unregisterType(refTypeOf(cust))
 }
 
 func TestBitString(t *testing.T) {
@@ -70,7 +71,6 @@ func TestBitString(t *testing.T) {
 	_, _ = NewBitString([]byte(``))
 	_, _ = NewBitString([]byte(`"1010101"B`))
 	verifyBitStringContents([]byte(`''B`))
-
 }
 
 /*

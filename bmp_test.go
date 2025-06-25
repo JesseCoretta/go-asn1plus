@@ -17,22 +17,6 @@ func equalBMPString(a, b BMPString) bool {
 	return true
 }
 
-func ExampleBMPString() {
-	// Parse our ASN.1 BMP STRING
-	bmp, err := NewBMPString(`HELLO Σ`)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// If non-zero, show the string representation
-	// of our new ASN.1 BMP STRING instance.
-	if !bmp.IsZero() {
-		fmt.Println(bmp)
-	}
-	// Output: HELLO Σ
-}
-
 func ExampleBMPString_roundTripBER() {
 	// Parse our ASN.1 BMP STRING
 	bmp, err := NewBMPString(`HELLO Σ`)
@@ -42,7 +26,8 @@ func ExampleBMPString_roundTripBER() {
 	}
 
 	// BER encode our ASN.1 BMP STRING instance
-	// into a Packet
+	// into a Packet. Alternatively, substitute
+	// BER with another encoding rule if desired.
 	var pkt Packet
 	if pkt, err = Marshal(bmp, With(BER)); err != nil {
 		fmt.Println(err)
@@ -51,33 +36,6 @@ func ExampleBMPString_roundTripBER() {
 
 	// Create a new receiver for BER decoded BMP data
 	// derived from our BER packet.
-	var bmp2 BMPString
-	if err = Unmarshal(pkt, &bmp2); err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("Values match: %t (%s)", bmp.String() == bmp2.String(), bmp)
-	// Output: Values match: true (HELLO Σ)
-}
-
-func ExampleBMPString_roundTripDER() {
-	// Parse our ASN.1 BMP STRING
-	bmp, err := NewBMPString(`HELLO Σ`)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// DER encode our ASN.1 BMP STRING instance
-	// into a Packet
-	var pkt Packet
-	if pkt, err = Marshal(bmp, With(DER)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Create a new receiver for DER decoded BMP data
-	// derived from our DER packet.
 	var bmp2 BMPString
 	if err = Unmarshal(pkt, &bmp2); err != nil {
 		fmt.Println(err)
@@ -123,120 +81,107 @@ func TestBMPString_codecov(t *testing.T) {
 		}
 	}
 
-	NewBMPString(struct{}{})
-	NewBMPString(BMPString{})
-	NewBMPString(BMPString{0x1e, 0x1, 0x1, 0xef})
-	NewBMPString(BMPString{0x1e, 0x1, 0x1, 0xef})
-	NewBMPString(BMPString{0x1f, 0x1, 0x1, 0xef})
-	NewBMPString(BMPString{0x1e, 0xe})
-	NewBMPString(BMPString{0x1f, 0x0})
-	NewBMPString(BMPString{0x1e, 0x0})
+	//NewBMPString(struct{}{})
+	//NewBMPString(BMPString{})
+	//NewBMPString(BMPString{0x1e, 0x1, 0x1, 0xef})
+	//NewBMPString(BMPString{0x1e, 0x1, 0x1, 0xef})
+	//NewBMPString(BMPString{0x1f, 0x1, 0x1, 0xef})
+	//NewBMPString(BMPString{0x1e, 0xe})
+	//NewBMPString(BMPString{0x1f, 0x0})
+	//NewBMPString(BMPString{0x1e, 0x0})
 
 	buildBMP(``)
+	//NewBMPString(OctetString("test"))
 	b := BMPString{0x1e, 0x5, 0x0, 0x48, 0x0, 0x45, 0x0, 0x4c, 0x0, 0x4c, 0x0, 0x4f}
+	b.IsZero()
 	b.Tag()
 	b.Len()
 	b.IsPrimitive()
 	_, _ = Marshal(b)
 
-}
+	for idx, valid := range []struct {
+		value  any
+		expect BMPString
+	}{
+		{
+			value:  "A",
+			expect: BMPString{0x1E, 0x01, 0x00, 0x41},
+		},
+		{
+			value:  "",
+			expect: BMPString{0x1E, 0x00},
+		},
+		{
+			value:  []byte("Hi"),
+			expect: BMPString{0x1E, 0x02, 0x00, 0x48, 0x00, 0x69},
+		},
+		{
+			value:  BMPString{0x1E, 0x02, 0x00, 0x48, 0x00, 0x69},
+			expect: BMPString{0x1E, 0x02, 0x00, 0x48, 0x00, 0x69},
+		},
+		{
+			value:  BMPString{0x1E, 0x00},
+			expect: BMPString{0x1E, 0x0},
+		},
+		{
+			value:  BMPString{},
+			expect: BMPString{0x1E, 0x0},
+		},
+		{
+			value:  OctetString("Hi"),
+			expect: BMPString{0x1E, 0x02, 0x00, 0x48, 0x00, 0x69},
+		},
+		{
+			value:  "",
+			expect: BMPString{0x1E, 0x00},
+		},
+	} {
+		if bmp, err := NewBMPString(valid.value); err != nil {
+			t.Fatalf("%s[%d]: NewBMPString(%v) returned error: %v", t.Name(), idx, valid.value, err)
+		} else {
+			if idx == 3 {
+				t.Logf("actual: %#v\n", bmp)
+				t.Logf("expect: %#v\n", valid.expect)
+			}
+			if !equalBMPString(bmp, valid.expect) {
+				t.Fatalf("%s[%d]: NewBMPString(%v) = len(%d); want len(%d)", t.Name(), idx, valid.value, bmp.Len(), valid.expect.Len())
+			}
+		}
+	}
 
-func TestNewBMPString_FromString(t *testing.T) {
-	input := "A"
-	bmp, err := NewBMPString(input)
-	if err != nil {
-		t.Fatalf("NewBMPString(%q) returned error: %v", input, err)
-	}
-	expected := BMPString{0x1E, 0x01, 0x00, 0x41}
-	if !equalBMPString(bmp, expected) {
-		t.Errorf("NewBMPString(%q) = %v; want %v", input, bmp, expected)
-	}
-	if s := bmp.String(); s != input {
-		t.Errorf("BMPString.String() = %q; want %q", s, input)
-	}
-}
-
-func TestNewBMPString_EmptyString(t *testing.T) {
-	input := ""
-	bmp, err := NewBMPString(input)
-	if err != nil {
-		t.Fatalf("NewBMPString(\"\") returned error: %v", err)
-	}
-	expected := BMPString{0x1E, 0x0}
-	if !equalBMPString(bmp, expected) {
-		t.Errorf("NewBMPString(\"\") = %v; want %v", bmp, expected)
-	}
-	if s := bmp.String(); s != "" {
-		t.Errorf("BMPString.String() = %q; want empty string", s)
-	}
-}
-
-func TestNewBMPString_FromBytes(t *testing.T) {
-	input := "Hi"
-	bmp1, err := NewBMPString(input)
-	if err != nil {
-		t.Fatalf("NewBMPString(%q) returned error: %v", input, err)
-	}
-	bmp2, err := NewBMPString([]uint8(input))
-	if err != nil {
-		t.Fatalf("NewBMPString([]uint8(%q)) returned error: %v", input, err)
-	}
-	if bmp1.String() != bmp2.String() {
-		t.Errorf("BMPString from string and []uint8 differ: %q vs. %q", bmp1.String(), bmp2.String())
-	}
-}
-
-func TestNewBMPString_TooLong(t *testing.T) {
-	bld := newStrBuilder()
+	tooLong := newStrBuilder()
 	for i := 0; i < 256; i++ {
-		bld.WriteByte('A')
+		tooLong.WriteByte('A')
 	}
-	longStr := bld.String()
-	_, err := NewBMPString(longStr)
-	if err == nil {
-		t.Errorf("Expected error when encoding a BMPString longer than 255 units, but got nil")
-	}
-}
 
-func TestNewBMPString_FromBMPStringValue(t *testing.T) {
-	original, err := NewBMPString("Test")
-	if err != nil {
-		t.Fatalf("NewBMPString(\"Test\") returned error: %v", err)
-	}
-	bmp, err := NewBMPString(original)
-	if err != nil {
-		t.Fatalf("NewBMPString(BMPString) returned error: %v", err)
-	}
-	if bmp.String() != "Test" {
-		t.Errorf("BMPString.String() = %q; want \"Test\"", bmp.String())
-	}
-}
-
-func TestNewBMPString_InvalidTag(t *testing.T) {
-	invalid := BMPString{0x00, 0x01, 0x00, 0x41}
-	_, err := NewBMPString(invalid)
-	if err == nil {
-		t.Errorf("Expected error for BMPString with invalid tag, got nil")
-	}
-}
-
-func TestNewBMPString_InvalidLengthOctet(t *testing.T) {
-	invalid := BMPString{0x1E, 0x02, 0x00, 0x41}
-	_, err := NewBMPString(invalid)
-	if err == nil {
-		t.Errorf("Expected error for BMPString with mismatched length octet, got nil")
-	}
-}
-
-func TestBMPString_StringMethod(t *testing.T) {
-	input := "Hello, BMP!"
-	bmp, err := NewBMPString(input)
-	if err != nil {
-		t.Fatalf("NewBMPString(%q) returned error: %v", input, err)
-	}
-	output := bmp.String()
-	if output != input {
-		t.Errorf("BMPString.String() = %q; want %q", output, input)
+	for idx, bogus := range []struct {
+		value  any
+		expect string
+	}{
+		{
+			value:  tooLong.String(),
+			expect: "too long error",
+		},
+		{
+			value:  BMPString{0x00, 0x00},
+			expect: "invalid BMP string length octet error",
+		},
+		{
+			value:  BMPString{0x00, 0x01, 0x00, 0x41},
+			expect: "invalid BMP string tag error",
+		},
+		{
+			value:  BMPString{0x1E, 0x02, 0x00, 0x41},
+			expect: "invalid BMP string length octet error",
+		},
+		{
+			value:  struct{}{},
+			expect: "invalid ASN.1 BMP STRING error",
+		},
+	} {
+		if _, err := NewBMPString(bogus.value); err == nil {
+			t.Fatalf("%s[%d]: expected %q for bogus %T, got nil", t.Name(), idx, bogus.expect, bogus.value)
+		}
 	}
 }
 

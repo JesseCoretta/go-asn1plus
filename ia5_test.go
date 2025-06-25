@@ -5,73 +5,6 @@ import (
 	"testing"
 )
 
-func TestNewIA5String_Valid(t *testing.T) {
-	input := "Hello, world!"
-	ia5, err := NewIA5String(input)
-	if err != nil {
-		t.Fatalf("NewIA5String(%q) returned error: %v", input, err)
-	}
-	if ia5.String() != input {
-		t.Errorf("Expected IA5String.String() = %q, got %q", input, ia5.String())
-	}
-}
-
-func TestNewIA5String_ByteSlice(t *testing.T) {
-	input := []byte("Test string from []byte")
-	ia5, err := NewIA5String(input)
-	if err != nil {
-		t.Fatalf("NewIA5String([]byte(%q)) returned error: %v", input, err)
-	}
-	if ia5.String() != string(input) {
-		t.Errorf("Expected IA5String.String() = %q, got %q", string(input), ia5.String())
-	}
-}
-
-func TestNewIA5String_Empty(t *testing.T) {
-	_, err := NewIA5String("")
-	if err == nil {
-		t.Error("Expected error for empty string, got nil")
-	}
-}
-
-func TestNewIA5String_InvalidType(t *testing.T) {
-	_, err := NewIA5String(123)
-	if err == nil {
-		t.Error("Expected error for invalid type (int), got nil")
-	}
-}
-
-func TestNewIA5String_InvalidCharacter(t *testing.T) {
-	invalid := "AĀB"
-	_, err := NewIA5String(invalid)
-	if err == nil {
-		t.Errorf("Expected error for IA5String with invalid character %q, got nil", invalid)
-	}
-}
-
-func TestIA5String_IsZero(t *testing.T) {
-	var s IA5String = ""
-	if !s.IsZero() {
-		t.Errorf("Expected IsZero() to return true for a zero IA5String")
-	}
-
-	s = IA5String("nonempty")
-	if s.IsZero() {
-		t.Errorf("Expected IsZero() to return false for a non-empty IA5String")
-	}
-}
-
-func TestIA5String_String(t *testing.T) {
-	input := "Example IA5 String"
-	ia5, err := NewIA5String(input)
-	if err != nil {
-		t.Fatalf("Unexpected error for valid IA5String(%q): %v", input, err)
-	}
-	if ia5.String() != input {
-		t.Errorf("IA5String.String() = %q, want %q", ia5.String(), input)
-	}
-}
-
 func TestIA5String_Range(t *testing.T) {
 	// Build a string containing runes from 0x00 to 0xFF.
 	var validRunes []rune
@@ -128,6 +61,8 @@ func ExampleIA5String_roundTripDER() {
 func TestIA5String_encodingRules(t *testing.T) {
 	for _, value := range []any{
 		"jesse.coretta@icloud.com",
+		[]byte("jesse.coretta@icloud.com"),
+		IA5String("jesse.coretta@icloud.com"),
 	} {
 		for _, rule := range encodingRules {
 			// Parse our ASN.1 IA5 STRING
@@ -160,13 +95,25 @@ func TestIA5String_encodingRules(t *testing.T) {
 	}
 }
 
-func TestIA5String_codecov(_ *testing.T) {
+func TestIA5String_codecov(t *testing.T) {
 	var ia5 IA5String
 	ia5.Tag()
 	ia5.Len()
+	ia5.IsZero()
 	ia5.IsPrimitive()
 	_ = ia5.String()
 	NewIA5String(ia5)
+
+	for _, bogus := range []any{
+		"",    // Zero len
+		123,   // Not a string, []byte or ASN.1 Primitive
+		"AĀB", // Outside of allowed 0x00:0xFF range
+	} {
+		if _, err := NewIA5String(bogus); err == nil {
+			t.Fatalf("%s: expected error for bogus %T value (%v), got nil",
+				t.Name(), bogus, bogus)
+		}
+	}
 }
 
 func ExampleIA5String_withConstraints() {
