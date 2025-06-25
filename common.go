@@ -6,6 +6,7 @@ components throughout this package.
 */
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"math"
