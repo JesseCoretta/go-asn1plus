@@ -171,8 +171,14 @@ func TestWrapRelOIDCtor(t *testing.T) {
 
 type temporalDummy struct{ time.Time }
 
-func (_ temporalDummy) Cast() time.Time { return time.Now() }
-func (_ temporalDummy) String() string  { return time.Now().String() }
+func (_ temporalDummy) Cast() time.Time    { return time.Now() }
+func (_ temporalDummy) String() string     { return time.Now().String() }
+func (_ temporalDummy) Eq(_ Temporal) bool { return false }
+func (_ temporalDummy) Ne(_ Temporal) bool { return false }
+func (_ temporalDummy) Gt(_ Temporal) bool { return false }
+func (_ temporalDummy) Ge(_ Temporal) bool { return false }
+func (_ temporalDummy) Lt(_ Temporal) bool { return false }
+func (_ temporalDummy) Le(_ Temporal) bool { return false }
 
 func TestWrapTemporalCtor(t *testing.T) {
 	var (
