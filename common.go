@@ -76,6 +76,7 @@ func sizeOfInt(i int) int {
 }
 
 func newStrBuilder() strings.Builder { return strings.Builder{} }
+func newByteBuffer() bytes.Buffer    { return bytes.Buffer{} }
 
 func bool2str(b bool) (s string) {
 	if s = `false`; b {
