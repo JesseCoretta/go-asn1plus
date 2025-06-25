@@ -5,8 +5,6 @@ oct.go contains all types and methods pertaining to the ASN.1
 OCTET STRING type.
 */
 
-import "bytes"
-
 /*
 OctetString returns an instance of [OctetString] alongside an error
 following an attempt to marshal x.
@@ -88,7 +86,7 @@ func (r OctetString) Len() int {
 func cerSegmentedOctetStringWrite[T TextLike](c *textCodec[T], pkt Packet, o *Options) (n int, err error) {
 	const maxSegSize = 1000
 
-	// 1. Obtain the raw "wire" data.
+	// Obtain the raw "wire" data.
 	var wire []byte
 	if c.encodeHook != nil {
 		wire, err = c.encodeHook(c.val)
@@ -97,15 +95,17 @@ func cerSegmentedOctetStringWrite[T TextLike](c *textCodec[T], pkt Packet, o *Op
 	}
 
 	if err == nil {
-		// 2. Build the outer header manually.
+		// Build the outer header manually.
+		//
 		// For CER, we use a constructed OCTET STRING with indefinite length.
 		// A common encoding is:
+		//
 		//   Identifier: 0x04 (OCTET STRING) with constructed flag (0x20) ⇒ 0x24
 		//   Length: 0x80 indicating indefinite length.
 		outerHeader := []byte{0x24, 0x80}
 
-		// 3. Build the inner segments.
-		var innerBuf bytes.Buffer
+		// Build the inner segments.
+		innerBuf := newByteBuffer()
 		segCount := 0
 		for i := 0; i < len(wire); i += maxSegSize {
 			end := i + maxSegSize
@@ -113,8 +113,9 @@ func cerSegmentedOctetStringWrite[T TextLike](c *textCodec[T], pkt Packet, o *Op
 				end = len(wire)
 			}
 			segment := wire[i:end]
-			// For a primitive OCTET STRING, the identifier is fixed to 0x04.
-			id := byte(0x04)
+			// For a primitive OCTET STRING, the
+			// identifier is fixed to 0x04.
+			id := byte(TagOctetString)
 			segLen := len(segment)
 			var lenBytes []byte
 			encodeLengthInto(pkt.Type(), &lenBytes, segLen)
@@ -124,21 +125,22 @@ func cerSegmentedOctetStringWrite[T TextLike](c *textCodec[T], pkt Packet, o *Op
 			segCount++
 		}
 
-		// 4. Append the EOC marker (two zero bytes).
+		// Append the EOC marker (two zero bytes).
 		eocMarker := []byte{0x00, 0x00}
 
-		// 5. Assemble the complete CER message:
-		// Outer header || Inner segments || EOC marker.
+		// Assemble the complete CER message:
+		//
+		//   Outer header || Inner segments || EOC marker.
 		completeBuf := make([]byte, 0, len(outerHeader)+innerBuf.Len()+len(eocMarker))
 		completeBuf = append(completeBuf, outerHeader...)
 		completeBuf = append(completeBuf, innerBuf.Bytes()...)
 		completeBuf = append(completeBuf, eocMarker...)
 
-		// 6. Manufacture a new Packet using the provided constructor.
+		// Manufacture a new Packet using the provided constructor.
 		rep := pkt.Type().New(completeBuf...)
 		rep.SetOffset(0)
 
-		// 7. Replace the original Packet's contents in place.
+		// Replace the original Packet's contents in place.
 		pkt.(*CERPacket).data = rep.Data()
 
 		n = len(completeBuf)
