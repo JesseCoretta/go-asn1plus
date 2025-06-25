@@ -18,6 +18,10 @@ int-cast byte value that cannot exceed 255. The remaining bytes, which
 may be zero (0) or more in number, define payload P. N must equal size
 of payload P.
 
+Note that this type may not be "string cast friendly", as it requires
+specific byte composition involving the tag and UTF-16-centric length
+octets.
+
 [ITU-T Rec. X.680]: https://www.itu.int/rec/T-REC-X.680
 */
 type BMPString []byte
@@ -28,20 +32,21 @@ an attempt to marshal x.
 */
 func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, err error) {
 	var e string
+	var skip bool
 
 	switch tv := x.(type) {
 	case []uint8:
 		e = string(tv)
 
 	case BMPString:
-		// Handle BMPString separately from (and
-		// before) Primitives, due to the unique
-		// manner in which BMP strings are to be
-		// comprised byte-wise.
+		// Handle BMP checks separately due to the
+		// unique manner in which BMP strings are
+		// expected to be comprised byte-wise.
 		if err = BMPSpec(tv); err != nil {
 			return
 		}
 		e = tv.String()
+		skip = true
 
 	case Primitive:
 		e = tv.String()
@@ -67,7 +72,14 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 
 	_bmp := BMPString(result)
 
-	var group ConstraintGroup[BMPString] = append(ConstraintGroup[BMPString]{BMPSpec}, constraints...)
+	var group ConstraintGroup[BMPString]
+	if skip {
+		// We already ran our spec check, so don't include
+		// it within the constraint appends.
+		group = append(ConstraintGroup[BMPString]{}, constraints...)
+	} else {
+		group = append(ConstraintGroup[BMPString]{BMPSpec}, constraints...)
+	}
 
 	if err = group.Validate(_bmp); err == nil {
 		bmp = _bmp
