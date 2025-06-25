@@ -71,7 +71,9 @@ NewReal returns an instance of [Real] alongside an error following an attempt
 to marshal a (non-infinity) mantissa, base and exponent combination.
 
 When creating an instance of [Real] that describes a positive or negative infinity,
-use [NewRealPlusInfinity] and [NewRealMinusInfinity] instead.
+use [NewRealPlusInfinity] and [NewRealMinusInfinity] instead of this function.
+
+Only base values of 2, 8, 10 and 16 are currently supported.
 */
 func NewReal(mantissa any, base, exponent int, constraints ...Constraint[Real]) (Real, error) {
 	var (
@@ -221,6 +223,7 @@ func encodeRealExponent(exp int) []byte {
 		absVal >>= 8
 	}
 	// Ensure proper two's complement representation.
+	var bflag byte = 0x00
 	if negative {
 		carry := byte(1)
 		for i := len(buf) - 1; i >= 0; i-- {
@@ -229,15 +232,11 @@ func encodeRealExponent(exp int) []byte {
 				carry = 0
 			}
 		}
-		// Prepend 0xFF if the sign bit is not set.
-		if buf[0]&0x80 == 0 {
-			buf = append([]byte{0xFF}, buf...)
-		}
-	} else {
-		// Prepend 0x00 if the sign bit is set.
-		if buf[0]&0x80 != 0 {
-			buf = append([]byte{0x00}, buf...)
-		}
+		bflag = 0xFF
+	}
+	// Prepend 0x00 or 0xFF (if negative) if the sign bit is not set.
+	if buf[0]&0x80 == 0 {
+		buf = append([]byte{bflag}, buf...)
 	}
 	return buf
 }
@@ -449,13 +448,8 @@ func bcdRealWrite[T any](c *realCodec[T], pkt Packet, o *Options) (off int, err 
 		if c.encodeHook != nil {
 			wire, err = c.encodeHook(c.val)
 		} else {
-			// special cases
-			switch r.Special {
-			case RealPlusInfinity:
-				wire = []byte{0x40}
-			case RealMinusInfinity:
-				wire = []byte{0x41}
-			default:
+			var ok bool
+			if wire, ok = infinityToByte(r.Special); !ok {
 				if r.Mantissa.Big().Sign() == 0 {
 					// zero: empty content
 					wire = nil
@@ -527,13 +521,8 @@ func bcdRealRead[T any](c *realCodec[T], pkt Packet, tlv TLV, o *Options) (err e
 					zero, _ := NewInteger(0)
 					r = Real{Mantissa: zero, Base: 2, Exponent: 0}
 				case 1: // ±∞
-					switch wire[0] {
-					case 0x40:
-						r = NewRealPlusInfinity()
-					case 0x41:
-						r = NewRealMinusInfinity()
-					default:
-						return mkerr("REAL: invalid special value")
+					if r, err = byteToInfinity(wire[0]); err != nil {
+						return
 					}
 				default:
 					header := wire[0]
@@ -570,6 +559,32 @@ func bcdRealRead[T any](c *realCodec[T], pkt Packet, tlv TLV, o *Options) (err e
 	}
 
 	return err
+}
+
+func byteToInfinity(b byte) (r Real, err error) {
+	switch b {
+	case 0x40:
+		r = NewRealPlusInfinity()
+	case 0x41:
+		r = NewRealMinusInfinity()
+	default:
+		err = mkerr("REAL: invalid special value for INFINITY")
+	}
+
+	return
+}
+
+func infinityToByte(special RealSpecial) (b []byte, ok bool) {
+	switch special {
+	case RealPlusInfinity:
+		b = []byte{0x40}
+	case RealMinusInfinity:
+		b = []byte{0x41}
+	}
+
+	ok = len(b) == 1
+
+	return
 }
 
 func realHeaderToBase(header byte) (base int) {
