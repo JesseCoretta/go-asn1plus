@@ -374,6 +374,10 @@ func TestBitString_codecov(_ *testing.T) {
 	_, _ = bc.write(tpkt, nil)
 	_, _ = bc.write(bpkt, nil)
 	bc.read(tpkt, TLV{}, nil)
+
+	bitStringCheckDERPadding(DER, []byte{0x1, 0x0, 0x0, 0x1, 0x1}, 4)
+	assertBitString(OctetString("test"))
+	verifyBitStringDigitSet(8, []byte{0x1, 0xf, 0x0, 0x0, 0xe, 0xd})
 }
 
 type customBitString BitString
