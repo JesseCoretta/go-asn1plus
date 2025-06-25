@@ -104,7 +104,7 @@ func convertToNumericString(x any) (str string, err error) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		str = fmtUint(v.Uint(), 10)
 	default:
-		err = mkerr("Invalid type for ASN.1 NUMERICSTRING")
+		err = errorBadTypeForConstructor("NUMERIC STRING", x)
 	}
 
 	return

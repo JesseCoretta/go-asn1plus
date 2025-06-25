@@ -64,7 +64,7 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 	case Primitive:
 		raw = tv.String()
 	default:
-		err = mkerr("Invalid ASN.1 T.61 STRING type")
+		err = errorBadTypeForConstructor("T.61 (Teletex) STRING", x)
 		return t61, err
 	}
 

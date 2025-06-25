@@ -58,7 +58,7 @@ func NewEnumerated(x any, constraints ...Constraint[Enumerated]) (enum Enumerate
 	case Enumerated:
 		e = int(tv)
 	default:
-		err = mkerr("Invalid type for ASN.1 ENUMERATED")
+		err = errorBadTypeForConstructor("ENUMERATED", x)
 	}
 
 	if len(constraints) > 0 && err == nil {

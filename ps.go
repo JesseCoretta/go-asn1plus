@@ -73,7 +73,7 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 	case []byte:
 		raw = string(tv)
 	default:
-		err = mkerr("Invalid type for ASN.1 PRINTABLE STRING")
+		err = errorBadTypeForConstructor("PRINTABLE STRING", x)
 		return
 	}
 

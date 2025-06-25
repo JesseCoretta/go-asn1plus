@@ -75,7 +75,7 @@ func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error
 	case byte:
 		b = Boolean(tv == 0xFF)
 	default:
-		err = mkerr("Invalid type for ASN.1 BOOLEAN")
+		err = errorBadTypeForConstructor("BOOLEAN", x)
 	}
 
 	if len(constraints) > 0 && err == nil {

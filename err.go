@@ -30,6 +30,14 @@ var (
 	errorRuleNotImplemented    error = mkerr("encoding rule not yet implemented")
 )
 
+func errorBadTypeForConstructor(asn1Type string, inputType any) (err error) {
+	var inName string = "<nil>" // sensible default
+	if inputType != nil {
+		inName = refTypeOf(inputType).String()
+	}
+	return mkerrf("Invalid input type for ASN.1 ", asn1Type, " constructor: ", inName)
+}
+
 func errorNoChoiceMatched(name string) (err error) {
 	return mkerrf(errorNoChoiceForType.Error() + " " + name)
 }

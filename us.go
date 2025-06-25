@@ -47,7 +47,7 @@ func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (Univ
 	case string:
 		raw = tv
 	default:
-		err = mkerr("Invalid type for ASN.1 UNIVERSAL STRING")
+		err = errorBadTypeForConstructor("UNIVERSAL STRING", x)
 		return us, err
 	}
 

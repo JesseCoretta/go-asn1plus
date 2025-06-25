@@ -133,7 +133,7 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 		case Constraint[ObjectIdentifier]:
 			constraints = append(constraints, tv)
 		default:
-			err = mkerr("Unsupported slice type for ASN.1 OBJECT IDENTIFIER")
+			err = errorBadTypeForConstructor("OBJECT IDENTIFIER", x[i])
 		}
 
 		if nf.Lt(Integer{big: true, bigInt: newBigInt(0)}) {
@@ -393,13 +393,14 @@ func NewRelativeOID(x ...any) (rel RelativeOID, err error) {
 		}
 	}
 
-	for i := 0; i < len(x) && err == nil; i++ {
+	for i := 0; i < len(x); i++ {
 		var nf Integer
 		switch tv := x[i].(type) {
 		case *big.Int, Integer, string, int64, uint64, int:
 			nf, err = NewInteger(tv)
 		default:
-			err = mkerr("Unsupported slice type for ASN.1 RELATIVE-OID")
+			err = errorBadTypeForConstructor("RELATIVE-OID", x[i])
+			break
 		}
 
 		if nf.Lt(Integer{big: true, bigInt: newBigInt(0)}) {

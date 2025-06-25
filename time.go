@@ -86,7 +86,7 @@ func NewDate(x any, constraints ...Constraint[Temporal]) (Date, error) {
 	case time.Time:
 		s = formatDate(tv)
 	default:
-		err = mkerr("Invalid type for ASN.1 DATE")
+		err = errorBadTypeForConstructor("DATE", x)
 	}
 
 	var t time.Time
@@ -209,7 +209,7 @@ func NewDateTime(x any, constraints ...Constraint[Temporal]) (DateTime, error) {
 	case time.Time:
 		s = formatDateTime(tv.Truncate(time.Second))
 	default:
-		err = mkerr("Invalid type for ASN.1 DATE-TIME")
+		err = errorBadTypeForConstructor("DATE-TIME", x)
 	}
 
 	var t time.Time
@@ -334,7 +334,7 @@ func NewTimeOfDay(x any, constraints ...Constraint[Temporal]) (TimeOfDay, error)
 	case time.Time:
 		s = formatTimeOfDay(tv)
 	default:
-		err = mkerr("Invalid type for ASN.1 TIME-OF-DAY")
+		err = errorBadTypeForConstructor("TIME-OF-DAY", x)
 	}
 
 	var t time.Time
@@ -467,7 +467,7 @@ func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
 	case time.Duration:
 		s = parseTimeDuration(tv).String()
 	default:
-		return Duration{}, mkerr("Invalid type for ASN.1 DURATION")
+		return Duration{}, errorBadTypeForConstructor("DURATION", x)
 	}
 
 	if len(s) == 0 || s[0] != 'P' {
@@ -792,7 +792,7 @@ func NewGeneralizedTime(x any, constraints ...Constraint[Temporal]) (gt Generali
 		}
 		raw = tv
 	default:
-		return gt, mkerr("Invalid type for ASN.1 GENERALIZED TIME")
+		return gt, errorBadTypeForConstructor("GENERALIZED TIME", x)
 	}
 
 	var t time.Time
@@ -1092,7 +1092,7 @@ func NewUTCTime(x any, constraints ...Constraint[Temporal]) (utc UTCTime, err er
 	case string:
 		raw = tv // keep the Z / ±hhmm intact for fast path
 	default:
-		err = mkerr("Invalid type for ASN.1 UTC Time")
+		err = errorBadTypeForConstructor("UTC TIME", x)
 	}
 
 	if err == nil {

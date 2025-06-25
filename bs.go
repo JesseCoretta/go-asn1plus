@@ -376,7 +376,7 @@ func assertBitString(x any) (raw []byte, err error) {
 	case Primitive:
 		raw = []byte(tv.String())
 	default:
-		err = mkerr("Invalid type for ASN.1 BITSTRING")
+		err = errorBadTypeForConstructor("BIT STRING", x)
 	}
 	return
 }

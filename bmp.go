@@ -34,6 +34,10 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 		e = string(tv)
 
 	case BMPString:
+		// Handle BMPString separately from (and
+		// before) Primitives, due to the unique
+		// manner in which BMP strings are to be
+		// comprised byte-wise.
 		if err = BMPSpec(tv); err != nil {
 			return
 		}
@@ -46,7 +50,7 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 		e = tv
 
 	default:
-		err = mkerr("Invalid type for ASN.1 BMPSTRING")
+		err = errorBadTypeForConstructor("BMP STRING", x)
 		return
 	}
 

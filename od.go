@@ -31,7 +31,7 @@ func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (Ob
 	case Primitive:
 		str = tv.String()
 	default:
-		err = mkerr("Invalid type for ASN.1 OBJECT DESCRIPTOR")
+		err = errorBadTypeForConstructor("OBJECT DESCRIPTOR", x)
 		return od, err
 	}
 

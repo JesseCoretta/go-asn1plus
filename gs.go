@@ -29,7 +29,7 @@ func NewGraphicString(x any, constraints ...Constraint[GraphicString]) (gs Graph
 	case Primitive:
 		s = tv.String()
 	default:
-		err = mkerr("Invalid type for ASN.1 GRAPHIC STRING")
+		err = errorBadTypeForConstructor("GRAPHIC STRING", x)
 		return
 	}
 

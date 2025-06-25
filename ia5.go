@@ -55,7 +55,7 @@ func NewIA5String(x any, constraints ...Constraint[IA5String]) (ia5 IA5String, e
 	case Primitive:
 		raw = tv.String()
 	default:
-		err = mkerr("Invalid type for IA5String")
+		err = errorBadTypeForConstructor("IA5 STRING", x)
 		return
 	}
 

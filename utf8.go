@@ -55,7 +55,7 @@ func NewUTF8String(x any, constraints ...Constraint[UTF8String]) (u8 UTF8String,
 	case string:
 		raw = tv
 	default:
-		err = mkerr("Invalid type for ASN.1 UTF8 STRING")
+		err = errorBadTypeForConstructor("UTF-8 STRING", x)
 		return
 	}
 

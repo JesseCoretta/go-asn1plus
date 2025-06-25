@@ -92,7 +92,7 @@ func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err 
 	case Integer:
 		i = value
 	default:
-		err = mkerr("Unsupported Integer type")
+		err = errorBadTypeForConstructor("INTEGER", value)
 	}
 
 	if len(constraints) > 0 {
