@@ -6,6 +6,23 @@ import (
 	"time"
 )
 
+func ExampleTime_withConstraint() {
+	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
+		func(o Temporal) (err error) {
+			deadline, _ := NewTime(`2014-12-31T08:04:55`)
+			if o.Cast().After(deadline.Cast()) {
+				err = fmt.Errorf("Constraint violation: you're late!")
+			}
+			return
+		})
+
+	// Here, we use the DateTime format for Time, though another
+	// format could also apply.
+	_, err := NewTime(`2015-04-19T15:43:08`, deadlineConstraint)
+	fmt.Println(err)
+	// Output: Constraint violation: you're late!
+}
+
 func ExampleDate_withConstraint() {
 	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
 		func(o Temporal) (err error) {
@@ -168,6 +185,31 @@ func ExampleTimeOfDay_viaGoString() {
 	// Output:
 	// Packet hex: 1F20 08 31353A33323A3031
 	// Time: 15:32:01
+}
+
+func ExampleTime_viaGoString() {
+	opts := Options{Identifier: "time"}
+
+	pkt, err := Marshal(`2018-09-11T15:32:01`, With(BER, opts))
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("Packet hex: %s\n", pkt.Hex())
+
+	var thyme string
+	if err = Unmarshal(pkt, &thyme, With(opts)); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("Time: %s\n", thyme)
+
+	// Output:
+	// Packet hex: 0E 13 323031382D30392D31315431353A33323A3031
+	// Time: 2018-09-11T15:32:01
 }
 
 func ExampleDuration_AddTo() {
@@ -905,11 +947,22 @@ func Test_parseUTCTimezone_InvalidCases(t *testing.T) {
 	}
 }
 
-func TestTime_codecov(_ *testing.T) {
+func TestTemporal_codecov(_ *testing.T) {
 	var t Time
 	t.Tag()
 	t.Cast()
 	t.IsPrimitive()
+	parseTime("2009-01-15")
+	parseTime("9511041405")
+	parseTime("01:15:07")
+	parseTime("20090813081703")
+	parseTime("20090813081703Z")
+	NewTime([]byte("2017-01-04T15:04:39"))
+	NewTime(time.Now())
+	NewTime(Time(time.Now()))
+	NewTime(struct{}{})
+	fallbackTimeMatch("x")
+	fallbackTimeMatch("2009-01-15")
 
 	var d Date
 	d.Tag()

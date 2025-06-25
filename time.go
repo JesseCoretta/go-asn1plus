@@ -34,7 +34,7 @@ const (
 	dateTimeLayout  = "2006-01-02T15:04:05"
 	timeOfDayLayout = "15:04:05"
 	genTimeLayout   = "20060102150405"
-	utcTimeLayout   = "0601021504"
+	uTCTimeLayout   = "0601021504"
 )
 
 /*
@@ -44,8 +44,52 @@ types:
   - [Date]
   - [DateTime]
   - [TimeOfDay]
+  - [GeneralizedTime]
+  - [UTCTime]
+
+Note that use of this type is less efficient than use of one of the derivative
+types, such as [DateTime] or [TimeOfDay].
 */
 type Time time.Time
+
+/*
+NewTime returns an instance of [Time] alongside an error following an
+attempt to marshal x.
+*/
+func NewTime(x any, constraints ...Constraint[Temporal]) (Time, error) {
+	var raw string
+	var err error
+
+	switch tv := x.(type) {
+	case string:
+		raw = tv
+	case []byte:
+		raw = unsafe.String(&tv[0], len(tv))
+	case Time:
+		raw = tv.String()
+	case time.Time:
+		raw = formatTime(tv.Truncate(time.Second))
+	default:
+		err = errorBadTypeForConstructor("TIME", x)
+	}
+
+	var t time.Time
+	if err == nil {
+		t, err = parseTime(raw)
+	}
+
+	if err == nil && len(constraints) > 0 {
+		var group ConstraintGroup[Temporal] = constraints
+		err = group.Constrain(Time(t))
+	}
+
+	var tm Time
+	if err == nil {
+		tm = Time(t)
+	}
+
+	return tm, err
+}
 
 /*
 Tag returns the integer constant [TagTime].
@@ -62,6 +106,78 @@ func (r Time) IsPrimitive() bool { return true }
 Cast returns the receiver instance cast as an instance of [time.Time].
 */
 func (r Time) Cast() time.Time { return time.Time(r) }
+
+/*
+String returns the string representation of the receiver instance.
+*/
+func (r Time) String() string { return formatTime(r.Cast()) }
+
+func parseTime(s string) (out time.Time, err error) {
+	// First, try fast-paths based on known fixed lengths.
+	switch len(s) {
+	case 19:
+		// Likely a DATE-TIME in "2006-01-02T15:04:05"
+		out, err = parseDateTime(s)
+	case 10:
+		// Could be a DATE ("2006-01-02") or a UTCTime ("0601021504")
+		// Here, we prefer a date if the string contains '-'.
+		if s[4] == '-' && s[7] == '-' {
+			out, err = parseDate(s)
+		} else {
+			out, err = parseUTCTime(s)
+		}
+	case 8:
+		// Possibly a Time-of-Day ("15:04:05")
+		out, err = parseTimeOfDay(s)
+	case 14:
+		// Likely a GeneralizedTime (e.g., "20060102150405")
+		out, err = parseGeneralizedTime(s)
+	default:
+		out, err = fallbackTimeMatch(s)
+	}
+
+	return
+}
+
+func fallbackTimeMatch(s string) (out time.Time, err error) {
+	// Alternatively, try a list of layouts if nothing fast-matched.
+	layouts := []string{
+		dateTimeLayout,  // "2006-01-02T15:04:05"
+		dateLayout,      // "2006-01-02"
+		timeOfDayLayout, // "15:04:05"
+		genTimeLayout,   // "20060102150405"
+		uTCTimeLayout,   // "0601021504"
+	}
+
+	var matched bool
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			out = t
+			matched = true
+			break
+		}
+	}
+
+	if !matched {
+		err = mkerr("Invalid TIME format")
+	}
+
+	return
+}
+
+func formatTime(t time.Time) string {
+	// In some designs you might instead format according to what was originally parsed.
+	return t.Format(dateTimeLayout)
+}
+
+func decTime(b []byte) (Time, error) {
+	t, err := parseTime(string(b))
+	return Time(t), err
+}
+
+func encTime(d Time) ([]byte, error) {
+	return []byte(formatTime(time.Time(d))), nil
+}
 
 /*
 Date implements the ASN.1 DATE type (tag 31), which extends from [Time].
@@ -1065,7 +1181,7 @@ Layout returns the string literal "0601021504". Note that the
 terminating Zulu (Z) character is not included, as it is not
 used wherever a UTC offset value is desired (e.g.: -0700).
 */
-func (r UTCTime) Layout() string { return utcTimeLayout }
+func (r UTCTime) Layout() string { return uTCTimeLayout }
 
 /*
 Cast unwraps and returns the underlying instance of [time.Time].
@@ -1488,6 +1604,7 @@ func fillTemporalHooks[T Temporal](
 	case attachDefaults[UTCTime](rt, &enc, &dec, encUTCTime, decUTCTime):
 	case attachDefaults[DateTime](rt, &enc, &dec, encDateTime, decDateTime):
 	case attachDefaults[Date](rt, &enc, &dec, encDate, decDate):
+	case attachDefaults[Time](rt, &enc, &dec, encTime, decTime):
 	default:
 		panic("RegisterTemporalAlias: please provide encode/decode hooks for custom temporal type")
 	}
@@ -1679,5 +1796,6 @@ func init() {
 	RegisterTemporalAlias[TimeOfDay](TagTimeOfDay, nil, nil, nil, nil)
 	RegisterTemporalAlias[GeneralizedTime](TagGeneralizedTime, nil, nil, nil, nil)
 	RegisterTemporalAlias[UTCTime](TagUTCTime, nil, nil, nil, nil)
+	RegisterTemporalAlias[Time](TagTime, nil, nil, nil, nil)
 	RegisterDurationAlias[Duration](TagDuration, nil, nil, nil, nil)
 }
