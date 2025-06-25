@@ -37,7 +37,7 @@ const (
 	TagVisibleString    = 26
 	TagGeneralString    = 27
 	TagUniversalString  = 28
-	TagCharacterString  = 29
+	TagCharacterString  = 29 // Not yet implemented.
 	TagBMPString        = 30
 	TagDate             = 31
 	TagTimeOfDay        = 32
