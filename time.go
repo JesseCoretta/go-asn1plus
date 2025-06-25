@@ -27,6 +27,12 @@ Note that [Duration] does not qualify this interface.
 type Temporal interface {
 	Cast() time.Time
 	String() string
+	Eq(Temporal) bool
+	Ne(Temporal) bool
+	Gt(Temporal) bool
+	Ge(Temporal) bool
+	Lt(Temporal) bool
+	Le(Temporal) bool
 }
 
 const (
@@ -65,7 +71,7 @@ func NewTime(x any, constraints ...Constraint[Temporal]) (Time, error) {
 		raw = tv
 	case []byte:
 		raw = unsafe.String(&tv[0], len(tv))
-	case Time:
+	case Temporal:
 		raw = tv.String()
 	case time.Time:
 		raw = formatTime(tv.Truncate(time.Second))
@@ -111,6 +117,69 @@ func (r Time) Cast() time.Time { return time.Time(r) }
 String returns the string representation of the receiver instance.
 */
 func (r Time) String() string { return formatTime(r.Cast()) }
+
+func truncateBy(r, by Temporal) time.Time {
+	switch by.(type) {
+	case Date:
+		rt := r.Cast()
+		return time.Date(rt.Year(), rt.Month(), rt.Day(), 0, 0, 0, 0, rt.Location())
+	case TimeOfDay:
+		rt := r.Cast()
+		return time.Date(1, time.January, 1, rt.Hour(), rt.Minute(), rt.Second(), 0, rt.Location())
+	}
+
+	return r.Cast()
+}
+
+/*
+Eq returns a Boolean value indicative of r being equal to t.
+*/
+func (r Time) Eq(t Temporal) bool {
+	_r := truncateBy(r, t)
+	_t := truncateBy(t, t)
+	return _r.Equal(_t)
+}
+
+/*
+Ne returns a Boolean value indicative of r not being equal to t.
+*/
+func (r Time) Ne(t Temporal) bool {
+	_r := truncateBy(r, t)
+	_t := truncateBy(t, t)
+	return !_r.Equal(_t)
+}
+
+/*
+Lt returns a Boolean value indicative of r occurring before t.
+*/
+func (r Time) Lt(t Temporal) bool {
+	_r := truncateBy(r, t)
+	_t := truncateBy(t, t)
+	return _r.Before(_t)
+}
+
+/*
+Le returns a Boolean value indicative of r occurring before, or at the same time as, t.
+*/
+func (r Time) Le(t Temporal) bool {
+	return r.Lt(t) || r.Eq(t)
+}
+
+/*
+Gt returns a Boolean value indicative of r occurring after t.
+*/
+func (r Time) Gt(t Temporal) bool {
+	_r := truncateBy(r, t)
+	_t := truncateBy(t, t)
+	return _r.After(_t)
+}
+
+/*
+Ge returns a Boolean value indicative of r occurring after, or at the same time as, t.
+*/
+func (r Time) Ge(t Temporal) bool {
+	return r.Gt(t) || r.Eq(t)
+}
 
 func parseTime(s string) (out time.Time, err error) {
 	// First, try fast-paths based on known fixed lengths.
@@ -221,6 +290,61 @@ func NewDate(x any, constraints ...Constraint[Temporal]) (Date, error) {
 	}
 
 	return d, err
+}
+
+/*
+Eq returns a Boolean value indicative of r being equal to t.
+*/
+func (r Date) Eq(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.truncate().Equal(time.Date(in.Year(), in.Month(),
+		in.Day(), 0, 0, 0, 0, in.Location()))
+}
+
+/*
+Ne returns a Boolean value indicative of r not being equal to t.
+*/
+func (r Date) Ne(t Temporal) bool {
+	in := truncateBy(t, t)
+	return !r.truncate().Equal(time.Date(in.Year(), in.Month(), in.Day(), 0, 0, 0, 0, in.Location()))
+}
+
+/*
+Lt returns a Boolean value indicative of r occurring before t.
+*/
+func (r Date) Lt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.truncate().Before(time.Date(in.Year(), in.Month(), in.Day(), 0, 0, 0, 0, in.Location()))
+}
+
+/*
+Le returns a Boolean value indicative of r occurring before, or at the same time as, t.
+*/
+func (r Date) Le(t Temporal) bool {
+	return r.Lt(t) || r.Eq(t)
+}
+
+/*
+Gt returns a Boolean value indicative of r occurring after t.
+*/
+func (r Date) Gt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.truncate().After(time.Date(in.Year(), in.Month(), in.Day(), 0, 0, 0, 0, in.Location()))
+}
+
+/*
+Ge returns a Boolean value indicative of r occurring after, or at the same time as, t.
+*/
+func (r Date) Ge(t Temporal) bool {
+	return r.Gt(t) || r.Eq(t)
+}
+
+/*
+truncate returns a cast instance of time.Time, minus all clock time components.
+*/
+func (r Date) truncate() time.Time {
+	t := r.Cast()
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
 // parseDate parses YYYY-MM-DD in UTC, no heap, ~70 ns.
@@ -428,6 +552,48 @@ Cast returns the receiver instance cast as an instance of [time.Time].
 func (r DateTime) Cast() time.Time { return time.Time(r) }
 
 /*
+Eq returns a Boolean value indicative of r being equal to t.
+*/
+func (r DateTime) Eq(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().Equal(in)
+}
+
+/*
+Ne returns a Boolean value indicative of r not being equal to t.
+*/
+func (r DateTime) Ne(t Temporal) bool {
+	in := truncateBy(t, t)
+	return !r.Cast().Equal(in)
+}
+
+/*
+Lt returns a Boolean value indicative of r occurring before t.
+*/
+func (r DateTime) Lt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().Before(in)
+}
+
+/*
+Le returns a Boolean value indicative of r occurring before, or at the same time as, t.
+*/
+func (r DateTime) Le(t Temporal) bool { return r.Lt(t) || r.Eq(t) }
+
+/*
+Gt returns a Boolean value indicative of r occurring after t.
+*/
+func (r DateTime) Gt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().After(in)
+}
+
+/*
+Ge returns a Boolean value indicative of r occurring after, or at the same time as, t.
+*/
+func (r DateTime) Ge(t Temporal) bool { return r.Gt(t) || r.Eq(t) }
+
+/*
 TimeOfDay implements the ASN.1 TIME-OF-DAY type (tag 32), which extends from [Time].
 */
 type TimeOfDay Time
@@ -541,7 +707,62 @@ Cast returns the receiver instance cast as an instance of [time.Time].
 func (r TimeOfDay) Cast() time.Time { return time.Time(r) }
 
 /*
-TimeOfDay implements the ASN.1 DURATION type (tag 34).
+Eq returns a Boolean value indicative of r being equal to t.
+*/
+func (r TimeOfDay) Eq(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.truncate().Equal(time.Date(1, time.January, 1,
+		in.Hour(), in.Minute(), in.Second(), 0, in.Location()))
+}
+
+/*
+Ne returns a Boolean value indicative of r not being equal to t.
+*/
+func (r TimeOfDay) Ne(t Temporal) bool {
+	in := truncateBy(t, t)
+	return !r.truncate().Equal(time.Date(1, time.January, 1,
+		in.Hour(), in.Minute(), in.Second(), 0, in.Location()))
+}
+
+/*
+Lt returns a Boolean value indicative of r occurring before t.
+*/
+func (r TimeOfDay) Lt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.truncate().Before(time.Date(1, time.January, 1,
+		in.Hour(), in.Minute(), in.Second(), 0, in.Location()))
+}
+
+/*
+Le returns a Boolean value indicative of r occurring before, or at the same time as, t.
+*/
+func (r TimeOfDay) Le(t Temporal) bool {
+	return r.Lt(t) || r.Eq(t)
+}
+
+/*
+Gt returns a Boolean value indicative of r occurring after t.
+*/
+func (r TimeOfDay) Gt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.truncate().After(time.Date(1, time.January, 1,
+		in.Hour(), in.Minute(), in.Second(), 0, in.Location()))
+}
+
+/*
+Ge returns a Boolean value indicative of r occurring after, or at the same time as, t.
+*/
+func (r TimeOfDay) Ge(t Temporal) bool {
+	return r.Gt(t) || r.Eq(t)
+}
+
+func (r TimeOfDay) truncate() time.Time {
+	t := r.Cast()
+	return time.Date(1, time.January, 1, t.Hour(), t.Minute(), t.Second(), 0, t.Location())
+}
+
+/*
+Duration implements the ASN.1 DURATION type (tag 34).
 */
 type Duration struct {
 	Years   int
@@ -806,26 +1027,130 @@ ASN.1 primitive.
 func (r Duration) IsPrimitive() bool { return true }
 
 /*
-Lt returns true if d is strictly less than other.
+Eq returns a Boolean value indicative of r being equal to d.
 */
-func (r Duration) Lt(other Duration) bool {
-	if r.Years != other.Years {
-		return r.Years < other.Years
+func (r Duration) Eq(d Duration) bool {
+	for _, pair := range []struct {
+		rs int
+		ds int
+	}{
+		{
+			rs: r.Years,
+			ds: d.Years,
+		},
+		{
+			rs: r.Months,
+			ds: d.Months,
+		},
+		{
+			rs: r.Days,
+			ds: d.Days,
+		},
+		{
+			rs: r.Hours,
+			ds: d.Hours,
+		},
+		{
+			rs: r.Minutes,
+			ds: d.Minutes,
+		},
+	} {
+		if pair.rs != pair.ds {
+			return pair.rs == pair.ds
+		}
 	}
-	if r.Months != other.Months {
-		return r.Months < other.Months
-	}
-	if r.Days != other.Days {
-		return r.Days < other.Days
-	}
-	if r.Hours != other.Hours {
-		return r.Hours < other.Hours
-	}
-	if r.Minutes != other.Minutes {
-		return r.Minutes < other.Minutes
-	}
-	return r.Seconds < other.Seconds
+
+	return r.Seconds == d.Seconds
 }
+
+/*
+Ne returns a Boolean value indicative of r being not equal to d.
+*/
+func (r Duration) Ne(d Duration) bool { return !r.Eq(d) }
+
+/*
+Lt returns a Boolean value indicative of r being less than d.
+*/
+func (r Duration) Lt(d Duration) bool {
+	for _, pair := range []struct {
+		rs int
+		ds int
+	}{
+		{
+			rs: r.Years,
+			ds: d.Years,
+		},
+		{
+			rs: r.Months,
+			ds: d.Months,
+		},
+		{
+			rs: r.Days,
+			ds: d.Days,
+		},
+		{
+			rs: r.Hours,
+			ds: d.Hours,
+		},
+		{
+			rs: r.Minutes,
+			ds: d.Minutes,
+		},
+	} {
+		if pair.rs != pair.ds {
+			return pair.rs < pair.ds
+		}
+	}
+
+	return r.Seconds < d.Seconds
+}
+
+/*
+Le returns a Boolean value indicative of r being less than or equal to d.
+*/
+func (r Duration) Le(d Duration) bool { return r.Eq(d) || r.Lt(d) }
+
+/*
+Gt returns a Boolean value indicative of r being greater than d.
+*/
+func (r Duration) Gt(d Duration) bool {
+	for _, pair := range []struct {
+		rs int
+		ds int
+	}{
+		{
+			rs: r.Years,
+			ds: d.Years,
+		},
+		{
+			rs: r.Months,
+			ds: d.Months,
+		},
+		{
+			rs: r.Days,
+			ds: d.Days,
+		},
+		{
+			rs: r.Hours,
+			ds: d.Hours,
+		},
+		{
+			rs: r.Minutes,
+			ds: d.Minutes,
+		},
+	} {
+		if pair.rs != pair.ds {
+			return pair.rs > pair.ds
+		}
+	}
+
+	return r.Seconds > d.Seconds
+}
+
+/*
+Ge returns a Boolean value indicative of r being greater than or equal to d.
+*/
+func (r Duration) Ge(d Duration) bool { return r.Eq(d) || r.Gt(d) }
 
 /*
 AddTo returns a new instance of [time.Time] following a call to
@@ -1140,16 +1465,54 @@ Layout returns the string literal "20060102150405". Note that the
 terminating Zulu character (Z) is not included, as it is not used
 wherever a UTC offset value is desired (e.g.: -0700).
 */
-func (r GeneralizedTime) Layout() string {
-	return genTimeLayout
-}
+func (r GeneralizedTime) Layout() string { return genTimeLayout }
 
 /*
 Cast unwraps and returns the underlying instance of [time.Time].
 */
-func (r GeneralizedTime) Cast() time.Time {
-	return time.Time(r)
+func (r GeneralizedTime) Cast() time.Time { return time.Time(r) }
+
+/*
+Eq returns a Boolean value indicative of r being equal to t.
+*/
+func (r GeneralizedTime) Eq(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().Equal(in)
 }
+
+/*
+Ne returns a Boolean value indicative of r not being equal to t.
+*/
+func (r GeneralizedTime) Ne(t Temporal) bool {
+	in := truncateBy(t, t)
+	return !r.Cast().Equal(in)
+}
+
+/*
+Lt returns a Boolean value indicative of r occurring before t.
+*/
+func (r GeneralizedTime) Lt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().Before(in)
+}
+
+/*
+Le returns a Boolean value indicative of r occurring before, or at the same time as, t.
+*/
+func (r GeneralizedTime) Le(t Temporal) bool { return r.Lt(t) || r.Eq(t) }
+
+/*
+Gt returns a Boolean value indicative of r occurring after t.
+*/
+func (r GeneralizedTime) Gt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().After(in)
+}
+
+/*
+Ge returns a Boolean value indicative of r occurring after, or at the same time as, t.
+*/
+func (r GeneralizedTime) Ge(t Temporal) bool { return r.Gt(t) || r.Eq(t) }
 
 /*
 Deprecated: UTCTime aliases an instance of [time.Time] to implement the
@@ -1187,6 +1550,48 @@ func (r UTCTime) Layout() string { return uTCTimeLayout }
 Cast unwraps and returns the underlying instance of [time.Time].
 */
 func (r UTCTime) Cast() time.Time { return time.Time(r) }
+
+/*
+Eq returns a Boolean value indicative of r being equal to t.
+*/
+func (r UTCTime) Eq(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().Equal(in)
+}
+
+/*
+Ne returns a Boolean value indicative of r not being equal to t.
+*/
+func (r UTCTime) Ne(t Temporal) bool {
+	in := truncateBy(t, t)
+	return !r.Cast().Equal(in)
+}
+
+/*
+Lt returns a Boolean value indicative of r occurring before t.
+*/
+func (r UTCTime) Lt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().Before(in)
+}
+
+/*
+Le returns a Boolean value indicative of r occurring before, or at the same time as, t.
+*/
+func (r UTCTime) Le(t Temporal) bool { return r.Lt(t) || r.Eq(t) }
+
+/*
+Gt returns a Boolean value indicative of r occurring after t.
+*/
+func (r UTCTime) Gt(t Temporal) bool {
+	in := truncateBy(t, t)
+	return r.Cast().After(in)
+}
+
+/*
+Ge returns a Boolean value indicative of r occurring after, or at the same time as, t.
+*/
+func (r UTCTime) Ge(t Temporal) bool { return r.Gt(t) || r.Eq(t) }
 
 /*
 Deprecated: UTCTime is intended for historical support only; use [GeneralizedTime]

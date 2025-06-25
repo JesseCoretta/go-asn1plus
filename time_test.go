@@ -952,6 +952,15 @@ func TestTemporal_codecov(_ *testing.T) {
 	t.Tag()
 	t.Cast()
 	t.IsPrimitive()
+	noww := time.Now()
+
+	t.Eq(Date(noww))
+	t.Ne(Time(noww))
+	t.Ge(Time(noww))
+	t.Gt(TimeOfDay(noww))
+	t.Le(Time(noww))
+	t.Lt(Time(noww))
+
 	parseTime("2009-01-15")
 	parseTime("9511041405")
 	parseTime("01:15:07")
@@ -972,6 +981,12 @@ func TestTemporal_codecov(_ *testing.T) {
 	_, _ = parseDate(`1`)
 	_, _ = parseDate(`2015?11=26`)
 	_, _ = parseDate(`2015-13-36`)
+	d.Eq(Date(noww))
+	d.Ne(Date(noww))
+	d.Ge(Date(noww))
+	d.Gt(Date(noww))
+	d.Le(Date(noww))
+	d.Lt(Date(noww))
 
 	var dt DateTime
 	dt.Tag()
@@ -981,6 +996,12 @@ func TestTemporal_codecov(_ *testing.T) {
 	_, _ = parseDateTime(`1`)
 	_, _ = parseDateTime(`2015?13-36T24:33:21`)
 	_, _ = parseDateTime(`2015-13-36T14:33:21`)
+	dt.Eq(DateTime(noww))
+	dt.Ne(DateTime(noww))
+	dt.Ge(DateTime(noww))
+	dt.Gt(DateTime(noww))
+	dt.Le(DateTime(noww))
+	dt.Lt(DateTime(noww))
 
 	var tod TimeOfDay
 	tod.Tag()
@@ -990,20 +1011,62 @@ func TestTemporal_codecov(_ *testing.T) {
 	_, _ = parseTimeOfDay(`1`)
 	_, _ = parseTimeOfDay(`24?33=21`)
 	_, _ = parseTimeOfDay(`24:53:21`)
+	tod.Eq(TimeOfDay(noww))
+	tod.Ne(TimeOfDay(noww))
+	tod.Ge(TimeOfDay(noww))
+	tod.Gt(TimeOfDay(noww))
+	tod.Le(TimeOfDay(noww))
+	tod.Lt(TimeOfDay(noww))
 
 	var dur Duration
 	dur.Tag()
 	dur.IsPrimitive()
 	NewDuration(`1`)
 	NewDuration(`P1T1`)
-	NewDuration(`P1YM3DT4H5M30S`)
+	x, _ := NewDuration(`P1YM3DT4H5M30S`)
+	y, _ := NewDuration(`P5YM3DT4H5M30S`)
 	NewDuration(`PXYXMXDTXHXMXXS`)
 	NewDuration(`PXYXMXDTXHXMXXS`)
+	y.Eq(Duration{
+		Years:   4,
+		Months:  1,
+		Days:    1,
+		Hours:   13,
+		Minutes: 8,
+		Seconds: 31,
+	})
+	y.Ne(x)
+	y.Ge(x)
+	y.Gt(y)
+	y.Gt(Duration{
+		Years:   4,
+		Months:  1,
+		Days:    1,
+		Hours:   13,
+		Minutes: 8,
+		Seconds: 31,
+	})
+	y.Le(x)
+	y.Lt(y)
+	y.Lt(Duration{
+		Years:   4,
+		Months:  1,
+		Days:    1,
+		Hours:   13,
+		Minutes: 8,
+		Seconds: 31,
+	})
 
 	var utc UTCTime
 	utc.Tag()
 	utc.IsPrimitive()
 	utc.Layout()
+	utc.Eq(UTCTime(noww))
+	utc.Ne(UTCTime(noww))
+	utc.Ge(UTCTime(noww))
+	utc.Gt(UTCTime(noww))
+	utc.Le(UTCTime(noww))
+	utc.Lt(UTCTime(noww))
 
 	var gt GeneralizedTime
 	gt.Tag()
@@ -1022,6 +1085,12 @@ func TestTemporal_codecov(_ *testing.T) {
 	parseGeneralizedTime("20250101123000+2X30")
 	parseGeneralizedTime("20250101123000ZEXTRA")
 	parseGeneralizedTime("20250101123000.123456ZEXTRA")
+	gt.Eq(GeneralizedTime(noww))
+	gt.Ne(GeneralizedTime(noww))
+	gt.Ge(GeneralizedTime(noww))
+	gt.Gt(GeneralizedTime(noww))
+	gt.Le(GeneralizedTime(noww))
+	gt.Lt(GeneralizedTime(noww))
 
 	tc := new(temporalCodec[GeneralizedTime])
 	tc.write(&testPacket{}, nil)
@@ -1050,10 +1119,16 @@ func TestTemporal_codecov(_ *testing.T) {
 
 type customGT GeneralizedTime
 
-func (_ customGT) Tag() int          { return TagGeneralizedTime }
-func (_ customGT) String() string    { return `` }
-func (_ customGT) IsPrimitive() bool { return true }
-func (r customGT) Cast() time.Time   { return time.Time(r) }
+func (_ customGT) Tag() int           { return TagGeneralizedTime }
+func (_ customGT) String() string     { return `` }
+func (_ customGT) IsPrimitive() bool  { return true }
+func (r customGT) Cast() time.Time    { return time.Time(r) }
+func (_ customGT) Eq(_ Temporal) bool { return false }
+func (_ customGT) Ne(_ Temporal) bool { return false }
+func (_ customGT) Ge(_ Temporal) bool { return false }
+func (_ customGT) Gt(_ Temporal) bool { return false }
+func (_ customGT) Le(_ Temporal) bool { return false }
+func (_ customGT) Lt(_ Temporal) bool { return false }
 
 func TestCustomTemporal_withControls(t *testing.T) {
 	RegisterTemporalAlias[customGT](TagGeneralizedTime,
