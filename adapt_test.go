@@ -216,3 +216,113 @@ func TestAdapter_ValueOfShouldPanic(t *testing.T) {
 	badIdea := &wrapped
 	valueOf[string](badIdea)
 }
+
+func TestAdapter_codecov(_ *testing.T) {
+	RegisterAdapter[stubPrimitive, string](nil, func(*stubPrimitive) string { return `` }, "bogusCodec")
+	var stubby stubPrimitive
+	opts := &Options{Identifier: "bogusCodec"}
+	pkt, _ := Marshal(stubby, With(opts))
+	var stubbs stubPrimitive
+	_ = Unmarshal(pkt, &stubbs, With(opts))
+	opts.Identifier = "brogusCodec"
+	pkt, _ = Marshal(stubby, With(opts))
+	_ = Unmarshal(pkt, &stubbs, With(opts))
+	unregisterType(refTypeOf(stubby))
+
+	r := wrapRealCtor[float64](2, func(float64, int) (any, int, error) { return nil, 0, nil })
+	r(float64(9.2))
+
+	r2 := wrapTemporalStringCtor[Time](
+		func(any, ...Constraint[Temporal]) (Time, error) { return Time{}, nil },
+		func(string) (time.Time, error) { return time.Time{}, nil },
+	)
+	r2(time.Now().String(), func(Time) error { return nil })
+
+	// misc. textCodec coverage
+	for _, iter := range []struct {
+		ident string
+		input any
+	}{
+		{
+			ident: "utf8",
+			input: "this is UTF-8",
+		},
+		{
+			ident: "numeric",
+			input: "09 72834 990",
+		},
+		{
+			ident: "visible",
+			input: "can you see me?",
+		},
+		{
+			ident: "videotex",
+			input: "don't mess with textas",
+		},
+		{
+			ident: "general",
+			input: "Brigadier General Jack O'Neill", // TWO L's!
+		},
+		{
+			ident: "t61",
+			input: "also known as teletex",
+		},
+		{
+			ident: "graphic",
+			input: "viewer discretion advised",
+		},
+		{
+			ident: "ia5",
+			input: "International Alphabet No. 5",
+		},
+		{
+			ident: "bmp",
+			input: "BMP strings are fat",
+		},
+		{
+			ident: "universal",
+			input: "Universal strings are morbidly obese",
+		},
+		{
+			ident: "octet",
+			input: "Octet strings have tentacles",
+		},
+		{
+			ident: "octet",
+			input: []byte("Octet strings have tentacles"),
+		},
+		{
+			ident: "bitstring",
+			input: []byte{0x0, 0x1, 0x1, 0x0, 0x0, 0x0, 0x1},
+		},
+	} {
+		opts.Identifier = iter.ident
+		pkt, _ = Marshal(iter.input, With(opts))
+		var strVal string
+		_ = Unmarshal(pkt, &strVal, With(opts))
+	}
+
+	opts.Identifier = "enum"
+	pkt, _ = Marshal(3, With(opts))
+	var enumer int
+	_ = Unmarshal(pkt, &enumer, With(opts))
+
+	opts.Identifier = "integer"
+	pkt, _ = Marshal(3, With(opts))
+	var inter int
+	_ = Unmarshal(pkt, &inter, With(opts))
+
+	opts.Identifier = "duration"
+	pkt, _ = Marshal(int64(43872), With(opts))
+	var durer1 int
+	_ = Unmarshal(pkt, &durer1, With(opts))
+
+	pkt, _ = Marshal(time.Duration(43872), With(opts))
+	var durer2 time.Duration
+	_ = Unmarshal(pkt, &durer2, With(opts))
+
+	pkt, _ = Marshal("34728957329", With(opts))
+	var durer3 string
+	_ = Unmarshal(pkt, &durer3, With(opts))
+
+}

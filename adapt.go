@@ -541,19 +541,18 @@ func wrapTemporalStringCtor[T any](
 	parse parseFn,
 ) func(string, ...Constraint[T]) (T, error) {
 
-	return func(s string, cs ...Constraint[T]) (T, error) {
-		tm, err := parse(s)
-		if err != nil {
-			return *new(T), err
+	return func(s string, cs ...Constraint[T]) (t T, err error) {
+		var tm time.Time
+		t = *new(T)
+		if tm, err = parse(s); err == nil {
+			tc := make([]Constraint[Temporal], len(cs))
+			for i, c := range cs {
+				cc := c
+				tc[i] = func(x Temporal) error { return cc(x.(T)) }
+			}
+			t, err = raw(tm, tc...)
 		}
-
-		// forward the constraints
-		tc := make([]Constraint[Temporal], len(cs))
-		for i, c := range cs {
-			cc := c
-			tc[i] = func(x Temporal) error { return cc(x.(T)) }
-		}
-		return raw(tm, tc...)
+		return
 	}
 }
 
@@ -564,10 +563,11 @@ func wrapRealCtor[GoT any](
 
 	return func(v GoT, cs ...Constraint[Real]) (Real, error) {
 		m, e, err := toComponents(v, base)
-		if err != nil {
-			return Real{}, err
+		var r Real
+		if err == nil {
+			r, err = NewReal(m, base, e, cs...)
 		}
-		return NewReal(m, base, e, cs...)
+		return r, err
 	}
 }
 
