@@ -163,11 +163,10 @@ func (r Choices) byTag(t any) (calt choiceAlternative, ok bool) {
 	}
 
 	var i int
-	i, ok = r.tagIx[tag]
-	if !ok {
-		return
+	if i, ok = r.tagIx[tag]; ok {
+		calt = r.alts[i]
 	}
-	calt = r.alts[i]
+
 	return
 }
 
@@ -269,36 +268,26 @@ method naming requirement exists because it is possible for a single struct
 to contain multiple fields that are all of the choiceAlternative type, thus
 there needed to be a way to differentiate them.
 */
-func getChoicesMethod(field string, x any) (func() Choices, bool) {
+func getChoicesMethod(field string, x any) (funk func() Choices, ok bool) {
 	v := refValueOf(x)
-	if !v.IsValid() {
-		return nil, false
-	}
-	if field == "" {
-		return nil, false
-	}
-
-	method := v.MethodByName(field + "Choices")
-	if !method.IsValid() {
-		return nil, false
-	}
-
-	mType := method.Type()
-	if mType.NumIn() != 0 || mType.NumOut() != 1 {
-		return nil, false
-	}
-
-	choicesType := refTypeOf((*Choices)(nil)).Elem()
-	if !mType.Out(0).AssignableTo(choicesType) {
-		return nil, false
+	if v.IsValid() && field != "" {
+		method := v.MethodByName(field + "Choices")
+		if method.IsValid() {
+			mType := method.Type()
+			if mType.NumIn() == 0 || mType.NumOut() == 1 {
+				choicesType := refTypeOf((*Choices)(nil)).Elem()
+				if mType.Out(0).AssignableTo(choicesType) {
+					funk = func() Choices {
+						results := method.Call(nil)
+						return results[0].Interface().(Choices)
+					}
+					ok = true
+				}
+			}
+		}
 	}
 
-	choicesFunc := func() Choices {
-		results := method.Call(nil)
-		return results[0].Interface().(Choices)
-	}
-
-	return choicesFunc, true
+	return
 }
 
 func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (alt Choice, err error) {
@@ -314,16 +303,14 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 		// before we fail, see if a ChoicesMap was included
 		// in the Options payload. If so, we can forego the
 		// error if we find a match.
-		if opts.ChoicesMap != nil {
-			var ok bool
-			if choices, ok = opts.ChoicesMap[opts.Choices]; !ok {
-				err = errorNoChoicesAvailable
-				return
-			}
-		} else {
-			err = errorNoChoicesAvailable
-			return
+		if opts.ChoicesMap != nil && len(opts.ChoicesMap) > 0 {
+			choices, _ = opts.ChoicesMap[opts.Choices]
 		}
+	}
+
+	if choices.Len() == 0 {
+		err = errorNoChoicesAvailable
+		return
 	}
 
 	var candidate any
@@ -334,19 +321,22 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 		var tlv TLV
 		if tlv, err = pkt.TLV(); err == nil {
 			pkt.SetOffset(pkt.Offset() + tlv.Length)
+
 			// IMPORTANT: Extract the explicit context tag from the outer TLV.
-			// This ensures that the opts used for choosing the candidate get a valid tag.
-			extractedTag := tlv.Tag // For example, if identifier is 0xA4, then extractedTag will be 4.
-			if tlv.Class == ClassUniversal && opts.HasTag() {
-				extractedTag = opts.Tag()
+			// This ensures that the opts used for choosing the candidate get
+			// a valid tag. For example, if identifier is 0xA4, extractedTag
+			// will be 4.
+			extractedTag := opts.Tag()
+			if !(tlv.Class == ClassUniversal && opts.HasTag()) {
+				extractedTag = tlv.Tag
 			}
-			// Build a structTag string that will be used for candidate matching.
-			opts.choiceTag = &extractedTag // Now opts.Tag is properly set (instead of -1).
+
+			opts.choiceTag = &extractedTag
 			structTag = "choice:tag:" + itoa((*opts.choiceTag))
 			candidate, err = chooseChoiceCandidateBER(pkt, tlv, choices, opts)
 		}
 	default:
-		err = mkerr("Encoding rule not supported")
+		err = errorRuleNotImplemented
 	}
 
 	if err == nil {

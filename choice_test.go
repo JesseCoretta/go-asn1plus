@@ -167,9 +167,42 @@ func ExampleChoice_encodeBareChoice() {
 
 func TestChoice_codecov(_ *testing.T) {
 	var choices Choices = NewChoices()
+	choices.cfg = Options{Automatic: false}
 	choices.Len()
 	choices.Register(nil)
 	choices.Choose(nil)
+
+	tag := 0
+	choices.byTag(nil)
+	choices.byTag(tag)
+	choices.byTag(&tag)
+	var tag2 *int
+	choices.byTag(tag2)
+
+	choices.tokenizeChoiceOptions(`choice:explicit`)
+	chooseChoiceCandidateBER(&BERPacket{}, TLV{}, Choices{}, &Options{tag: &tag})
+	selectFieldChoice("", struct{}{}, &DERPacket{}, &Options{})
+
+	choices.Register(ObjectIdentifier{}, `choice:tag:0,explicit`)
+	choices.Register(ObjectIdentifier{}, `choice:tag:3,explicit`)
+	choices.Choose(ObjectIdentifier{})
+	choicesMap := map[string]Choices{"test": choices}
+	selectFieldChoice("", struct{}{}, &testPacket{}, &Options{Choices: "test", ChoicesMap: choicesMap})
+	chooseChoiceCandidateBER(&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}}, TLV{}, choices, &Options{tag: &tag})
+	choices.Register(new(relOIDCodec[ObjectIdentifier]), `choice:tag:4`)
+	tag = 4
+	chooseChoiceCandidateBER(
+		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
+		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
+		choices, &Options{choiceTag: &tag, tag: &tag},
+	)
+	choices.Register(stubPrimitive{}, `choice:tag:5`)
+	tag = 5
+	chooseChoiceCandidateBER(
+		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
+		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
+		choices, &Options{choiceTag: &tag, tag: &tag},
+	)
 }
 
 func TestSequence_choiceAutomaticTagging(t *testing.T) {
