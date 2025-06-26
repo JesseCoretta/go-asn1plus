@@ -267,6 +267,11 @@ type NamedBit struct {
 NamedBits provides a base implementation for ASN.1 BITSTRING types which
 represent a set of named flags. It embeds the native [BitString] and a
 slice of bit definitions.
+
+During string representation, instances of this type will return the
+entire structure if [BitString] is not set. Otherwise, the process of
+string representation will be limited to only those [NamedBit] slices
+which are currently set within [BitString].
 */
 type NamedBits struct {
 	BitString            // embedded BitString
