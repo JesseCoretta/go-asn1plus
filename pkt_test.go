@@ -256,10 +256,6 @@ func TestPacket_codecov(_ *testing.T) {
 	pktD := &DERPacket{}
 	pktD.Type().OID()
 	With(&Options{})
-	x := WithEncoding(DER)
-	x(&encodingConfig{})
-	x = WithOptions(Options{})
-	x(&encodingConfig{})
 	tester := testPacket{}
 	tester.Type().New()
 	tester.HasMoreData()
