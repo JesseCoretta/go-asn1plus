@@ -5,6 +5,8 @@ tlv.go contains all types, methods and functions for the
 Type-Length-Value type.
 */
 
+import "bytes"
+
 func tlvString(tlv TLV) (str string) {
 	str = "{invalid TLV}"
 	var value []string
@@ -128,6 +130,24 @@ func encodeTLV(t TLV, opts *Options) []byte {
 	return out
 }
 
+func getTLVResolveOverride(class, tag int, compound bool, opts *Options) (int, int, error) {
+	var err error
+	if opts != nil && (opts.HasClass() || opts.HasTag()) {
+		if opts.Explicit && !compound {
+			err = mkerr("Expected constructed TLV for explicit tagging override")
+		} else {
+			if opts.HasClass() {
+				class = opts.Class()
+			}
+			if opts.HasTag() {
+				tag = opts.Tag()
+			}
+		}
+	}
+
+	return class, tag, err
+}
+
 func getTLV(r Packet, opts *Options) (TLV, error) {
 
 	if r.Offset() >= r.Len() {
@@ -154,22 +174,12 @@ func getTLV(r Packet, opts *Options) (TLV, error) {
 		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: error reading tag: ", err.Error())
 	}
 
-	// Advance offset by identifier length.
 	r.SetOffset(r.Offset() + idLen)
 
-	// If there's an override in options, adjust.
-	if opts != nil {
-		if opts.HasTag() || opts.HasClass() {
-			if opts.Explicit && !compound {
-				return TLV{}, mkerr("Expected constructed TLV for explicit tagging override")
-			}
-			if opts.HasClass() {
-				class = opts.Class()
-			}
-			if opts.HasTag() {
-				tag = opts.Tag()
-			}
-		}
+	// restore implicit/explicit override here
+	class, tag, err = getTLVResolveOverride(class, tag, compound, opts)
+	if err != nil {
+		return TLV{}, err
 	}
 
 	// Parse length.
@@ -178,19 +188,37 @@ func getTLV(r Packet, opts *Options) (TLV, error) {
 		return TLV{}, err
 	}
 
-	// Advance offset by the length bytes.
 	r.SetOffset(r.Offset() + lenLen)
 
-	// Use remaining data as value bytes.
-	// Note: For definite lengths it may be necessary to slice exactly the given number
-	// of bytes, but here we pass all remaining bytes.
+	if !r.Type().In(encodingRules...) {
+		err = errorRuleNotImplemented
+		return TLV{}, err
+	}
+
+	start := r.Offset()
+	var valueBytes []byte
+
+	if length >= 0 {
+		// definite-length
+		end := start + length
+		if end > len(d) {
+			return TLV{}, mkerrf("TLV: unexpected truncation of definite length value (", itoa(end), " > ", itoa(len(d)), ")")
+		}
+		valueBytes = d[start:end]
+	} else {
+		// indefinite-length (BER)
+		buf := d[start:]
+		eocIdx := bytes.Index(buf, []byte{0x00, 0x00})
+		if eocIdx < 0 {
+			return TLV{}, mkerr("TLV: missing end-of-contents for indefinite value")
+		}
+		valueBytes = buf[:eocIdx]
+	}
+
 	var tlv TLV
 	switch r.Type() {
 	case BER, CER, DER:
-		tlv = r.Type().newTLV(class, tag, length, compound, d[r.Offset():]...)
-	default:
-		tlv = TLV{}
-		err = errorRuleNotImplemented
+		tlv = r.Type().newTLV(class, tag, length, compound, valueBytes...)
 	}
 
 	return tlv, err

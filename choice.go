@@ -291,18 +291,11 @@ func getChoicesMethod(field string, x any) (funk func() Choices, ok bool) {
 }
 
 func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (alt Choice, err error) {
-	// First see if the construct type exports a
-	// choices method of <FieldName>Choices. If so,
-	// derive our Choices instance from that.
 	var choices Choices
 	meth, found := getChoicesMethod(n, constructed)
 	if found {
 		choices = meth()
 	} else {
-		// No <FieldName>Choices method was discovered. But
-		// before we fail, see if a ChoicesMap was included
-		// in the Options payload. If so, we can forego the
-		// error if we find a match.
 		if opts.ChoicesMap != nil && len(opts.ChoicesMap) > 0 {
 			choices, _ = opts.ChoicesMap[opts.Choices]
 		}
@@ -317,24 +310,23 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 	var structTag string
 	switch pkt.Type() {
 	case BER, CER, DER:
-		// Extract the outer TLV from the Packet.
 		var tlv TLV
-		if tlv, err = pkt.TLV(); err == nil {
-			pkt.SetOffset(pkt.Offset() + tlv.Length)
-
-			// IMPORTANT: Extract the explicit context tag from the outer TLV.
-			// This ensures that the opts used for choosing the candidate get
-			// a valid tag. For example, if identifier is 0xA4, extractedTag
-			// will be 4.
-			extractedTag := opts.Tag()
-			if !(tlv.Class == ClassUniversal && opts.HasTag()) {
-				extractedTag = tlv.Tag
-			}
-
-			opts.choiceTag = &extractedTag
-			structTag = "choice:tag:" + itoa((*opts.choiceTag))
-			candidate, err = chooseChoiceCandidateBER(pkt, tlv, choices, opts)
+		tlv, err = pkt.TLV()
+		if err != nil {
+			return
 		}
+		extractedTag := opts.Tag()
+		if !(tlv.Class == ClassUniversal && opts.HasTag()) {
+			extractedTag = tlv.Tag
+		}
+		opts.choiceTag = &extractedTag
+		structTag = "choice:tag:" + itoa(*opts.choiceTag)
+		candidate, err = bcdChooseChoiceCandidate(pkt, tlv, choices, opts)
+		if err != nil {
+			return
+		}
+		pkt.SetOffset(pkt.Offset() + tlv.Length)
+
 	default:
 		err = errorRuleNotImplemented
 	}
@@ -346,7 +338,7 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 	return
 }
 
-func chooseChoiceCandidateBER(pkt Packet, tlv TLV, choices Choices, opts *Options) (candidate any, err error) {
+func bcdChooseChoiceCandidate(pkt Packet, tlv TLV, choices Choices, opts *Options) (candidate any, err error) {
 	// First try choicesTag, if defined
 	alt, ok := choices.byTag(opts.choiceTag)
 	if !ok {

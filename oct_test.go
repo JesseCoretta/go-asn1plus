@@ -38,11 +38,11 @@ func TestOctetString_codecov(_ *testing.T) {
 	oc.read(tpkt, TLV{}, nil)
 	cerSegmentedOctetStringWrite(oc, cpkt, nil)
 	cpkt.offset = 100
-	cerSegmentedOctetStringRead(oc, cpkt, nil)
+	cerSegmentedOctetStringRead(oc, cpkt, TLV{}, nil)
 	cpkt.data = nil
-	cerSegmentedOctetStringRead(oc, cpkt, nil)
+	cerSegmentedOctetStringRead(oc, cpkt, TLV{}, nil)
 	cpkt.data = []byte{0x00}
-	cerSegmentedOctetStringRead(oc, cpkt, nil)
+	cerSegmentedOctetStringRead(oc, cpkt, TLV{}, nil)
 }
 
 func TestOctetString_encodingRules(t *testing.T) {

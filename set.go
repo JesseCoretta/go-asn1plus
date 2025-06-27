@@ -130,14 +130,10 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts *Options) (err error) {
 	elemType := v.Type().Elem()
 	var elements []reflect.Value
 
-	var subOpts *Options
-	if opts != nil {
-		subOpts = clearChildOpts(opts)
-	}
-
+	subOpts := clearChildOpts(opts)
 	isChoice := unmarshalSetIsChoice(elemType)
 
-	for pkt.Offset() < pkt.Len() {
+	for pkt.HasMoreData() {
 		var tmp reflect.Value
 		if elemType.Kind() == reflect.Ptr {
 			tmp = reflect.New(elemType.Elem())
@@ -208,68 +204,146 @@ func unmarshalSequenceAsSet(v reflect.Value) (reflect.Value, error) {
 	return v, err
 }
 
-func unmarshalSetOfChoice(pkt Packet, tmp reflect.Value, subOpts *Options, elemType reflect.Type) (reflect.Value, error) {
-	// Process a CHOICE element.
-	startOffset := pkt.Offset()
-	var err error
-
-	var tlv TLV
-	if tlv, err = pkt.TLV(); err != nil {
-		return tmp, err
+func unmarshalSetOfChoiceHeaderLength(start int, pkt Packet) (data []byte, headerLen int) {
+	// Compute headerLen = identifier + length octets
+	data = pkt.Data()
+	if data[start+1]&0x80 != 0 {
+		headerLen = 2 + int(data[start+1]&0x7F)
+	} else {
+		headerLen = 2
 	}
 
-	// Advance offset past TLV.
-	pkt.SetOffset(pkt.Offset() + tlv.Length)
-	// Peek at raw identifier byte.
-	rawID := pkt.Data()[startOffset]
-	computedTag := int(rawID) & 0x1F
+	return
+}
 
-	// Use tlv.Tag if valid; if tlv.Tag equals the
-	// universal SET tag (17) then fallback.
-	var tag int = computedTag
-	if tlv.Tag != 17 {
+func unmarshalSetOfChoiceGetTag(tlv TLV, fullWrapper []byte) (tag int) {
+	tag = int(fullWrapper[0]) & 0x1F
+	if tlv.Tag != 17 { // override if non‐universal SET
 		tag = tlv.Tag
 	}
 
-	// Record the tag in Options.
+	return
+}
+
+func unmarshalSetOfChoice(
+	pkt Packet,
+	tmp reflect.Value,
+	subOpts *Options,
+	elemType reflect.Type,
+) (reflect.Value, error) {
+
+	start := pkt.Offset()
+	tlv, err := pkt.TLV()
+	if err != nil {
+		return tmp, err
+	}
+
+	data, headerLen := unmarshalSetOfChoiceHeaderLength(start, pkt)
+
+	// Extract the full wrapper bytes and advance the cursor
+	end := start + headerLen + tlv.Length
+	fullWrapper := data[start:end]
+	pkt.SetOffset(end)
+
+	// Figure out the CHOICE tag and grab its registry entry
+	tag := unmarshalSetOfChoiceGetTag(tlv, fullWrapper)
+
 	subOpts.choiceTag = new(int)
 	*subOpts.choiceTag = tag
 	subOpts.SetTag(tag)
 	structTag := "choice:tag:" + itoa(tag)
-	var choices Choices
-	var ok bool
-	if subOpts.ChoicesMap != nil {
-		if choices, ok = subOpts.ChoicesMap[subOpts.Choices]; !ok {
-			return tmp, errorNoChoicesAvailable
-		}
-	} else {
+	choices, ok := subOpts.ChoicesMap[subOpts.Choices]
+	if !ok {
 		return tmp, errorNoChoicesAvailable
 	}
 
-	var candidate any
-	candidate, err = chooseChoiceCandidateBER(pkt, tlv, choices, subOpts)
-	if err != nil {
-		return tmp, mkerrf("unmarshalSet: error selecting CHOICE: ", err.Error())
+	// Grab the variant definition so we can see if it's a slice.
+	choiceDef, present := choices.byTag(subOpts.choiceTag)
+	if !present {
+		return tmp, mkerrf("no CHOICE variant for tag ", itoa(tag))
 	}
 
-	var alt Choice
-	if alt, err = choices.Choose(candidate, structTag); err == nil {
-		// Instead of directly passing refValueOf(alt.Value),
-		// allocate a new pointer for the inner value.
-		subPkt := pkt.Type().New(tlv.Value...)
-		subPkt.SetOffset(0)
-		innerPtr := reflect.New(reflect.TypeOf(alt.Value))
-		if err = unmarshalValue(subPkt, innerPtr, subOpts); err == nil {
-			// Update alt.Value from the decoded inner value.
-			alt.Value = innerPtr.Elem().Interface()
-			// Now, set the decoded Choice into tmp.
-			if elemType.Kind() == reflect.Ptr {
-				tmp.Elem().Set(reflect.ValueOf(Choice{Value: alt.Value, Tag: alt.Tag, Explicit: alt.Explicit}))
-			} else {
-				tmp.Set(reflect.ValueOf(Choice{Value: alt.Value, Tag: alt.Tag, Explicit: alt.Explicit}))
+	if choiceDef.Type.Kind() == reflect.Slice {
+		elemType := choiceDef.Type.Elem()
+		sample := reflect.New(elemType).Interface()
+		if _, ok := createCodecForPrimitive(sample); ok {
+			innerBytes := fullWrapper[headerLen:]
+			allPkt := pkt.Type().New(innerBytes...)
+			allPkt.SetOffset(0)
+
+			sliceVal := reflect.MakeSlice(choiceDef.Type, 0, 0)
+
+			for allPkt.Offset() < len(innerBytes) {
+				off2 := allPkt.Offset()
+				tlv2, err := allPkt.TLV()
+				if err != nil {
+					return tmp, mkerrf("slice element TLV: ", err.Error())
+				}
+				raw := innerBytes[off2:]
+				var hdr2 int
+				if raw[1]&0x80 != 0 {
+					hdr2 = 2 + int(raw[1]&0x7F)
+				} else {
+					hdr2 = 2
+				}
+				totalLen := hdr2 + tlv2.Length
+				oneTLV := innerBytes[off2 : off2+totalLen]
+
+				subPkt := pkt.Type().New(oneTLV...)
+				subPkt.SetOffset(0)
+				opts2 := *subOpts
+				opts2.tag = nil
+
+				ptr := reflect.New(elemType)
+				if err := unmarshalValue(subPkt, ptr, &opts2); err != nil {
+					return tmp, mkerrf("slice element decode: ", err.Error())
+				}
+				sliceVal = reflect.Append(sliceVal, ptr.Elem())
+
+				allPkt.SetOffset(off2 + totalLen)
 			}
+
+			choiceVal := Choice{
+				Value:    sliceVal.Interface(),
+				Explicit: choiceDef.Opts.Explicit,
+			}
+			choiceVal.SetTag(choiceDef.Opts.Tag)
+			if elemType.Kind() == reflect.Ptr {
+				tmp.Elem().Set(reflect.ValueOf(choiceVal))
+			} else {
+				tmp.Set(reflect.ValueOf(choiceVal))
+			}
+			return tmp, nil
 		}
 	}
 
-	return tmp, err
+	candidate, err := bcdChooseChoiceCandidate(pkt, tlv, choices, subOpts)
+	if err != nil {
+		return tmp, mkerrf("selecting CHOICE: ", err.Error())
+	}
+	alt, err := choices.Choose(candidate, structTag)
+	if err != nil {
+		return tmp, err
+	}
+
+	innerTLV := fullWrapper[headerLen:]
+
+	innerPkt := pkt.Type().New(innerTLV...)
+	innerPkt.SetOffset(0)
+	opts2 := *subOpts
+	opts2.tag = nil
+
+	innerPtr := reflect.New(reflect.TypeOf(alt.Value))
+	if err := unmarshalValue(innerPkt, innerPtr, &opts2); err != nil {
+		return tmp, mkerrf("inner decode failed: ", err.Error())
+	}
+	alt.Value = innerPtr.Elem().Interface()
+
+	choiceVal := Choice{Value: alt.Value, Tag: alt.Tag, Explicit: alt.Explicit}
+	if elemType.Kind() == reflect.Ptr {
+		tmp.Elem().Set(reflect.ValueOf(choiceVal))
+	} else {
+		tmp.Set(reflect.ValueOf(choiceVal))
+	}
+	return tmp, nil
 }

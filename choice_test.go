@@ -68,6 +68,76 @@ func TestChoice_SetOfChoice(t *testing.T) {
 	//t.Logf("%#v\n", F2)
 }
 
+func TestChoice_SequenceOfChoice(t *testing.T) {
+	type substringAssertion struct {
+		Initial OctetString   `asn1:"tag:0"`     // occurs at most once
+		Any     []OctetString `asn1:"tag:1,set"` // zero or more occurrences
+		Final   OctetString   `asn1:"tag:2"`     // occurs at most once
+	}
+
+	makeChoice := func(t int, val any) Choice {
+		tag := t
+		return Choice{
+			Value:    val,
+			Tag:      &tag,
+			Explicit: true,
+		}
+	}
+
+	var seq []Choice
+	var sa substringAssertion = substringAssertion{
+		Initial: OctetString("thi"),
+		Any: []OctetString{
+			OctetString("is"),
+			OctetString("a"),
+			OctetString("subs"),
+		},
+		Final: OctetString("ring"),
+	}
+
+	// [0] initial, if provided (non-zero length)
+	if len(sa.Initial) != 0 {
+		seq = append(seq, makeChoice(0, sa.Initial))
+	}
+
+	// [1] any — one Choice per element of the slice
+	for _, part := range sa.Any {
+		seq = append(seq, makeChoice(1, part))
+	}
+
+	// [2] final, if provided (non-zero length)
+	if len(sa.Final) != 0 {
+		seq = append(seq, makeChoice(2, sa.Final))
+	}
+
+	// enforce SIZE(1..MAX)
+	if len(seq) == 0 {
+		t.Fatalf("substring must contain at least one of Initial, Any or Final")
+	}
+
+	pkt, err := Marshal(seq, With(BER))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	choices := NewChoices()
+	choices.Register(OctetString{}, "choice:tag:0")
+	choices.Register([]OctetString{}, "choice:tag:1")
+	choices.Register(OctetString{}, "choice:tag:2")
+
+	opts := &Options{
+		Choices: "substring",
+		ChoicesMap: map[string]Choices{
+			"substring": choices,
+		},
+	}
+
+	var seq2 []Choice
+	if err = Unmarshal(pkt, &seq2, With(opts)); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+}
+
 func TestChoice_ContextTagging(t *testing.T) {
 	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
 	tagVal := "choice:tag:3"
@@ -180,7 +250,7 @@ func TestChoice_codecov(_ *testing.T) {
 	choices.byTag(tag2)
 
 	choices.tokenizeChoiceOptions(`choice:explicit`)
-	chooseChoiceCandidateBER(&BERPacket{}, TLV{}, Choices{}, &Options{tag: &tag})
+	bcdChooseChoiceCandidate(&BERPacket{}, TLV{}, Choices{}, &Options{tag: &tag})
 	selectFieldChoice("", struct{}{}, &DERPacket{}, &Options{})
 
 	choices.Register(ObjectIdentifier{}, `choice:tag:0,explicit`)
@@ -188,17 +258,17 @@ func TestChoice_codecov(_ *testing.T) {
 	choices.Choose(ObjectIdentifier{})
 	choicesMap := map[string]Choices{"test": choices}
 	selectFieldChoice("", struct{}{}, &testPacket{}, &Options{Choices: "test", ChoicesMap: choicesMap})
-	chooseChoiceCandidateBER(&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}}, TLV{}, choices, &Options{tag: &tag})
+	bcdChooseChoiceCandidate(&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}}, TLV{}, choices, &Options{tag: &tag})
 	choices.Register(new(relOIDCodec[ObjectIdentifier]), `choice:tag:4`)
 	tag = 4
-	chooseChoiceCandidateBER(
+	bcdChooseChoiceCandidate(
 		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
 		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
 		choices, &Options{choiceTag: &tag, tag: &tag},
 	)
 	choices.Register(stubPrimitive{}, `choice:tag:5`)
 	tag = 5
-	chooseChoiceCandidateBER(
+	bcdChooseChoiceCandidate(
 		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
 		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
 		choices, &Options{choiceTag: &tag, tag: &tag},

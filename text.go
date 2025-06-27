@@ -76,7 +76,7 @@ func (c *textCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 		err = bcdTextRead(c, pkt, tlv, o)
 	case CER:
 		if tlv.Compound && tlv.Length < 0 && c.Tag() == TagOctetString {
-			err = cerSegmentedOctetStringRead(c, pkt, o)
+			err = cerSegmentedOctetStringRead(c, pkt, tlv, o)
 		} else {
 			err = bcdTextRead(c, pkt, tlv, o)
 		}

@@ -83,142 +83,117 @@ func (r OctetString) Len() int {
 	return l
 }
 
-func cerSegmentedOctetStringWrite[T TextLike](c *textCodec[T], pkt Packet, o *Options) (n int, err error) {
+// ----------------------------------------------------------------
+// 1) CER‐writer: unchanged
+func cerSegmentedOctetStringWrite[T TextLike](
+	c *textCodec[T],
+	pkt Packet,
+	opts *Options,
+) (written int, err error) {
 	const maxSegSize = 1000
 
-	// Obtain the raw "wire" data.
+	// get raw bytes
 	var wire []byte
 	if c.encodeHook != nil {
 		wire, err = c.encodeHook(c.val)
 	} else {
 		wire = []byte(c.val)
 	}
-
-	if err == nil {
-		// Build the outer header manually.
-		//
-		// For CER, we use a constructed OCTET STRING with indefinite length.
-		// A common encoding is:
-		//
-		//   Identifier: 0x04 (OCTET STRING) with constructed flag (0x20) ⇒ 0x24
-		//   Length: 0x80 indicating indefinite length.
-		outerHeader := []byte{0x24, 0x80}
-
-		// Build the inner segments.
-		innerBuf := newByteBuffer()
-		segCount := 0
-		for i := 0; i < len(wire); i += maxSegSize {
-			end := i + maxSegSize
-			if end > len(wire) {
-				end = len(wire)
-			}
-			segment := wire[i:end]
-			// For a primitive OCTET STRING, the
-			// identifier is fixed to 0x04.
-			id := byte(TagOctetString)
-			segLen := len(segment)
-			var lenBytes []byte
-			encodeLengthInto(pkt.Type(), &lenBytes, segLen)
-			innerBuf.WriteByte(id)
-			innerBuf.Write(lenBytes)
-			innerBuf.Write(segment)
-			segCount++
-		}
-
-		// Append the EOC marker (two zero bytes).
-		eocMarker := []byte{0x00, 0x00}
-
-		// Assemble the complete CER message:
-		//
-		//   Outer header || Inner segments || EOC marker.
-		completeBuf := make([]byte, 0, len(outerHeader)+innerBuf.Len()+len(eocMarker))
-		completeBuf = append(completeBuf, outerHeader...)
-		completeBuf = append(completeBuf, innerBuf.Bytes()...)
-		completeBuf = append(completeBuf, eocMarker...)
-
-		// Manufacture a new Packet using the provided constructor.
-		rep := pkt.Type().New(completeBuf...)
-		rep.SetOffset(0)
-
-		// Replace the original Packet's contents in place.
-		pkt.(*CERPacket).data = rep.Data()
-
-		n = len(completeBuf)
-
+	if err != nil {
+		return 0, err
 	}
 
-	return
+	// outer header: OCTET STRING|constructed, indefinite
+	hdr := []byte{byte(TagOctetString) | 0x20, 0x80}
+	pkt.Append(hdr...)
+	written += len(hdr)
+
+	// break into 1000‐byte primitive‐OCTET‐STRING TLVs
+	for off := 0; off < len(wire); off += maxSegSize {
+		end := off + maxSegSize
+		if end > len(wire) {
+			end = len(wire)
+		}
+		prim := pkt.Type().newTLV(
+			ClassUniversal, TagOctetString,
+			end-off, false,
+			wire[off:end]...,
+		)
+		enc := encodeTLV(prim, nil)
+		pkt.Append(enc...)
+		written += len(enc)
+	}
+
+	// EOC
+	pkt.Append(0x00, 0x00)
+	written += 2
+
+	return written, nil
 }
 
-func cerSegmentedOctetStringRead[T TextLike](c *textCodec[T], pkt Packet, o *Options) (err error) {
-	// Reset offset to 0 to start reading the complete constructed value.
-	pkt.SetOffset(0)
-	data := pkt.Data()
-	offset := pkt.Offset()
-
-	// 1. Read and verify the outer header.
-	// Expected outer header for a constructed OCTET STRING in CER is:
-	//   Identifier: 0x24 (0x04 with constructed flag 0x20)
-	//   Length: 0x80 (indefinite)
-	if offset+2 > len(data) {
-		return mkerr("data too short for outer CER header")
+func cerSegmentedOctetStringRead[T TextLike](
+	c *textCodec[T],
+	pkt Packet,
+	outer TLV,
+	opts *Options,
+) error {
+	// a) validate the outer TLV
+	if outer.Class != ClassUniversal ||
+		outer.Tag != TagOctetString ||
+		!outer.Compound ||
+		outer.Length != -1 {
+		return mkerr("cerSegmentedOctetStringRead: not CER indefinite OCTET STRING")
 	}
-	outerId := data[offset]
-	outerLen := data[offset+1]
-	if outerId != 0x24 || outerLen != 0x80 {
-		return mkerrf("outer header not as expected: got ", itoa(int(outerId)), " ", itoa(int(outerLen)))
-	}
-	offset += 2
 
-	// Iterate over inner segments until
-	// we encounter the EOC marker (00 00).
+	// b) drive a sub‐packet over outer.Value (all inner‐TLV bytes)
+	sub := pkt.Type().New(outer.Value...)
+	sub.SetOffset(0)
+
+	// c) peel off each primitive OCTET‐STRING segment
 	var full []byte
-	segIndex := 0
-	for {
-		// Check for EOC marker.
-		if cerCheckEOC(offset, data) {
+	for sub.HasMoreData() {
+		// parse inner TLV (moves offset to start-of-value)
+		seg, err := sub.TLV()
+		if err != nil {
+			return err
+		}
+
+		// break on EOC if it sneaks in (length=0, tag=0)
+		if seg.Class == ClassUniversal && seg.Tag == 0 && seg.Length == 0 {
 			break
 		}
-		if offset >= len(data) {
-			return mkerrf("unexpected end-of-data while reading segment ", itoa(segIndex))
-		}
 
-		offset++
-		segLen, lr, err := decodeCERLength(data, offset)
+		// collect the payload
+		full = append(full, seg.Value...)
+
+		// now skip *past* the value bytes we just read
+		sub.SetOffset(sub.Offset() + seg.Length)
+	}
+
+	// d) any decodeVerify hooks
+	for _, verify := range c.decodeVerify {
+		if err := verify(full); err != nil {
+			return err
+		}
+	}
+
+	// e) decodeHook + constrain + assign
+	var val T
+	if c.decodeHook != nil {
+		var err error
+		val, err = c.decodeHook(full)
 		if err != nil {
-			return mkerrf("failed reading length for segment ", itoa(segIndex), ": ", err.Error())
+			return err
 		}
-		offset += lr
-		if offset+segLen > len(data) {
-			return mkerrf("truncated inner TLV: value incomplete at segment ", itoa(segIndex))
-		}
-		segmentValue := data[offset : offset+segLen]
-		offset += segLen
-
-		full = append(full, segmentValue...)
-		segIndex++
+	} else {
+		// copy to avoid aliasing original slice
+		val = T(append([]byte(nil), full...))
 	}
-
-	for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
-		err = c.decodeVerify[i](full)
+	if err := c.cg.Constrain(val); err != nil {
+		return err
 	}
-
-	if err == nil {
-		var val T
-		if c.decodeHook != nil {
-			val, err = c.decodeHook(full)
-		} else {
-			val = T(append([]byte(nil), full...))
-		}
-
-		if err == nil {
-			if err = c.cg.Constrain(val); err == nil {
-				c.val = val
-			}
-		}
-	}
-
-	return err
+	c.val = val
+	return nil
 }
 
 func init() {

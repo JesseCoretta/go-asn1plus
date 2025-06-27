@@ -211,8 +211,11 @@ func decodeCERLength(data []byte, offset int) (length int, bytesRead int, err er
 	return length, bytesRead, nil
 }
 
+/*
+// NOT NEEDED FOR NOW.
 func cerCheckEOC(offset int, data []byte) (ok bool) {
 	return offset+2 <= len(data) && data[offset] == 0x00 && data[offset+1] == 0x00
 }
+*/
 
 var cerPktPool = sync.Pool{New: func() any { return &CERPacket{} }}
