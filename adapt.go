@@ -870,7 +870,7 @@ func registerMiscAdapters() {
 	RegisterAdapter[ObjectIdentifier, string](
 		wrapOIDCtor(NewObjectIdentifier, func(s string) any { return s }),
 		func(p *ObjectIdentifier) string { return p.String() },
-		"", "oid", "objectidentifier",
+		"", "oid", "objectidentifier", "object-identifier",
 	)
 
 	// ditto for RelativeOID
