@@ -136,7 +136,7 @@ func cerSegmentedOctetStringRead[T TextLike](
 	pkt Packet,
 	outer TLV,
 	opts *Options,
-) error {
+) (err error) {
 	// a) validate the outer TLV
 	if outer.Class != ClassUniversal ||
 		outer.Tag != TagOctetString ||
@@ -145,55 +145,44 @@ func cerSegmentedOctetStringRead[T TextLike](
 		return mkerr("cerSegmentedOctetStringRead: not CER indefinite OCTET STRING")
 	}
 
-	// b) drive a sub‐packet over outer.Value (all inner‐TLV bytes)
 	sub := pkt.Type().New(outer.Value...)
 	sub.SetOffset(0)
 
-	// c) peel off each primitive OCTET‐STRING segment
 	var full []byte
-	for sub.HasMoreData() {
-		// parse inner TLV (moves offset to start-of-value)
-		seg, err := sub.TLV()
-		if err != nil {
-			return err
-		}
+	for sub.HasMoreData() && err == nil {
+		var seg TLV
+		if seg, err = sub.TLV(); err == nil {
+			if seg.Class == ClassUniversal && seg.Tag == 0 && seg.Length == 0 {
+				break
+			}
 
-		// break on EOC if it sneaks in (length=0, tag=0)
-		if seg.Class == ClassUniversal && seg.Tag == 0 && seg.Length == 0 {
-			break
-		}
-
-		// collect the payload
-		full = append(full, seg.Value...)
-
-		// now skip *past* the value bytes we just read
-		sub.SetOffset(sub.Offset() + seg.Length)
-	}
-
-	// d) any decodeVerify hooks
-	for _, verify := range c.decodeVerify {
-		if err := verify(full); err != nil {
-			return err
+			full = append(full, seg.Value...)
+			sub.SetOffset(sub.Offset() + seg.Length)
 		}
 	}
 
-	// e) decodeHook + constrain + assign
-	var val T
-	if c.decodeHook != nil {
-		var err error
-		val, err = c.decodeHook(full)
-		if err != nil {
-			return err
+	if err == nil {
+		for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
+			err = c.decodeVerify[i](full)
 		}
-	} else {
-		// copy to avoid aliasing original slice
-		val = T(append([]byte(nil), full...))
+
+		if err == nil {
+			var val T
+			if c.decodeHook != nil {
+				val, err = c.decodeHook(full)
+			} else {
+				// copy to avoid aliasing original slice
+				val = T(append([]byte(nil), full...))
+			}
+			if err == nil {
+				if err = c.cg.Constrain(val); err == nil {
+					c.val = val
+				}
+			}
+		}
 	}
-	if err := c.cg.Constrain(val); err != nil {
-		return err
-	}
-	c.val = val
-	return nil
+
+	return
 }
 
 func init() {
