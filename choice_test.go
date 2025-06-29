@@ -2,6 +2,7 @@ package asn1plus
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -567,6 +568,87 @@ func TestChoice_ConcurrentUseDataRace(t *testing.T) {
 	wg.Wait()
 	// With current mutable slice, the -race tool reports:
 	// "WARNING: DATA RACE" (append while readers iterate).
+}
+
+func Test_pickChoiceAlternative_NoUnwrap(t *testing.T) {
+	// build a registry that knows “tag 2 ⇒ int”
+	c := NewChoices()
+	c.Register((*int)(nil), "choice:tag:2")
+
+	// Options must point at that same map
+	opts := &Options{Choices: "choiceDemo"}
+	opts.ChoicesMap = map[string]Choices{
+		"choiceDemo": c,
+	}
+
+	// payload = bare INTEGER 42
+	raw := []byte{0x02, 0x01, 0x2A}
+	pkt := DER.New(raw...)
+	pkt.SetOffset(0)
+
+	def, tag, payload, payloadPK, outOpts, err := setPickChoiceAlternative(pkt, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tag != 2 {
+		t.Errorf("tag = %d; want 2", tag)
+	}
+	if def.Type.Kind() != reflect.Int {
+		t.Errorf("def.Type = %v; want Int", def.Type)
+	}
+	if len(payload) != 1 || payload[0] != 0x2A {
+		t.Errorf("payload = %v; want [0x2A]", payload)
+	}
+	b := payloadPK.Data()
+	if len(b) != 1 || b[0] != 0x2A {
+		t.Errorf("payloadPK.Data() = %v; want [0x2A]", b)
+	}
+	if outOpts.ChoicesMap == nil {
+		t.Errorf("lost registry")
+	}
+}
+
+func Test_pickChoiceAlternative_MustUnwrap(t *testing.T) {
+	c := NewChoices()
+	c.Register((*int)(nil), "choice:tag:2")
+
+	opts := &Options{Choices: "choiceDemo"}
+	opts.ChoicesMap = map[string]Choices{
+		"choiceDemo": c,
+	}
+
+	// context-specific constructed tag 2 (0xA2), length=3, inner=0x02 0x01 0x05
+	raw := []byte{0xA2, 0x03, 0x02, 0x01, 0x05}
+	pkt := DER.New(raw...)
+	pkt.SetOffset(0)
+
+	def, tag, payload, _, _, err := setPickChoiceAlternative(pkt, opts)
+	if err != nil {
+		t.Fatalf("unwrap error: %v", err)
+	}
+	if tag != 2 {
+		t.Errorf("unwrap tag = %d; want 2", tag)
+	}
+	if def.Type.Kind() != reflect.Int {
+		t.Errorf("unwrap def.Type = %v; want Int", def.Type)
+	}
+	if len(payload) != 3 || payload[2] != 0x05 {
+		t.Errorf("unwrap payload = %v; want [0x05]", payload)
+	}
+}
+
+func Test_handleChoiceSlice_NotSlice(t *testing.T) {
+	payload := []byte{0x04, 0x01, 'x'}
+	pkt := DER.New(payload...)
+
+	def := choiceAlternative{
+		Type: reflect.TypeOf(int(0)),
+		Opts: choiceOptions{},
+	}
+	tmp := reflect.New(reflect.TypeOf(Choice{})).Elem()
+	if _, handled, err := handleChoiceSlice(tmp, def, payload, pkt, &Options{}); err != nil || handled {
+		t.Fatalf("got (handled=%v, err=%v), want handled=false, no error", handled, err)
+	}
 }
 
 func init() {
