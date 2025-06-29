@@ -26,7 +26,7 @@ type Options struct {
 	Set         bool               // if true, encode as SET instead of SEQUENCE (for collections)
 	Indefinite  bool               // whether a field is known to be of an indefinite length
 	Automatic   bool               // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
-	Choices     string             // Name of ChoicesMap key for the associated Choices of a single SEQUENCE field
+	Choices     string             // Name of ChoicesMap key for the associated Choices of a single SEQUENCE field or other context
 	Identifier  string             // "ia5", "numeric", "utf8" etc. (for string fields)
 	Constraints []string           // references to registered Constraint/ConstraintGroup instances
 	Default     any                // default value
@@ -38,27 +38,22 @@ type Options struct {
 	unidentified []string // for unidentified or superfluous keywords
 }
 
-// immutable template copied by value.
-var ctxspec = ClassContextSpecific
-var defaultOptionsTemplate = Options{
-	class: &ctxspec, // “tag:x” -> context-specific unless overridden
+func implicitOptions() *Options {
+	o := borrowOptions()
+	o.class = ptrClassUniversal
+	return o
 }
 
 func defaultOptions() *Options {
-	c := ClassContextSpecific // each call gets its OWN variable
-	return &Options{class: &c}
-}
-
-func implicitOptions() *Options {
-	c := ClassUniversal
-	return &Options{class: &c}
+	o := borrowOptions()
+	o.class = ptrClassContextSpecific
+	return o
 }
 
 func deferImplicit(o *Options) *Options {
 	if o == nil {
 		o = implicitOptions()
 	}
-
 	return o
 }
 
@@ -198,28 +193,12 @@ func parseOptions(tagStr string) (opts Options, err error) {
 
 Done:
 	out := *po
-	releaseOptions(po)
+	po.Free()
 	return out, err
 }
 
 func isBoolKeyword(tok string) bool  { _, ok := boolKeywords[tok]; return ok }
 func isClassKeyword(tok string) bool { _, ok := classKeywords[tok]; return ok }
-
-var boolKeywords = map[string]struct{}{
-	"explicit":   {},
-	"optional":   {},
-	"automatic":  {},
-	"set":        {},
-	"omitempty":  {},
-	"indefinite": {},
-}
-
-var classKeywords = map[string]struct{}{
-	"application":      {},
-	"context-specific": {},
-	"context specific": {},
-	"private":          {},
-}
 
 func (r *Options) setBool(name string) {
 	switch {
@@ -292,6 +271,11 @@ func (r *Options) parseOptionKeyword(token string) {
 	}
 }
 
+/*
+swapAlias returns a resolved token from the input alias string.
+This is only used in cases where a particular ASN.1 primitive
+type is known by more than one name.
+*/
 func swapAlias(alias string) (token string) {
 	switch alias {
 	case "teletex":
@@ -334,12 +318,26 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 	return
 }
 
+/*
+SetTag assigns n to the receiver instance. n MUST be greater
+than zero (0).
+*/
 func (r *Options) SetTag(n int) {
 	if n >= 0 {
 		r.tag = &n
 	}
 }
+
+/*
+HasTag returns a Boolean value indicative of a tag being
+set within the receiver instance.
+*/
 func (r Options) HasTag() bool { return r.tag != nil }
+
+/*
+Tag returns the tag integer residing within the receiver
+instance. If unset, -1 (invalid) is returned.
+*/
 func (r Options) Tag() int {
 	if r.tag != nil {
 		return *r.tag
@@ -347,18 +345,41 @@ func (r Options) Tag() int {
 	return -1 // NO valid default
 }
 
+/*
+SetClass assigns n to the receiver instance. n MUST be within
+the bounds of 0..4.
+*/
 func (r *Options) SetClass(n int) {
 	if n >= 0 {
 		r.class = &n
 	}
 }
 
+/*
+HasClass returns a Boolean value indicative of a class being
+set within the receiver instance.
+*/
 func (r Options) HasClass() bool { return r.class != nil }
+
+/*
+Class returns the class integer residing within the receiver
+instance. If unset, 0 ([ClassUniversal]) is returned.
+*/
 func (r Options) Class() int {
 	if r.class != nil {
 		return *r.class
 	}
 	return 0 // UNIVERSAL default
+}
+
+/*
+Free frees the receiver instance from memory.
+*/
+func (r *Options) Free() {
+	if r != nil {
+		*r = Options{} // zero out all fields
+		optPool.Put(r) // hand it back
+	}
 }
 
 func clearChildOpts(o *Options) (c *Options) {
@@ -375,12 +396,6 @@ func clearChildOpts(o *Options) (c *Options) {
 	return
 }
 
-var optPool = sync.Pool{
-	New: func() any { return &Options{} }, // zero-value Options
-}
+var optPool = sync.Pool{New: func() any { return &Options{} }}
 
 func borrowOptions() *Options { return optPool.Get().(*Options) }
-func releaseOptions(o *Options) {
-	*o = Options{} // zero all fields
-	optPool.Put(o)
-}
