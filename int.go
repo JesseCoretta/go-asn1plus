@@ -191,9 +191,7 @@ func encodeIntegerContent(i *big.Int) (data []byte) {
 		// First, determine the minimum number of octets n needed.
 		abs := new(big.Int).Abs(i)
 		n := (abs.BitLen() + 7) / 8
-		if n == 0 {
-			n = 1 // at least one byte is required
-		}
+
 		// For negative numbers, n must be chosen so that i >= - (1 << (8*n - 1)).
 		min := new(big.Int).Lsh(newBigInt(1), uint(8*n-1))
 		min.Neg(min)
@@ -204,15 +202,6 @@ func encodeIntegerContent(i *big.Int) (data []byte) {
 		mod := new(big.Int).Lsh(newBigInt(1), uint(8*n))
 		value := new(big.Int).Add(mod, i)
 		b := value.Bytes()
-		// Ensure the output is exactly n bytes.
-		if len(b) < n {
-			padding := make([]byte, n-len(b))
-			b = append(padding, b...)
-		}
-		// By DER rules, for negative integers the first byte must have its high bit set.
-		if b[0]&0x80 == 0 {
-			b = append([]byte{0xff}, b...)
-		}
 		data = b
 	}
 
