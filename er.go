@@ -19,7 +19,8 @@ const (
 	DER
 )
 
-// for unit tests
+// for unit tests, enforcement and officiation of all supported
+// encoding rules within this package.
 var encodingRules []EncodingRule = []EncodingRule{BER, CER, DER}
 
 /*
@@ -67,50 +68,10 @@ the final byte. If none are provided, an empty (but initialized) [Packet]
 is returned as-is.
 */
 func (r EncodingRule) New(src ...byte) Packet {
-	var pkt Packet
-	switch r {
-	case BER:
-		b := berPktPool.Get().(*BERPacket)
+	var pkt Packet = invalidPacket{}
 
-		if cap(b.data) < len(src) {
-			bufPtr := bufPool.Get().(*[]byte)
-			if cap(*bufPtr) < len(src) {
-				*bufPtr = make([]byte, 0, roundup(len(src)))
-			}
-			b.data = *bufPtr
-		}
-
-		b.data = append(b.data[:0], src...)
-		pkt = b
-
-	case CER:
-		b := cerPktPool.Get().(*CERPacket)
-
-		if cap(b.data) < len(src) {
-			bufPtr := bufPool.Get().(*[]byte)
-			if cap(*bufPtr) < len(src) {
-				*bufPtr = make([]byte, 0, roundup(len(src)))
-			}
-			b.data = *bufPtr
-		}
-
-		b.data = append(b.data[:0], src...)
-		pkt = b
-
-	case DER:
-		d := derPktPool.Get().(*DERPacket)
-		if cap(d.data) < len(src) {
-			bufPtr := bufPool.Get().(*[]byte)
-			if cap(*bufPtr) < len(src) {
-				*bufPtr = make([]byte, 0, roundup(len(src)))
-			}
-			d.data = *bufPtr
-		}
-		d.data = append(d.data[:0], src...)
-		pkt = d
-
-	default:
-		pkt = invalidPacket{}
+	if r.In(encodingRules...) {
+		pkt = packetConstructors[r](src...)
 	}
 
 	pkt.SetOffset(-1)
