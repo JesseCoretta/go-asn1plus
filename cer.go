@@ -84,7 +84,7 @@ func (r *CERPacket) Append(data ...byte) {
 	if r == nil || len(data) == 0 {
 		return
 	}
-	need := len(r.data) + len(data)
+	need := r.Len() + len(data)
 
 	if cap(r.data) < need {
 		bufPtr := bufPool.Get().(*[]byte)
@@ -209,6 +209,22 @@ func decodeCERLength(data []byte, offset int) (length int, bytesRead int, err er
 	}
 	bytesRead += numOctets
 	return length, bytesRead, nil
+}
+
+func newCERPacket(src ...byte) (pkt Packet) {
+	b := cerPktPool.Get().(*CERPacket)
+
+	if cap(b.data) < len(src) {
+		bufPtr := bufPool.Get().(*[]byte)
+		if cap(*bufPtr) < len(src) {
+			*bufPtr = make([]byte, 0, roundup(len(src)))
+		}
+		b.data = *bufPtr
+	}
+
+	b.data = append(b.data[:0], src...)
+	pkt = b
+	return
 }
 
 /*

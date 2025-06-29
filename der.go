@@ -84,7 +84,7 @@ func (r *DERPacket) Append(data ...byte) {
 	if r == nil || len(data) == 0 {
 		return
 	}
-	need := len(r.data) + len(data)
+	need := r.Len() + len(data)
 
 	if cap(r.data) < need {
 		bufPtr := bufPool.Get().(*[]byte)
@@ -185,6 +185,22 @@ func encodeDERLengthInto(dst *[]byte, n int) {
 	}
 	*dst = append(*dst, 0x80|byte(len(tmp)-i))
 	*dst = append(*dst, tmp[i:]...)
+}
+
+func newDERPacket(src ...byte) (pkt Packet) {
+	b := derPktPool.Get().(*DERPacket)
+
+	if cap(b.data) < len(src) {
+		bufPtr := bufPool.Get().(*[]byte)
+		if cap(*bufPtr) < len(src) {
+			*bufPtr = make([]byte, 0, roundup(len(src)))
+		}
+		b.data = *bufPtr
+	}
+
+	b.data = append(b.data[:0], src...)
+	pkt = b
+	return
 }
 
 var derPktPool = sync.Pool{New: func() any { return &DERPacket{} }}

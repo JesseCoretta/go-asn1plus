@@ -94,7 +94,7 @@ func (r *BERPacket) Append(data ...byte) {
 	if r == nil || len(data) == 0 {
 		return
 	}
-	need := len(r.data) + len(data)
+	need := r.Len() + len(data)
 
 	if cap(r.data) < need {
 		bufPtr := bufPool.Get().(*[]byte)
@@ -166,6 +166,22 @@ WriteTLV returns an int following an attempt to write a [BER] tag/length
 header to the receiver buffer.
 */
 func (r *BERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }
+
+func newBERPacket(src ...byte) (pkt Packet) {
+	b := berPktPool.Get().(*BERPacket)
+
+	if cap(b.data) < len(src) {
+		bufPtr := bufPool.Get().(*[]byte)
+		if cap(*bufPtr) < len(src) {
+			*bufPtr = make([]byte, 0, roundup(len(src)))
+		}
+		b.data = *bufPtr
+	}
+
+	b.data = append(b.data[:0], src...)
+	pkt = b
+	return
+}
 
 /*
 Packet returns an instance of [Packet] alongside an error following an attempt to read
