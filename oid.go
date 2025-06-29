@@ -200,23 +200,6 @@ func vlqEncodeBig(n *big.Int) []byte {
 	return buf[i:]
 }
 
-//func vlqDecode(pkt Packet) (*big.Int, error) {
-//	v := newBigInt(0)
-//	for {
-//		if pkt.Offset() >= pkt.Len() {
-//			return nil, mkerr("truncated VLQ")
-//		}
-//		oct := pkt.Data()[pkt.Offset()]
-//		pkt.SetOffset(pkt.Offset() + 1)
-//
-//		v.Lsh(v, 7)
-//		v.Or(v, newBigInt(int64(oct&0x7F)))
-//		if oct&0x80 == 0 {
-//			return v, nil
-//		}
-//	}
-//}
-
 /*
 IntSlice returns slices of integer values and an error. The integer values are based
 upon the contents of the receiver. Note that if any single arc number overflows int,
@@ -822,10 +805,6 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 			arc = Integer{native: subidentifier.Int64()}
 		} else {
 			arc = Integer{big: true, bigInt: newBigInt(0).Set(subidentifier)}
-		}
-		if arc.Big().Sign() < 0 {
-			err = mkerr("Relative OID arcs may not be negative")
-			return
 		}
 
 		roid = append(roid, arc)
