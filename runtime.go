@@ -22,11 +22,7 @@ If an encoding rule is not specified, [DER] encoding is used as the default.
 See also [Unmarshal] and [With].
 */
 func Marshal(x any, with ...EncodingOption) (pkt Packet, err error) {
-	// For example, we default to DER and to a default Options value.
-	cfg := &encodingConfig{
-		rule: DER,
-	}
-
+	cfg := &encodingConfig{rule: DER} // default
 	for _, o := range with {
 		o(cfg)
 	}
