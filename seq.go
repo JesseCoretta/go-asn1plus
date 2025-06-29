@@ -82,40 +82,15 @@ func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err
 	var tlv TLV
 	sub.SetOffset(0)
 	if depth == 1 && opts != nil {
-		// At the outermost level (depth==1), if global options were provided, use them.
 		content := sub.Data()
 		tlv = pkt.Type().newTLV(opts.Class(), seqTag, len(content), true, content...)
 		encoded := encodeTLV(tlv, opts)
 		pkt.Append(encoded...)
 	} else {
-		// unified wrap: take *all* of sub.Data() as your content
 		content := sub.Data()
-		// the tag/class logic is identical whether depth==1 or not:
-		class, tag := ClassUniversal, TagSequence
-		if depth == 1 && opts != nil {
-			class, tag = opts.Class(), seqTag
-		}
-		tlv := pkt.Type().newTLV(class, tag, len(content), true, content...)
-		// use explicit opts only at top-level
-		var enc []byte
-		if depth == 1 && opts != nil {
-			enc = encodeTLV(tlv, opts)
-		} else {
-			enc = encodeTLV(tlv, nil)
-		}
-		pkt.Append(enc...)
-		return
+		tlv := pkt.Type().newTLV(ClassUniversal, TagSequence, len(content), true, content...)
+		pkt.Append(encodeTLV(tlv, nil)...)
 	}
-	//} else if tlv, err = sub.TLV(); err == nil {
-	//	// Inner sequences use the universal SEQUENCE tag (0x30).
-	//	pkt.Append(0x30)
-	//	enc := encodeTLV(tlv, nil)
-	//	bufPtr := getBuf()
-	//	encodeLengthInto(pkt.Type(), bufPtr, len(enc))
-	//	pkt.Append(*bufPtr...)
-	//	putBuf(bufPtr)
-	//	pkt.Append(enc...)
-	//}
 
 	return
 }
