@@ -123,7 +123,31 @@ var (
 	cerOID ObjectIdentifier
 )
 
+var (
+	ptrClassUniversal       = new(int)
+	ptrClassContextSpecific = new(int)
+)
+
+var boolKeywords = map[string]struct{}{
+	"explicit":   {},
+	"optional":   {},
+	"automatic":  {},
+	"set":        {},
+	"omitempty":  {},
+	"indefinite": {},
+}
+
+var classKeywords = map[string]struct{}{
+	"application":      {},
+	"context-specific": {},
+	"context specific": {},
+	"private":          {},
+}
+
 func init() {
+	*ptrClassUniversal = ClassUniversal
+	*ptrClassContextSpecific = ClassContextSpecific
+
 	berOID, _ = NewObjectIdentifier(2, 1, 1)
 	cerOID, _ = NewObjectIdentifier(2, 1, 2, 0)
 	derOID, _ = NewObjectIdentifier(2, 1, 2, 1)
