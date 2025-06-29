@@ -6,6 +6,7 @@ and use of all string/[]byte type derivatives.
 */
 
 import "reflect"
+import "unicode/utf8"
 
 /*
 TextLike is implemented through string and []byte types,
@@ -190,4 +191,39 @@ func RegisterTextAlias[T TextLike](
 	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
+}
+
+func buildText(
+	in string,
+	tag byte,
+	maxUnits int,
+	maxBPU int,
+	enc func(r rune, dst []byte, pos int) (bw, cu int, err error),
+) ([]byte, error) {
+	if len(in) == 0 {
+		return []byte{tag, 0}, nil
+	}
+	out := make([]byte, 2+len(in)*maxBPU)
+	out[0], out[1] = tag, 0
+	pos, used := 2, 0
+
+	for i := 0; i < len(in); {
+		r, sz := utf8.DecodeRuneInString(in[i:])
+		if r == utf8.RuneError && sz == 1 {
+			return nil, mkerr("invalid UTF-8")
+		}
+		i += sz
+
+		bw, cu, err := enc(r, out, pos)
+		if err != nil {
+			return nil, err
+		}
+		pos += bw
+		used += cu
+		if used > maxUnits {
+			return nil, mkerr("too many code units")
+		}
+	}
+	out[1] = byte(used)
+	return out[:pos], nil
 }
