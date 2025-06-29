@@ -151,20 +151,21 @@ the receiver instance.
 func (r Choices) Len() int { return len(r.alts) }
 
 func (r Choices) byTag(t any) (calt choiceAlternative, ok bool) {
-	var tag int
+	var tag int = -1
 	switch tv := t.(type) {
 	case int:
 		tag = tv
 	case *int:
-		if tv == nil {
-			return
+		if tv != nil {
+			tag = *tv
 		}
-		tag = *tv
 	}
 
-	var i int
-	if i, ok = r.tagIx[tag]; ok {
-		calt = r.alts[i]
+	if tag > -1 {
+		var i int
+		if i, ok = r.tagIx[tag]; ok {
+			calt = r.alts[i]
+		}
 	}
 
 	return
@@ -222,7 +223,7 @@ func (r Choices) Choose(instance any, opts ...string) (c Choice, err error) {
 	case 0:
 		err = errorNoChoiceMatched(inputType.String())
 	case 1:
-		c = Choice{Value: instance, Tag: &matches[0].Opts.Tag, Explicit: matches[0].Opts.Explicit}
+		c = Choice{Value: instance, Tag: &matches[0].Opts.Tag, Explicit: matches[0].Opts.Explicit || o.Explicit}
 	default:
 		err = errorAmbiguousChoice
 	}
@@ -312,20 +313,18 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 	case BER, CER, DER:
 		var tlv TLV
 		tlv, err = pkt.TLV()
-		if err != nil {
-			return
+		if err == nil {
+			extractedTag := opts.Tag()
+			if !(tlv.Class == ClassUniversal && opts.HasTag()) {
+				extractedTag = tlv.Tag
+			}
+			opts.choiceTag = &extractedTag
+			structTag = "choice:tag:" + itoa(*opts.choiceTag)
+			candidate, err = bcdChooseChoiceCandidate(pkt, tlv, choices, opts)
+			if err == nil {
+				pkt.SetOffset(pkt.Offset() + tlv.Length)
+			}
 		}
-		extractedTag := opts.Tag()
-		if !(tlv.Class == ClassUniversal && opts.HasTag()) {
-			extractedTag = tlv.Tag
-		}
-		opts.choiceTag = &extractedTag
-		structTag = "choice:tag:" + itoa(*opts.choiceTag)
-		candidate, err = bcdChooseChoiceCandidate(pkt, tlv, choices, opts)
-		if err != nil {
-			return
-		}
-		pkt.SetOffset(pkt.Offset() + tlv.Length)
 
 	default:
 		err = errorRuleNotImplemented
