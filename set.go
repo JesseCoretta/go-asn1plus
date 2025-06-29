@@ -144,11 +144,7 @@ func unmarshalSet(v reflect.Value, pkt Packet, opts *Options) (err error) {
 		if isChoice {
 			tmp, err = unmarshalSetOfChoice(pkt, tmp, subOpts, elemType)
 		} else {
-			if subOpts != nil {
-				err = unmarshalValue(pkt, tmp, subOpts)
-			} else {
-				err = unmarshalValue(pkt, tmp, nil)
-			}
+			err = unmarshalValue(pkt, tmp, subOpts)
 		}
 		if err != nil {
 			err = mkerrf("unmarshalSet: error unmarshaling SET element: ", err.Error())
@@ -260,7 +256,8 @@ func unmarshalSetOfChoice(
 	// Grab the variant definition so we can see if it's a slice.
 	choiceDef, present := choices.byTag(subOpts.choiceTag)
 	if !present {
-		return tmp, mkerrf("no CHOICE variant for tag ", itoa(tag))
+		cht := subOpts.choiceTag
+		return tmp, mkerrf("no CHOICE variant for tag ", itoa(*cht))
 	}
 
 	if choiceDef.Type.Kind() == reflect.Slice {
