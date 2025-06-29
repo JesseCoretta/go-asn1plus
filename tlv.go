@@ -78,56 +78,37 @@ func (r TLV) Eq(tlv TLV, length ...bool) bool {
 }
 
 func encodeTLV(t TLV, opts *Options) []byte {
-	bufPtr := getBuf()
-	b := *bufPtr
+    bufPtr := getBuf()
+    b := *bufPtr
+    b = b[:0]
 
-	classVal := t.Class // class bits from the TLV
-	tagVal := t.Tag     // tag from the TLV
-	compound := t.Compound
+    id := byte(t.Class<<6)
+    if t.Compound || (opts != nil && opts.Explicit) {
+        id |= 0x20
+    }
+    tagVal := t.Tag
+    if opts != nil && opts.HasTag() {
+        tagVal = opts.Tag()
+    }
+    if tagVal < 31 {
+        b = append(b, id|byte(tagVal))
+    } else {
+        b = append(b, id|0x1F)
+        b = append(b, encodeBase128Int(tagVal)...)
+    }
 
-	if opts != nil {
-		classVal = opts.Class()
-		if opts.HasTag() {
-			tagVal = opts.Tag()
-		}
-		if opts.Explicit {
-			compound = true
-		}
-	}
+    if tagVal < 0 {
+        panic("encodeTLV: negative tag reached encoder")
+    }
 
-	// TODO: is panic the most appropriate action?
-	if tagVal < 0 {
-		panic("encodeTLV: negative tag reached encoder")
-	}
+    encodeLengthInto(t.Type(), &b, t.Length)
+    b = append(b, t.Value...)
+    out := make([]byte, len(b))
+    copy(out, b)
+    *bufPtr = b[:0]
+    putBuf(bufPtr)
 
-	var id byte = byte(classVal << 6)
-	if compound {
-		id |= 0x20
-	}
-
-	if tagVal < 31 {
-		id |= byte(tagVal)
-		b = append(b, id)
-	} else {
-		id |= 0x1F
-		b = append(b, id)
-		b = append(b, encodeBase128Int(tagVal)...)
-	}
-
-	indef := t.Type().allowsIndefinite() &&
-		((opts != nil && opts.Indefinite) || t.Length < 0)
-
-	if indef {
-		b = append(b, 0x80) // indefinite-length indicator
-	} else {
-		encodeLengthInto(t.Type(), &b, t.Length)
-	}
-
-	b = append(b, t.Value...)
-
-	out := append([]byte(nil), b...)
-	putBuf(bufPtr)
-	return out
+    return out
 }
 
 func getTLVResolveOverride(class, tag int, compound bool, opts *Options) (int, int, error) {
@@ -287,32 +268,6 @@ func sizeTLV(tag int, length int) (size int) {
 }
 
 /*
-encodeBase128Int returns the []byte encoding of an integer
-as base-128 (for long-form tags).
-*/
-func encodeBase128Int(value int) (enc []byte) {
-	bufPtr := getBuf()
-	out := *bufPtr
-	for {
-		b := byte(value & 0x7f)
-		value >>= 7
-		// Prepend if this isn't the last byte.
-		if len(out) > 0 {
-			b |= 0x80
-		}
-		out = append([]byte{b}, out...)
-		if value == 0 {
-			break
-		}
-	}
-
-	enc = append([]byte(nil), out...)
-	putBuf(bufPtr)
-
-	return
-}
-
-/*
 readBase128Int returns the decoded base-128 integer,
 used for tags >= 31.
 */
@@ -331,6 +286,22 @@ func readBase128Int(pkt Packet) (int, error) {
 	}
 	return result, nil
 }
+
+// encodeBase128Int builds the tag field in a fixed [10]byte buffer.
+// It never allocates or shifts—just writes from the end down.
+func encodeBase128Int(value int) []byte {
+    var buf [10]byte
+    i := len(buf) - 1
+    buf[i] = byte(value & 0x7F)
+    value >>= 7
+    for value > 0 {
+        i--
+        buf[i] = byte(value&0x7F) | 0x80
+        value >>= 7
+    }
+    return buf[i:]
+}
+
 
 func encodeLengthInto(rule EncodingRule, dst *[]byte, n int) {
 	switch rule {
