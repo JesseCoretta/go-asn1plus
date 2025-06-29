@@ -120,9 +120,10 @@ func extractPacket(pkt Packet, L int) (sub Packet, err error) {
 	if pkt.Offset()+L > pkt.Len() {
 		err = errorASN1Expect(L, pkt.Len()-pkt.Offset(), "Length")
 	} else {
-		inner := pkt.Type().New(pkt.Data()[pkt.Offset() : pkt.Offset()+L]...)
-		pkt.SetOffset(pkt.Offset() + L)
-		sub = pkt.Type().New(inner.Data()...)
+		off := pkt.Offset()
+		innerData := pkt.Data()[off : off+L]
+		pkt.SetOffset(off + L)
+		sub = pkt.Type().New(innerData...)
 	}
 
 	return sub, err
@@ -458,3 +459,25 @@ var bufPool = sync.Pool{
 
 func getBuf() *[]byte  { return bufPool.Get().(*[]byte) }
 func putBuf(p *[]byte) { *p = (*p)[:0]; bufPool.Put(p) }
+
+var packetConstructors map[EncodingRule]func(...byte) Packet
+
+// This is mainly for maintainer convenience in the midst
+// of implementing new encoding rules.
+func panicOnMissingEncodingRuleConstructor(table map[EncodingRule]func(...byte) Packet) {
+	for i := 0; i < len(encodingRules); i++ {
+		rule := encodingRules[i]
+		if _, found := table[rule]; !found {
+			panic(mkerrf("EncodingRule ", rule.String(), " has no registered constructor"))
+		}
+	}
+}
+
+func init() {
+	packetConstructors = map[EncodingRule]func(...byte) Packet{
+		BER: newBERPacket,
+		CER: newCERPacket,
+		DER: newDERPacket,
+	}
+	panicOnMissingEncodingRuleConstructor(packetConstructors)
+}
