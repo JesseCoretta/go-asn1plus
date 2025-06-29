@@ -30,20 +30,18 @@ func TestConvertToNumericString(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := convertToNumericString(tt.input)
-			if tt.expectErr {
-				if err == nil {
-					t.Errorf("convertToNumericString(%v) expected error, got nil", tt.input)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("convertToNumericString(%v) unexpected error: %v", tt.input, err)
-				} else if got != tt.expected {
-					t.Errorf("convertToNumericString(%v) = %q, want %q", tt.input, got, tt.expected)
-				}
+		got, err := convertToNumericString(tt.input)
+		if tt.expectErr {
+			if err == nil {
+				t.Errorf("convertToNumericString(%v) expected error, got nil", tt.input)
 			}
-		})
+		} else {
+			if err != nil {
+				t.Errorf("convertToNumericString(%v) unexpected error: %v", tt.input, err)
+			} else if got != tt.expected {
+				t.Errorf("convertToNumericString(%v) = %q, want %q", tt.input, got, tt.expected)
+			}
+		}
 	}
 }
 
@@ -64,20 +62,18 @@ func TestNewNumericString(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ns, err := NewNumericString(tt.input)
-			if tt.expectErr {
-				if err == nil {
-					t.Errorf("NewNumericString(%v) expected error, got nil", tt.input)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("NewNumericString(%v) unexpected error: %v", tt.input, err)
-				} else if string(ns) != tt.expected {
-					t.Errorf("NewNumericString(%v) = %q, want %q", tt.input, ns, tt.expected)
-				}
+		ns, err := NewNumericString(tt.input)
+		if tt.expectErr {
+			if err == nil {
+				t.Errorf("NewNumericString(%v) expected error, got nil", tt.input)
 			}
-		})
+		} else {
+			if err != nil {
+				t.Errorf("NewNumericString(%v) unexpected error: %v", tt.input, err)
+			} else if string(ns) != tt.expected {
+				t.Errorf("NewNumericString(%v) = %q, want %q", tt.input, ns, tt.expected)
+			}
+		}
 	}
 }
 
@@ -176,4 +172,19 @@ func ExampleNumericString_withConstraints() {
 
 	// Output:
 	// Constraint violation: policy prohibits use of '2' and '4'
+}
+
+func BenchmarkNumericStringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"00 18928 1",
+		"1488945",
+		1488945,
+		NumericString("00 18928 1"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewNumericString(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
 }

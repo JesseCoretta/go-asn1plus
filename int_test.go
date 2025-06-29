@@ -270,34 +270,32 @@ func TestNewIntegerConstraints(t *testing.T) {
 
 	constraint := LiftConstraint(func(i Integer) Integer { return i }, allowedRange)
 	for _, tc := range integerConstraintTests {
-		t.Run(tc.name, func(t *testing.T) {
-			i, err := NewInteger(tc.input, constraint)
-			if tc.expectFailure {
-				if err == nil {
-					t.Errorf("expected failure, but got integer: %+v", i)
-				}
+		i, err := NewInteger(tc.input, constraint)
+		if tc.expectFailure {
+			if err == nil {
+				t.Errorf("expected failure, but got integer: %+v", i)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
+				// Check that the obtained integer equals the expected value.
+				var val int64
+				if !i.big {
+					val = i.native
 				} else {
-					// Check that the obtained integer equals the expected value.
-					var val int64
-					if !i.big {
-						val = i.native
+					if i.bigInt.IsInt64() {
+						val = i.bigInt.Int64()
 					} else {
-						if i.bigInt.IsInt64() {
-							val = i.bigInt.Int64()
-						} else {
-							t.Errorf("big integer does not fit in int64")
-							return
-						}
+						t.Errorf("big integer does not fit in int64")
+						return
 					}
-					if val != tc.expectedValue {
-						t.Errorf("expected value %d, got %d", tc.expectedValue, val)
-					}
+				}
+				if val != tc.expectedValue {
+					t.Errorf("expected value %d, got %d", tc.expectedValue, val)
 				}
 			}
-		})
+		}
 	}
 }
 
@@ -333,4 +331,21 @@ func TestCustomInteger_withControls(t *testing.T) {
 		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
+}
+
+func BenchmarkIntegerConstructor(b *testing.B) {
+	inty, _ := NewInteger(47676)
+	for _, value := range []any{
+		int64(1748),
+		4378,
+		-1,
+		inty,
+		"75849375689347598437983578495783548953947844759839784",
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewInteger(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
 }

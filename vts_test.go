@@ -3,10 +3,11 @@ package asn1plus
 import (
 	"fmt"
 	"testing"
+	//"time"
 )
 
 func TestVideotexString_encodingRules(t *testing.T) {
-	for idx, value := range []any{
+	for _, value := range []any{
 		// Simple ASCII
 		"A simple VIDEOTEX string!",
 		[]byte("A simple VIDEOTEX string!"),
@@ -68,31 +69,31 @@ func TestVideotexString_encodingRules(t *testing.T) {
 		VideotexString("Mixed: ¡Hola!, Привет, 你好, and مرحبا!"),
 	} {
 		for _, rule := range encodingRules {
+			//t.Parallel() // optional
+
+			//start := time.Now()
 			vts, err := NewVideotexString(value)
 			if err != nil {
-				t.Fatalf("%s[%d] failed [%s NewVideotexString]: %v",
-					t.Name(), idx, rule, err)
+				t.Fatalf("%s NewVideotexString error: %v", t.Name(), err)
 			}
-
-			var pkt Packet
-			if pkt, err = Marshal(vts); err != nil {
-				t.Fatalf("%s[%d] failed [%s encoding]: %v",
-					t.Name(), idx, rule, err)
+			pkt, err := Marshal(vts, With(rule))
+			if err != nil {
+				t.Fatalf("%s Marshal(%s) error: %v", t.Name(), rule.String(), err)
 			}
 
 			var vts2 VideotexString
-			if err = Unmarshal(pkt, &vts2); err != nil {
-				t.Fatalf("%s[%d] failed [%s decoding]: %v",
-					t.Name(), idx, rule, err)
+			if err := Unmarshal(pkt, &vts2); err != nil {
+				t.Fatalf("%s Unmarshal(%s) error: %v", t.Name(), rule.String(), err)
 			}
 
-			vts1Str := vts.String()
-			vts2Str := vts2.String()
-
-			if vts1Str != vts2Str {
-				t.Fatalf("%s[%d] failed [%s string cmp.]\n\twant: '%s'\n\tgot:  '%s'",
-					t.Name(), idx, rule, vts1Str, vts2Str)
+			got, want := vts2.String(), vts.String()
+			if got != want {
+				t.Fatalf("%s round-trip mismatch for %s:\n\twant=%q\n\t got=%q",
+					t.Name(), rule.String(), want, got)
 			}
+
+			//elapsed := time.Since(start)
+			//t.Logf("%s took %s", name, elapsed)
 		}
 	}
 }

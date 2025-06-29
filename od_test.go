@@ -133,3 +133,17 @@ func ExampleObjectDescriptor_withConstraints() {
 	// Constraint violation: policy prohibits digits
 	// Constraint violation: policy prohibits lower-case ASCII
 }
+
+func BenchmarkObjectDescriptorConstructor(b *testing.B) {
+	for _, value := range []any{
+		"objectName",
+		[]byte("objectName"),
+		ObjectDescriptor("objectName"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewObjectDescriptor(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

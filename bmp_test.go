@@ -81,6 +81,9 @@ func TestBMPString_codecov(t *testing.T) {
 		}
 	}
 
+	buildBMP("😀")
+	BMPSpec(BMPString{})
+
 	//NewBMPString(struct{}{})
 	//NewBMPString(BMPString{})
 	//NewBMPString(BMPString{0x1e, 0x1, 0x1, 0xef})
@@ -238,4 +241,12 @@ func ExampleBMPString_withConstraints() {
 	// Output:
 	// Constraint violation: policy prohibits digits
 	// Constraint violation: policy prohibits lower-case ASCII
+}
+
+func BenchmarkBMPStringConstructor(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		if _, err := NewBMPString("Hello 漢"); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

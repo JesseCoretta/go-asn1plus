@@ -239,6 +239,8 @@ func TestReal_codecov(_ *testing.T) {
 		Exponent: 0,
 	}
 
+	byteToInfinity(0x02)
+
 	encodeMantissa(new(big.Int))
 	float64Components(float64(3.1415900000), 10)
 	float64Components(float64(3.1415900000), 16)
@@ -265,6 +267,7 @@ func TestReal_codecov(_ *testing.T) {
 	_, _ = rc.write(tpkt, nil)
 	_, _ = rc.write(bpkt, nil)
 	rc.read(tpkt, TLV{}, nil)
+	rc.read(bpkt, TLV{}, nil)
 
 	realBaseToHeader(2)
 	realBaseToHeader(8)
@@ -460,4 +463,13 @@ func ExampleReal_withConstraints() {
 
 	// Output:
 	// Constraint violation: prohibited base detected: 10
+}
+
+func BenchmarkRealConstructor(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		if _, err := NewReal(314159, 10, -5); err != nil {
+			b.Fatal(err)
+		}
+	}
+
 }

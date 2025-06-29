@@ -723,14 +723,12 @@ func TestFormatGeneralizedTime_FractionalSeconds(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(fmt.Sprintf("nanos=%d", tc.nanos), func(t *testing.T) {
-			base := time.Date(2025, 6, 20, 15, 4, 5, tc.nanos, time.UTC)
-			got := formatGeneralizedTime(base)
-			suffix := tc.expected + "Z"
-			if !hasSfx(got, suffix) {
-				t.Errorf("expected suffix %q, got %q", suffix, got)
-			}
-		})
+		base := time.Date(2025, 6, 20, 15, 4, 5, tc.nanos, time.UTC)
+		got := formatGeneralizedTime(base)
+		suffix := tc.expected + "Z"
+		if !hasSfx(got, suffix) {
+			t.Errorf("expected suffix %q, got %q", suffix, got)
+		}
 	}
 }
 

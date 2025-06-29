@@ -14,6 +14,9 @@ func TestCER_codecov(_ *testing.T) {
 	encodeCERLengthInto(&bts, -1)
 	decodeCERLength([]byte{}, 10)
 	decodeCERLength([]byte{0x82, 0x01}, 0)
+	decodeCERLength([]byte{0x30, 0x00}, 0)
+	decodeCERLength([]byte{0x80, 0x00}, 0)
+	decodeCERLength([]byte{0x82, 0x01, 0xF4}, 0)
 }
 
 func TestCERPacket_OutOfBoundsGuards(t *testing.T) {

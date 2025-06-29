@@ -132,3 +132,17 @@ func ExampleGeneralString_withConstraints() {
 	// Constraint violation: policy prohibits digits
 	// Constraint violation: policy prohibits lower-case ASCII
 }
+
+func BenchmarkGeneralStringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"objectName",
+		[]byte("objectName"),
+		GeneralString("objectName"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewGeneralString(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

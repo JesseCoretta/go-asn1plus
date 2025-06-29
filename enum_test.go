@@ -131,3 +131,11 @@ func TestEnumerated_codecov(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkEnumeratedConstructor(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		if _, err := NewEnumerated(56); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

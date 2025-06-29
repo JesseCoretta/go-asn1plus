@@ -126,6 +126,11 @@ func TestUniversalString_codecov(t *testing.T) {
 	us3 = UniversalString(string([]rune{0x0E, 0x1A, 0x81, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}))
 	_ = us3.String()
 
+	us3 = UniversalString([]byte{0x00, 0x00, 0x00, 0x41})
+	_ = us3.String()
+
+	encodeUniversalString(UniversalString([]byte{0xFF}))
+
 	badRune := uint32(0xD800)
 	b := []byte{
 		byte(badRune >> 24),
@@ -202,4 +207,17 @@ func ExampleUniversalString_withConstraints() {
 	// Output:
 	// Constraint violation: policy prohibits digits
 	// Constraint violation: policy prohibits lower-case ASCII
+}
+
+func BenchmarkUniversalStringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"Hello, 世界",
+		[]byte("Hello, 世界"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewUniversalString(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
 }

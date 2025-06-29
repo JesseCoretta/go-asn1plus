@@ -1,7 +1,9 @@
 package asn1plus
 
 import (
+	"bytes"
 	"fmt"
+	"math/big"
 	"testing"
 )
 
@@ -171,13 +173,32 @@ func TestObjectIdentifier_codecov(_ *testing.T) {
 	rootBad := Integer{native: int64(3)}
 	second := Integer{native: int64(1)}
 	secondBad := Integer{native: int64(9999)}
-	//oc.encodeHook = func(b ObjectIdentifier) ([]byte, error) {
-	//        return nil, nil
-	//}
-	//oc.decodeHook = func(b []byte) (ObjectIdentifier, error) {
-	//        return ObjectIdentifier{}, nil
-	//}
-	//oc.decodeVerify = []DecodeVerifier{func(b []byte) (err error) { return nil }}
+
+	bcdOIDRead(oc, &BERPacket{}, TLV{Compound: true}, nil)
+	subs := []*big.Int{
+		newBigInt(10),
+		newBigInt(0).Lsh(newBigInt(1), 63), // 2^63, outside int64
+	}
+	objectIdentifierReadExpandFirstArcs(subs)
+
+	objectIdentifierReadData(
+		nil,
+		TLV{
+			Value:  []byte{0xAA, 0xBB, 0xCC},
+			Length: 2,
+		},
+		nil,
+	)
+
+	objectIdentifierReadData(
+		&BERPacket{data: []byte{0x05}},
+		TLV{
+			Value:  nil,
+			Length: 0,
+		},
+		nil,
+	)
+
 	oc.IsPrimitive()
 	oc.Tag()
 	_ = oc.String()
@@ -335,6 +356,89 @@ func TestRelativeOID_codecov(_ *testing.T) {
 		_ = f.newEmpty().(box)
 		_ = f.newWith(RelativeOID{}).(box)
 	}
+
+	bcdRelOIDRead(
+		rc,
+		&BERPacket{data: []byte{
+			0x0D, 0x02,
+			0x81, 0x22,
+		}},
+		TLV{
+			Class:    ClassUniversal,
+			Tag:      TagRelativeOID,
+			Compound: true,
+			Length:   2,
+			Value:    []byte{0x81, 0x22},
+		},
+		nil,
+	)
+
+	_ = bcdRelOIDRead(
+		rc,
+		&BERPacket{data: []byte{}},
+		TLV{
+			Class:    ClassUniversal,
+			Tag:      TagRelativeOID,
+			Compound: false,
+			Value:    []byte{0x81, 0x22, 0x33},
+			Length:   2,
+		},
+		nil,
+	)
+
+	_ = bcdRelOIDRead(
+		rc,
+		&BERPacket{data: []byte{
+			0x0D, 0x01, 0x2A,
+		}},
+		TLV{
+			Class:    ClassUniversal,
+			Tag:      TagRelativeOID,
+			Compound: false,
+			Value:    nil,
+			Length:   0,
+		},
+		nil,
+	)
+
+	relativeOIDReadArcs([]byte{0x81})
+	relativeOIDReadArcs(append(bytes.Repeat([]byte{0x81}, 10), 0x00))
+	relativeOIDReadArcs([]byte{})
+
+	bcdRelOIDWrite(
+		&relOIDCodec[RelativeOID]{
+			tag: TagRelativeOID,
+			val: RelativeOID{},
+		},
+		&BERPacket{data: []byte{}},
+		nil,
+	)
+
+	bcdRelOIDRead(
+		&relOIDCodec[RelativeOID]{
+			tag: TagRelativeOID,
+		},
+		&BERPacket{data: []byte{}},
+		TLV{
+			Class:    ClassUniversal,
+			Tag:      TagRelativeOID,
+			Compound: true, // forces the getTLV call
+			Length:   0,
+			Value:    nil, // so getTLV(pkt,…) sees no bytes and returns an error
+		},
+		nil,
+	)
+
+	bcdRelOIDWrite(
+		&relOIDCodec[RelativeOID]{
+			tag: TagRelativeOID,
+			val: RelativeOID{
+				Integer{native: -1},
+			},
+		},
+		&BERPacket{data: []byte{}},
+		nil,
+	)
 }
 
 func TestCustomRelativeOID_withControls(t *testing.T) {
@@ -436,4 +540,31 @@ func ExampleObjectIdentifier_sequenceWithStringOID() {
 	// Output:
 	// Encoded sequence: 30 19 070D4A6573736520436F726574746106082B0601040183B949
 	// Decoded sequence: Jesse Coretta, 1.3.6.1.4.1.56521
+}
+
+func BenchmarkObjectIdentifierConstructor(b *testing.B) {
+	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
+	for _, value := range []any{
+		"1.3.6.1.4.1.56521",
+		oid,
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewObjectIdentifier(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func BenchmarkRelativeOIDConstructor(b *testing.B) {
+	for _, value := range [][]any{
+		{"4.1.56521"},
+		{4, 1, 56521},
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewRelativeOID(value...); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
 }

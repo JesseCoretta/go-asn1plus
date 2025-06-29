@@ -2,7 +2,7 @@ package asn1plus
 
 import "testing"
 
-func TestPrimitive_codecov(_ *testing.T) {
+func TestPrimitive_codecov(t *testing.T) {
 	primitiveCheckExplicitRead(1, &BERPacket{}, TLV{Class: -1, Tag: -1, Compound: false}, &Options{})
 
 	opts := &Options{}
@@ -31,4 +31,18 @@ func TestPrimitive_codecov(_ *testing.T) {
 			0x38, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67,
 			0x00, 0x00}},
 		TLV{Class: 0, Tag: 2, Compound: false}, &Options{tag: &tag})
+
+	tag = TagInteger
+	primitiveCheckExplicitRead(
+		TagInteger,
+		&BERPacket{data: []byte{0x02, 0x01, 0xAB}}, // inner TLV: tag=INTEGER, len=1, value=0xAB
+		TLV{
+			Class:    ClassUniversal,
+			Tag:      TagInteger,
+			Compound: true,
+			Length:   1,
+			Value:    []byte{0x02, 0x01, 0xAB},
+		},
+		&Options{class: &class, tag: &tag},
+	)
 }

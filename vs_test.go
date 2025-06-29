@@ -106,3 +106,17 @@ func TestVisibleString_codecov(t *testing.T) {
 	NewVisibleString([]byte{0x7F, 0x7F, 0x08})
 	_, _ = NewVisibleString(struct{}{})
 }
+
+func BenchmarkVisibleStringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"Hello, 世界",
+		[]byte("Hello, 世界"),
+		VisibleString("Hello, 世界"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewVisibleString(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

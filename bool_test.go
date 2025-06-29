@@ -167,3 +167,17 @@ func ExampleBoolean_withConstraint() {
 	}
 	// Output: Constraint violation: Boolean must be true
 }
+
+func BenchmarkBooleanConstructor(b *testing.B) {
+	for _, value := range []any{
+		0, 0x00, 1, 0xFF,
+		"0", "1", "true", "false", // this hits strconv.ParseBool
+		true, false,
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewBoolean(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

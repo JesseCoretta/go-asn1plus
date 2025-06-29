@@ -26,4 +26,23 @@ func TestText_codecov(t *testing.T) {
 		_ = f.newWith(OctetString(``)).(box)
 	}
 
+	buildText(
+		string([]byte{0xFF}),
+		0x1E,
+		10,
+		4,
+		func(r rune, dst []byte, pos int) (bw, cu int, err error) {
+			return 0, 0, nil
+		},
+	)
+
+	buildText(
+		"A",
+		0x1E,
+		10,
+		4,
+		func(r rune, dst []byte, pos int) (bw, cu int, err error) {
+			return 0, 0, mkerr("error")
+		},
+	)
 }

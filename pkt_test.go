@@ -14,6 +14,7 @@ solely for tripping special corner-cases in unit tests.
 */
 type testPacket struct {
 	data   []byte
+	indef  bool
 	offset int
 	length int          // reported Len(); can differ from len(data)
 	typ    EncodingRule // hardwire a type
@@ -29,6 +30,7 @@ func (r *testPacket) HasMoreData() bool            { return r.offset < len(r.dat
 func (r *testPacket) TLV() (TLV, error)            { return getTLV(r, nil) }
 func (r *testPacket) WriteTLV(tlv TLV) error       { return writeTLV(r, tlv, nil) }
 func (r *testPacket) Packet(L int) (Packet, error) { return extractPacket(r, L) }
+func (r *testPacket) allowsIndefinite() bool       { return r.indef }
 
 func (r *testPacket) Bytes() ([]byte, error) {
 	return parseBody(r.Data(), r.Offset(), r.Type())
@@ -42,7 +44,7 @@ func (r *testPacket) Append(data ...byte) {
 	if r == nil || len(data) == 0 {
 		return
 	}
-	need := len(r.data) + len(data)
+	need := r.Len() + len(data)
 
 	if cap(r.data) < need {
 		bufPtr := bufPool.Get().(*[]byte)
@@ -298,6 +300,12 @@ func TestPacket_codecov(_ *testing.T) {
 	unmarshalPrimitive(&BERPacket{data: berBytes}, refValueOf(&o), &opts)
 
 	BER.Extends(CER)
+
+	rc := new(realCodec[Real])
+	marshalPrimitive(refValueOf(rc), &BERPacket{}, nil)
+	marshalPrimitive(refValueOf(rc), &BERPacket{}, &Options{Explicit: true})
+	unmarshalPrimitive(&BERPacket{data: berBytes}, refValueOf(rc), &Options{Explicit: true})
+	unmarshalPrimitive(&BERPacket{data: berBytes}, refValueOf("test"), &Options{Explicit: true})
 }
 
 func TestParseLengthCornerCases(t *testing.T) {
@@ -815,6 +823,16 @@ func TestSequence_PrimitiveFieldsImplicit(t *testing.T) {
 	}
 }
 
+func TestConstructorMap_ShouldPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+
+	panicOnMissingEncodingRuleConstructor(map[EncodingRule]func(...byte) Packet{})
+}
+
 func BenchmarkEncodeDirectoryString(b *testing.B) {
 	dir := Choice{Value: PrintableString("Hello")}
 	for n := 0; n < b.N; n++ {
@@ -837,4 +855,30 @@ func getTestPacket() *testPacket { return testPktPool.Get().(*testPacket) }
 func putTestPacket(p *testPacket) {
 	*p = testPacket{}
 	testPktPool.Put(p)
+}
+
+func BenchmarkPacket_SequenceBER(b *testing.B) {
+	type MySequence struct {
+		Name string `asn1:"printable"`
+		Age  int    `asn1:"integer"`
+		Raw  OctetString
+	}
+
+	mine := MySequence{
+		Name: "Bill Smith",
+		Age:  80,
+		Raw:  OctetString(`fjkewjlkjlkwjlkr324j589234torhj23trioh324t8294ht24ih243hui4h4hih3i`),
+	}
+
+	for i := 0; i < b.N; i++ {
+		pkt, err := Marshal(mine, With(BER))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		var mine2 MySequence
+		if err = Unmarshal(pkt, &mine2); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

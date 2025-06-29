@@ -106,3 +106,17 @@ func ExampleT61String_withConstraint() {
 	fmt.Println(err)
 	// Output: Constraint violation: policy prohibits lower-case ASCII
 }
+
+func BenchmarkT61StringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"objectName",
+		[]byte("objectName"),
+		T61String("objectName"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewT61String(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

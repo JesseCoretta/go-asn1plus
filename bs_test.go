@@ -375,6 +375,8 @@ func TestBitString_codecov(_ *testing.T) {
 	_, _ = bc.write(bpkt, nil)
 	bc.read(tpkt, TLV{}, nil)
 
+	parseBase16BitString([]byte(`Ae4328ffec`))
+
 	bitStringCheckDERPadding(DER, []byte{0x1, 0x0, 0x0, 0x1, 0x1}, 4)
 	assertBitString(OctetString("test"))
 	verifyBitStringDigitSet(8, []byte{0x1, 0xf, 0x0, 0x0, 0xe, 0xd})
@@ -656,5 +658,24 @@ func TestPacket_LargeBitStringCER(t *testing.T) {
 
 	if !bytes.Equal(large.Bytes, alsoLarge.Bytes) {
 		t.Fatalf("%s failed [CER large BitString contents cmp.]: contents differ", t.Name())
+	}
+}
+
+func BenchmarkBitStringConstructor(b *testing.B) {
+	for _, value := range []any{
+		`'10101'B`,
+		`'EC'H`,
+		[]byte(`'10101'B`),
+		[]byte(`'EC'H`),
+		BitString{
+			Bytes:     []byte{0xAB, 0xCD},
+			BitLength: 12,
+		},
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewBitString(value); err != nil {
+				b.Fatal(err)
+			}
+		}
 	}
 }

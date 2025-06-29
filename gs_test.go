@@ -142,3 +142,17 @@ func ExampleGraphicString_withConstraints() {
 	// Constraint violation: policy prohibits digits
 	// Constraint violation: policy prohibits lower-case ASCII
 }
+
+func BenchmarkGraphicStringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"objectName",
+		[]byte("objectName"),
+		GraphicString("objectName"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewGraphicString(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}

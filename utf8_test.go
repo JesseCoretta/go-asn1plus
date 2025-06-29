@@ -170,3 +170,16 @@ func TestUTF8String_codecov(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkUTF8StringConstructor(b *testing.B) {
+	for _, value := range []any{
+		"Hello, 世界",
+		[]byte("Hello, 世界"),
+	} {
+		for i := 0; i < b.N; i++ {
+			if _, err := NewUTF8String(value); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
