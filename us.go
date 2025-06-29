@@ -5,7 +5,10 @@ us.go contains all types and methods pertaining to the ASN.1
 UNIVERSAL STRING type.
 */
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"unicode/utf8"
+)
 
 /*
 UniversalString implements the UCS-4 ASN.1 UNIVERSAL STRING (tag 28).
@@ -89,25 +92,46 @@ func universalStringDecoderVerify(b []byte) (err error) {
 
 // UTF-32BE -> Go string
 func decodeUniversalString(b []byte) (UniversalString, error) {
-	var runes []rune
-	for i := 0; i < len(b); i += 4 {
-		runes = append(runes, rune(binary.BigEndian.Uint32(b[i:i+4])))
-	}
+	units := len(b) / 4
+	sb := newStrBuilder()
+	sb.Grow(units * 3)
 
-	return UniversalString(string(runes)), nil
+	var err error
+	for i := 0; i < len(b); i += 4 {
+		cp := uint32(b[i])<<24 |
+			uint32(b[i+1])<<16 |
+			uint32(b[i+2])<<8 |
+			uint32(b[i+3])
+		if err = universalStringCharacterOutOfBounds(rune(cp)); err == nil {
+			var tmp [4]byte
+			n := utf8.EncodeRune(tmp[:], rune(cp))
+			sb.Write(tmp[:n])
+		}
+	}
+	return UniversalString(sb.String()), err
 }
 
 // Go string -> UTF-32BE
-func encodeUniversalString(u UniversalString) (content []byte, err error) {
-	runes := []rune(u)
-	content = make([]byte, 4*len(runes))
-	for i := 0; i < len(runes) && err == nil; i++ {
-		r := runes[i]
+func encodeUniversalString(u UniversalString) ([]byte, error) {
+	s := string(u)
+
+	out := make([]byte, 4*len(s))
+	pos := 0
+
+	var err error
+	for i := 0; i < len(s); {
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && sz == 1 {
+			return nil, mkerr("invalid UTF-8 in UniversalString")
+		}
 		if err = universalStringCharacterOutOfBounds(r); err == nil {
-			binary.BigEndian.PutUint32(content[i*4:], uint32(r))
+			binary.BigEndian.PutUint32(out[pos:], uint32(r))
+			pos += 4
+			i += sz
 		}
 	}
-	return content, err
+
+	return out[:pos], err
 }
 
 func universalStringCharacterOutOfBounds(r rune) (err error) {
@@ -122,26 +146,22 @@ func universalStringCharacterOutOfBounds(r rune) (err error) {
 String returns the string representation of the receiver instance.
 */
 func (r UniversalString) String() string {
-	// Fast-path: if the length isn’t a multiple of
-	// 4 we *know* it can’t be UTF-32BE, so we'll
-	// just cast as-is.
-	if len(r)%4 != 0 {
-		return string(r)
+	b := []byte(r)
+	if len(b)%4 != 0 {
+		return string(b)
 	}
-
-	// Attempt to interpret as UTF-32BE.  If we hit an
-	// invalid sequence we fall back to the raw bytes.
-	runes := make([]rune, 0, len(r)/4)
-	for i := 0; i+4 <= len(r); i += 4 {
-		code := binary.BigEndian.Uint32([]byte(r[i:])) // has to be []byte
-		runes = append(runes, rune(code))
-		if universalStringCharacterOutOfBounds(rune(code)) != nil {
-			// Not valid UTF-32BE; bail out to raw bytes.
-			runes = []rune(string(r))
-			break
+	sb := newStrBuilder()
+	units := len(b) / 4
+	sb.Grow(units * 3)
+	for i := 0; i < len(b); i += 4 {
+		cp := uint32(b[i])<<24 | uint32(b[i+1])<<16 |
+			uint32(b[i+2])<<8 | uint32(b[i+3])
+		if cp > 0x10FFFF || (0xD800 <= cp && cp <= 0xDFFF) {
+			return string(b)
 		}
+		sb.WriteRune(rune(cp))
 	}
-	return string(runes)
+	return sb.String()
 }
 
 /*

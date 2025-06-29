@@ -30,61 +30,66 @@ type BMPString []byte
 NewBMPString returns an instance of [BMPString] alongside an error following
 an attempt to marshal x.
 */
+// ––– NewBMPString –––
 func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, err error) {
-	var e string
-	var skip bool
-
-	switch tv := x.(type) {
-	case []uint8:
-		e = string(tv)
-
-	case BMPString:
-		// Handle BMP checks separately due to the
-		// unique manner in which BMP strings are
-		// expected to be comprised byte-wise.
+	if tv, ok := x.(BMPString); ok {
+		if len(tv) == 0 {
+			bmp = BMPString{0x1E, 0x00}
+			return
+		}
 		if err = BMPSpec(tv); err != nil {
 			return
 		}
-		e = tv.String()
-		skip = true
+		bmp = tv
+		return
+	}
 
+	var e string
+	switch tv := x.(type) {
+	case []byte:
+		e = string(tv)
 	case Primitive:
 		e = tv.String()
-
 	case string:
 		e = tv
-
 	default:
 		err = errorBadTypeForConstructor("BMP STRING", x)
 		return
 	}
 
 	if len(e) == 0 {
-		bpm := BMPString{0x1E, 0x0}
-		bmp = bpm
+		return BMPString{0x1E, 0x00}, nil
+	}
+
+	var out []byte
+	if out, err = buildBMP(e); err != nil {
 		return
 	}
 
-	var result []byte
-	if result, err = buildBMP(e); err != nil {
-		return
-	}
-
-	_bmp := BMPString(result)
+	_bmp := BMPString(out)
 
 	var group ConstraintGroup[BMPString]
-	if skip {
-		// We already ran our spec check, so don't include
-		// it within the constraint appends.
-		group = append(ConstraintGroup[BMPString]{}, constraints...)
-	} else {
-		group = append(ConstraintGroup[BMPString]{BMPSpec}, constraints...)
-	}
-
+	group = append(group, constraints...)
 	if err = group.Validate(_bmp); err == nil {
 		bmp = _bmp
 	}
 	return
+}
+
+func buildBMP(e string) ([]byte, error) {
+	// TagBMPString=0x1E, maxUnits=255, maxBPU=4 bytes (surrogate pairs)
+	return buildText(e, TagBMPString, 255, 4, func(r rune, dst []byte, pos int) (bw, cu int, err error) {
+		if r <= 0xFFFF {
+			dst[pos], dst[pos+1] = byte(r>>8), byte(r)
+			return 2, 1, nil
+		}
+		v := r - 0x10000
+		hi := 0xD800 | (v >> 10)
+		lo := 0xDC00 | (v & 0x3FF)
+		dst[pos], dst[pos+1] = byte(hi>>8), byte(hi)
+		dst[pos+2], dst[pos+3] = byte(lo>>8), byte(lo)
+		return 4, 2, nil
+	})
 }
 
 /*
@@ -94,32 +99,6 @@ Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
 var BMPSpec Constraint[BMPString]
-
-func buildBMP(e string) (out []byte, err error) {
-	bufPtr := getBuf()
-	_out := *bufPtr
-	_out = append(_out, byte(TagBMPString))
-
-	// empty string → tag, length 0
-	if len(e) == 0 {
-		_out = append(_out, 0)
-	} else {
-		encoded := utf16Enc([]rune(e))
-		if len(encoded) > 255 {
-			err = mkerr("input string too long for BMPString encoding")
-		} else {
-			_out = append(_out, byte(len(encoded)))
-			for _, ch := range encoded {
-				_out = append(_out, byte(ch>>8), byte(ch&0xFF))
-			}
-		}
-	}
-
-	out = _out
-	putBuf(bufPtr)
-
-	return
-}
 
 /*
 Tag returns the integer constant [TagBMPString].
