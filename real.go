@@ -318,15 +318,10 @@ func float64Components(f float64, base int) (mant *big.Int, exp int, err error) 
 
 		// split "d.dddd" and "e±xx"
 		parts := split(sci, "e")
-		mantStr := replaceAll(parts[0], ".", "") // remove dot
+		mantStr := replaceAll(parts[0], ".", "")
 		exp10, _ := atoi(parts[1])
-		exp10 -= len(mantStr) - 1 // adjust for removed dot
+		exp10 -= len(mantStr) - 1
 
-		// strip trailing zeros from mantissa
-		for len(mantStr) > 1 && mantStr[len(mantStr)-1] == '0' {
-			mantStr = mantStr[:len(mantStr)-1]
-			exp10++
-		}
 		mant = newBigInt(0)
 		mant, _ = mant.SetString(mantStr, 10)
 		exp = exp10
