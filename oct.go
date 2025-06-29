@@ -131,6 +131,17 @@ func cerSegmentedOctetStringWrite[T TextLike](
 	return written, nil
 }
 
+func cerOctetStringReadBadTLV(outer TLV) (err error) {
+	if outer.Class != ClassUniversal ||
+		outer.Tag != TagOctetString ||
+		!outer.Compound ||
+		outer.Length != -1 {
+		err = mkerr("cerSegmentedOctetStringRead: not CER indefinite OCTET STRING")
+	}
+
+	return
+}
+
 func cerSegmentedOctetStringRead[T TextLike](
 	c *textCodec[T],
 	pkt Packet,
@@ -138,11 +149,8 @@ func cerSegmentedOctetStringRead[T TextLike](
 	opts *Options,
 ) (err error) {
 	// a) validate the outer TLV
-	if outer.Class != ClassUniversal ||
-		outer.Tag != TagOctetString ||
-		!outer.Compound ||
-		outer.Length != -1 {
-		return mkerr("cerSegmentedOctetStringRead: not CER indefinite OCTET STRING")
+	if err = cerOctetStringReadBadTLV(outer); err != nil {
+		return
 	}
 
 	sub := pkt.Type().New(outer.Value...)
