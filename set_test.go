@@ -1,9 +1,48 @@
 package asn1plus
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
+
+func ExampleOctetString_setOf() {
+	values := []OctetString{
+		OctetString(`Zero`),
+		OctetString(`One`),
+		OctetString(`Two`),
+		OctetString(`Three`),
+		OctetString(`Four`),
+		OctetString(`Five`),
+	}
+
+	pkt, err := Marshal(values, With(BER))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("BER encoding: %s\n", pkt.Hex())
+
+	var values2 []OctetString
+	if err = Unmarshal(pkt, &values2); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for i := 0; i < len(values2); i++ {
+		fmt.Printf("Slice %d: %s (%T)\n", i, values2[i], values2[i])
+	}
+
+	// Output:
+	// BER encoding: 31 23 04045A65726F04034F6E65040354776F040554687265650404466F7572040446697665
+	// Slice 0: Zero (asn1plus.OctetString)
+	// Slice 1: One (asn1plus.OctetString)
+	// Slice 2: Two (asn1plus.OctetString)
+	// Slice 3: Three (asn1plus.OctetString)
+	// Slice 4: Four (asn1plus.OctetString)
+	// Slice 5: Five (asn1plus.OctetString)
+}
 
 func TestSet_encodingRules(t *testing.T) {
 	equalSlices := func(a, b []string, rule EncodingRule) (boo bool) {
