@@ -378,15 +378,11 @@ func bcdChooseChoiceCandidate(pkt Packet, tlv TLV, choices Choices, opts *Option
 			err = mkerr("Primitive has no codec")
 		}
 	} else {
-		sub := pkt.Type().New(pkt.Data()...)
-		sub.SetOffset(0)
-		if _, err = sub.TLV(); err == nil {
-			// IMPORTANT: Clear the tag override before decoding inner fields.
-			// This allows inner decoders (for, say, ObjectIdentifier) to use
-			// their natural universal tag.
-			opts.tag = nil
-			err = unmarshalValue(sub, refValueOf(candidateInst), opts)
-		}
+	        payload := tlv.Value
+	        sub := pkt.Type().New(payload...)
+	        sub.SetOffset(0)
+	        childOpts := clearChildOpts(opts)
+	        err = unmarshalValue(sub, refValueOf(candidateInst), childOpts)
 	}
 
 	if err == nil {
