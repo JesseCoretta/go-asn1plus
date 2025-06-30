@@ -316,11 +316,29 @@ func unmarshalValue(pkt Packet, v reflect.Value, opts *Options) (err error) {
 
 	switch v.Kind() {
 	case reflect.Slice:
-		err = unmarshalSet(v, pkt, opts)
+		err = unmarshalSetBranch(v, pkt, opts)
 	case reflect.Struct:
 		err = unmarshalSequence(v, pkt, opts)
 	default:
 		err = mkerrf("unmarshalValue: unsupported type ", v.Kind().String())
+	}
+
+	return
+}
+
+func unmarshalSetBranch(v reflect.Value, pkt Packet, opts *Options) (err error) {
+	if opts != nil && (opts.HasTag() || opts.Class() != ClassUniversal) {
+		var outer TLV
+		if outer, err = pkt.TLV(); err == nil {
+			hdrEnd := pkt.Offset()
+			subPkt := pkt.Type().New(outer.Value...)
+			subPkt.SetOffset(0)
+			if err = unmarshalSet(v, subPkt, opts); err == nil {
+				pkt.SetOffset(hdrEnd + len(outer.Value))
+			}
+		}
+	} else {
+		err = unmarshalSet(v, pkt, opts)
 	}
 
 	return

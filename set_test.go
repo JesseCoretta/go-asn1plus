@@ -44,6 +44,41 @@ func ExampleOctetString_setOf() {
 	// Slice 5: Five (asn1plus.OctetString)
 }
 
+func ExampleOctetString_sequenceWithSet() {
+	type substringAssertion struct {
+		Initial OctetString   `asn1:"tag:0"`
+		Any     []OctetString `asn1:"tag:1"`
+		Final   OctetString   `asn1:"tag:2"`
+	}
+
+	// subs*r*ngs*are cool
+	ssa := substringAssertion{
+		Initial: OctetString(`subs`),
+		Any: []OctetString{
+			OctetString(`r`),
+			OctetString(`ngs`),
+		},
+		Final: OctetString(`are cool`),
+	}
+
+	pkt, err := Marshal(ssa, With(BER))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("BER encoding: %s\n", pkt.Hex())
+
+	var dest substringAssertion
+	if err = Unmarshal(pkt, &dest); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Output:
+	// BER encoding: 30 1A 800473756273310804017204036E6773820861726520636F6F6C
+}
+
 func TestSet_encodingRules(t *testing.T) {
 	equalSlices := func(a, b []string, rule EncodingRule) (boo bool) {
 		switch rule {
