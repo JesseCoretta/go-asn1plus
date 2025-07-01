@@ -118,27 +118,23 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byt
 		return nil, mkerr("prohibited: indefinite length on primitive")
 	}
 
+	canBeEmpty := tag == TagOctetString || tag == TagNull
+
 	if data, err = primitiveCheckReadOverride(tag, pkt, tlv, opts); err == nil {
-		if len(data) == 0 {
-			if tag != TagNull {
-				err = mkerrf("Empty ", TagNames[tag], " content")
-			}
-		} else {
-			// Chop the indefinite 0x00 0x00 markers IF we're
-			// in INDEFINITE mode AND if Packet type is BER
-			// WITH a length of 0x80.
-			//
-			// TODO: revisit this approach.
-			if pkt.Type().allowsIndefinite() && pkt.Data()[1] == 0x80 {
-				if data[len(data)-1] == 0x00 &&
-					data[len(data)-2] == 0x00 {
-					data = data[:len(data)-2]
-				}
+		// Chop the indefinite 0x00 0x00 markers IF we're
+		// in INDEFINITE mode AND if Packet type is BER
+		// WITH a length of 0x80.
+		//
+		// TODO: revisit this approach.
+		if pkt.Type().allowsIndefinite() && pkt.Data()[1] == 0x80 {
+			if data[len(data)-1] == 0x00 &&
+				data[len(data)-2] == 0x00 {
+				data = data[:len(data)-2]
 			}
 		}
 	}
 
-	if len(data) == 0 && tag != TagNull {
+	if len(data) == 0 && !canBeEmpty {
 		err = mkerrf("Empty ", TagNames[tag], " content in ",
 			pkt.Type().String(), " Packet")
 	}
