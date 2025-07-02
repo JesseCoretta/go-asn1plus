@@ -84,28 +84,28 @@ var TagNames = map[int]string{
 	TagReal:             "REAL",              //  9
 	TagEnum:             "ENUM",              // 10
 	TagEmbeddedPDV:      "EMBEDDED PDV",      // 11
-	TagUTF8String:       "UTF8 STRING",       // 12
-	TagRelativeOID:      "RELATIVE OID",      // 13
+	TagUTF8String:       "UTF8String",        // 12
+	TagRelativeOID:      "RelativeOID",       // 13
 	TagTime:             "TIME",              // 14
 	TagSequence:         "SEQUENCE",          // 16
 	TagSet:              "SET",               // 17
-	TagNumericString:    "NUMERIC STRING",    // 18
-	TagPrintableString:  "PRINTABLE STRING",  // 19
-	TagT61String:        "T61 STRING",        // 20
-	TagVideotexString:   "VIDEOTEX STRING",   // 21 -- obsolete
-	TagIA5String:        "IA5 STRING",        // 22
-	TagUTCTime:          "UTC TIME",          // 23
-	TagGeneralizedTime:  "GENERALIZED TIME",  // 24
-	TagGraphicString:    "GRAPHIC STRING",    // 25 -- deprecated in favor of BMPString, UniversalStirng, UTF8String
-	TagVisibleString:    "VISIBLE STRING",    // 26
-	TagGeneralString:    "GENERAL STRING",    // 27 -- deprecated in favor of BMPString, UniversalString, UTF8String
-	TagUniversalString:  "UNIVERSAL STRING",  // 28
-	TagCharacterString:  "CHARACTER STRING",  // 29
-	TagBMPString:        "BMP STRING",        // 30
-	TagDate:             "DATE",              // 31
-	TagTimeOfDay:        "TIME-OF-DAY",       // 32
-	TagDateTime:         "DATE-TIME",         // 33
-	TagDuration:         "DURATION",          // 34
+	TagNumericString:    "NumericString",     // 18
+	TagPrintableString:  "PrintableString",   // 19
+	TagT61String:        "T61String",         // 20
+	TagVideotexString:   "VideotexString",    // 21 -- obsolete
+	TagIA5String:        "IA5String",         // 22
+	TagUTCTime:          "UTCTime",           // 23
+	TagGeneralizedTime:  "GeneralizedTime",   // 24
+	TagGraphicString:    "GraphicString",     // 25 -- deprecated in favor of BMPString, UniversalStirng, UTF8String
+	TagVisibleString:    "VisibleString",     // 26
+	TagGeneralString:    "GeneralString",     // 27 -- deprecated in favor of BMPString, UniversalString, UTF8String
+	TagUniversalString:  "UniversalString",   // 28
+	TagCharacterString:  "CharacterString",   // 29
+	TagBMPString:        "BMPString",         // 30
+	TagDate:             "Date",              // 31
+	TagTimeOfDay:        "TimeOfDay",         // 32
+	TagDateTime:         "DateTime",          // 33
+	TagDuration:         "Duration",          // 34
 }
 
 /*
