@@ -4,7 +4,10 @@ package asn1plus
 ber.go contains BER-focused components. See also der.go.
 */
 
-import "sync"
+import (
+	"io"
+	"sync"
+)
 
 /*
 BERPacket implements a data encapsulation and transport type to store
@@ -69,6 +72,16 @@ Hex returns the hexadecimal encoding of the underlying encoded value
 within the receiver instance.
 */
 func (r BERPacket) Hex() string { return formatHex(&r) }
+
+/*
+Dump returns an error following an attempt to write the receiver
+instance into w.
+
+The variadic wrapAt value defines the maximum number of characters
+displayed per line before the value is wrapped. The default is 24,
+and can be configured no less than 16.
+*/
+func (r *BERPacket) Dump(w io.Writer, wrapAt ...int) error { return dumpPacket(r, w) }
 
 /*
 Len returns the integer length of the underlying byte buffer within

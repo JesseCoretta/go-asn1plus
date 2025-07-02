@@ -5,7 +5,11 @@ pkt.go contains all types and methods pertaining to the payload
 abstraction interface known as Packet.
 */
 
-import "sync"
+import (
+	"bytes"
+	"io"
+	"sync"
+)
 
 /*
 Packet implements a generic ASN.1 packet of any supported codec.
@@ -52,6 +56,14 @@ type Packet interface {
 	// underlying buffer.
 	Hex() string
 
+	// Dump returns an error following an attempt to write the receiver
+	// instance into the io.Writer.
+	//
+	// The variadic integer value defines the maximum number of characters
+	// displayed per line before the value is wrapped. The default is 24,
+	// and can be configured no less than 16.
+	Dump(io.Writer, ...int) error
+
 	// Offset returns the integer "cursor" position currently set
 	// within the underlying buffer.
 	Offset() int
@@ -95,24 +107,25 @@ scenarios for the purpose of panic protection when used carelessly.
 */
 type invalidPacket struct{}
 
-func (_ invalidPacket) Type() EncodingRule           { return invalidEncodingRule }
-func (_ invalidPacket) Data() []byte                 { return nil }
-func (_ invalidPacket) Class() (int, error)          { return -1, errorInvalidPacket }
-func (_ invalidPacket) Tag() (int, error)            { return -1, errorInvalidPacket }
-func (_ invalidPacket) Bytes() ([]byte, error)       { return nil, errorInvalidPacket }
-func (_ invalidPacket) FullBytes() ([]byte, error)   { return nil, errorInvalidPacket }
-func (_ invalidPacket) HasMoreData() bool            { return false }
-func (_ invalidPacket) Compound() (bool, error)      { return false, errorInvalidPacket }
-func (_ invalidPacket) Offset() int                  { return 0 }
-func (_ invalidPacket) Packet(_ int) (Packet, error) { return invalidPacket{}, errorInvalidPacket }
-func (_ invalidPacket) SetOffset(_ ...int)           {}
-func (_ invalidPacket) Free()                        {}
-func (_ invalidPacket) Hex() string                  { return `` }
-func (_ invalidPacket) Len() int                     { return 0 }
-func (_ invalidPacket) Append(_ ...byte)             {}
-func (_ invalidPacket) PeekTLV() (TLV, error)        { return TLV{}, errorInvalidPacket }
-func (_ invalidPacket) WriteTLV(_ TLV) error         { return errorInvalidPacket }
-func (_ invalidPacket) TLV() (TLV, error)            { return TLV{}, errorInvalidPacket }
+func (_ invalidPacket) Type() EncodingRule               { return invalidEncodingRule }
+func (_ invalidPacket) Data() []byte                     { return nil }
+func (_ invalidPacket) Class() (int, error)              { return -1, errorInvalidPacket }
+func (_ invalidPacket) Tag() (int, error)                { return -1, errorInvalidPacket }
+func (_ invalidPacket) Bytes() ([]byte, error)           { return nil, errorInvalidPacket }
+func (_ invalidPacket) FullBytes() ([]byte, error)       { return nil, errorInvalidPacket }
+func (_ invalidPacket) HasMoreData() bool                { return false }
+func (_ invalidPacket) Compound() (bool, error)          { return false, errorInvalidPacket }
+func (_ invalidPacket) Offset() int                      { return 0 }
+func (_ invalidPacket) Packet(_ int) (Packet, error)     { return invalidPacket{}, errorInvalidPacket }
+func (_ invalidPacket) SetOffset(_ ...int)               {}
+func (_ invalidPacket) Free()                            {}
+func (_ invalidPacket) Hex() string                      { return `` }
+func (_ invalidPacket) Dump(_ io.Writer, _ ...int) error { return errorInvalidPacket }
+func (_ invalidPacket) Len() int                         { return 0 }
+func (_ invalidPacket) Append(_ ...byte)                 {}
+func (_ invalidPacket) PeekTLV() (TLV, error)            { return TLV{}, errorInvalidPacket }
+func (_ invalidPacket) WriteTLV(_ TLV) error             { return errorInvalidPacket }
+func (_ invalidPacket) TLV() (TLV, error)                { return TLV{}, errorInvalidPacket }
 
 func extractPacket(pkt Packet, L int) (sub Packet, err error) {
 	sub = invalidPacket{}
@@ -470,6 +483,129 @@ func panicOnMissingEncodingRuleConstructor(table map[EncodingRule]func(...byte) 
 		if _, found := table[rule]; !found {
 			panic(mkerrf("EncodingRule ", rule.String(), " has no registered constructor"))
 		}
+	}
+}
+
+func dumpPacket(pkt Packet, w io.Writer, wrapAt ...int) error {
+	pkt.SetOffset(0)
+	width := 24
+
+	if len(wrapAt) > 0 && wrapAt[0] > 15 {
+		width = wrapAt[0]
+	}
+
+	return dumpLevel(w, pkt.Type(), pkt.Data(), 0, width)
+}
+
+func dumpLevel(w io.Writer, rule EncodingRule, data []byte, depth, width int) error {
+	resolveTagName := func(class, tag int) string {
+		cName := ClassNames[class]
+		if class == 0 {
+			if name, ok := TagNames[tag]; ok {
+				return name
+			}
+		}
+		return "[" + cName + " " + itoa(tag) + "]"
+	}
+
+	indent := strrpt("  ", depth)
+	offset := 0
+
+	for offset < len(data) {
+		class, _ := parseClassIdentifier(data[offset:])
+		compound, _ := parseCompoundIdentifier(data[offset:])
+		tag, idLen, err := parseTagIdentifier(data[offset:])
+		if err != nil {
+			return err
+		}
+
+		length, lenLen, err := parseLength(data[offset+idLen:])
+		if err != nil {
+			return mkerrf("Packet.Dump", "error reading length: ", err.Error())
+		}
+
+		name := resolveTagName(class, tag)
+		line := newStrBuilder()
+		line.WriteString(indent)
+
+		line.WriteByte(hexDigits[tag>>4])
+		line.WriteByte(hexDigits[tag&0xF])
+		line.WriteByte(' ')
+
+		if length >= 0 && length < 0x100 {
+			line.WriteByte(hexDigits[length>>4])
+			line.WriteByte(hexDigits[length&0xF])
+		} else {
+			line.WriteString(itoa(length))
+		}
+
+		line.WriteString("    # ")
+		line.WriteString(name)
+		line.WriteString(", len=")
+		line.WriteString(itoa(length))
+		line.WriteByte('\n')
+
+		if _, err := w.Write([]byte(line.String())); err != nil {
+			return err
+		}
+
+		start := offset + idLen + lenLen
+		var end int
+		if length >= 0 {
+			end = start + length
+			if end > len(data) {
+				return mkerrf("truncation ", itoa(end), " > ", itoa(len(data)))
+			}
+		} else {
+			idx := bytes.Index(data[start:], []byte{0x00, 0x00})
+			if idx < 0 {
+				return mkerr("no EOC")
+			}
+			end = start + idx
+		}
+
+		if compound {
+			if err := dumpLevel(w, rule, data[start:end], depth+1, width); err != nil {
+				return err
+			}
+		} else {
+			dumpHexLines(w, data[start:end], depth, width)
+		}
+
+		offset = end
+		if length < 0 {
+			offset += 2
+		}
+	}
+
+	return nil
+}
+
+// dumpHexLines prints raw bytes in 16-byte hex lines under the given indent.
+func dumpHexLines(w io.Writer, b []byte, depth, width int) {
+	indent := strrpt("  ", depth)
+
+	for i := 0; i < len(b); i += width {
+		end := i + width
+		if end > len(b) {
+			end = len(b)
+		}
+		chunk := b[i:end]
+
+		line := newStrBuilder()
+		line.WriteString(indent)
+		line.WriteString("  ") // extra two‐space gutter
+
+		for j, x := range chunk {
+			if j > 0 {
+				line.WriteByte(' ')
+			}
+			line.WriteByte(hexDigits[x>>4])
+			line.WriteByte(hexDigits[x&0xF])
+		}
+		line.WriteByte('\n')
+
+		w.Write([]byte(line.String()))
 	}
 }
 

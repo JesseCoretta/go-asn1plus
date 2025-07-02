@@ -4,7 +4,10 @@ package asn1plus
 cer.go contains CER-focused components. See also ber.go and der.go.
 */
 
-import "sync"
+import (
+	"io"
+	"sync"
+)
 
 /*
 CERPacket encapsulates an [ITU-T Rec. X.690] CER-encoded byte
@@ -59,6 +62,16 @@ Hex returns the hexadecimal encoding of the underlying encoded value
 within the receiver instance.
 */
 func (r CERPacket) Hex() string { return formatHex(&r) }
+
+/*
+Dump returns an error following an attempt to write the receiver
+instance into w.
+
+The variadic wrapAt value defines the maximum number of characters
+displayed per line before the value is wrapped. The default is 24,
+and can be configured no less than 16.
+*/
+func (r *CERPacket) Dump(w io.Writer, wrapAt ...int) error { return dumpPacket(r, w) }
 
 /*
 Len returns the integer length of the underlying byte buffer within
