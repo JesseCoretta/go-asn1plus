@@ -5,28 +5,6 @@ import (
 	"testing"
 )
 
-func ExampleBoolean_viaGoBool() {
-	pkt, err := Marshal(true, With(BER))
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Boolean encoding: %s\n", pkt.Hex())
-
-	var b bool
-	if err = Unmarshal(pkt, &b); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Boolean: %t", b)
-	// Output:
-	// Boolean encoding: 01 01 FF
-	// Boolean: true
-}
-
 func TestNewBoolean(t *testing.T) {
 	var b bool
 	for idx, boo := range []any{
@@ -50,7 +28,7 @@ func TestNewBoolean(t *testing.T) {
 			_ = B.String()
 
 			for _, rule := range encodingRules {
-				var pkt Packet
+				var pkt PDU
 				if pkt, err = Marshal(B, With(rule)); err != nil {
 					t.Errorf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 					continue
@@ -125,14 +103,14 @@ func TestCustomBoolean_withControls(t *testing.T) {
 
 	var cust customBoolean = customBoolean(true)
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next customBoolean
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }

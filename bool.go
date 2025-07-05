@@ -80,7 +80,7 @@ func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Boolean] = constraints
-		err = group.Validate(Boolean(b == true))
+		err = group.Constrain(Boolean(b == true))
 	}
 
 	return b, err
@@ -105,7 +105,7 @@ func (c *booleanCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toBoolean[T any](v T) Boolean   { return *(*Boolean)(unsafe.Pointer(&v)) }
 func fromBoolean[T any](i Boolean) T { return *(*T)(unsafe.Pointer(&i)) }
 
-func (c *booleanCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+func (c *booleanCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 	switch pkt.Type() {
 	case BER, CER, DER:
 		n, err = bcdBooleanWrite(c, pkt, o)
@@ -116,7 +116,7 @@ func (c *booleanCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	return
 }
 
-func bcdBooleanWrite[T any](c *booleanCodec[T], pkt Packet, o *Options) (off int, err error) {
+func bcdBooleanWrite[T any](c *booleanCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
@@ -144,7 +144,7 @@ func bcdBooleanWrite[T any](c *booleanCodec[T], pkt Packet, o *Options) (off int
 	return
 }
 
-func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+func (c *booleanCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
 	case BER, CER, DER:
 		err = bcdBooleanRead(c, pkt, tlv, o)
@@ -155,7 +155,7 @@ func (c *booleanCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	return
 }
 
-func bcdBooleanRead[T any](c *booleanCodec[T], pkt Packet, tlv TLV, o *Options) error {
+func bcdBooleanRead[T any](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.Tag(), pkt, tlv, o)
