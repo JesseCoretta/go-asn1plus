@@ -63,7 +63,7 @@ func NewEnumerated(x any, constraints ...Constraint[Enumerated]) (enum Enumerate
 
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[Enumerated] = constraints
-		err = group.Validate(Enumerated(e))
+		err = group.Constrain(Enumerated(e))
 	}
 
 	if err == nil {
@@ -85,12 +85,12 @@ func (c *enumeratedCodec[T]) getVal() any       { return c.val }
 func (c *enumeratedCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func (c *enumeratedCodec[T]) String() string    { return "enumeratedCodec" }
 
-func (c *enumeratedCodec[T]) write(pkt Packet, o *Options) (int, error) {
+func (c *enumeratedCodec[T]) write(pkt PDU, o *Options) (int, error) {
 	c.base.val = Integer{native: int64(c.val)}
 	return c.base.write(pkt, o)
 }
 
-func (c *enumeratedCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+func (c *enumeratedCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
 	if err = c.base.read(pkt, tlv, o); err == nil {
 		c.val = T(c.base.val.native)
 	}
