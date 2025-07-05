@@ -291,7 +291,7 @@ func getChoicesMethod(field string, x any) (funk func() Choices, ok bool) {
 	return
 }
 
-func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (alt Choice, err error) {
+func selectFieldChoice(n string, constructed any, pkt PDU, opts *Options) (alt Choice, err error) {
 	var choices Choices
 	meth, found := getChoicesMethod(n, constructed)
 	if found {
@@ -337,7 +337,7 @@ func selectFieldChoice(n string, constructed any, pkt Packet, opts *Options) (al
 	return
 }
 
-func bcdChooseChoiceCandidate(pkt Packet, tlv TLV, choices Choices, opts *Options) (candidate any, err error) {
+func bcdChooseChoiceCandidate(pkt PDU, tlv TLV, choices Choices, opts *Options) (candidate any, err error) {
 	// First try choicesTag, if defined
 	alt, ok := choices.byTag(opts.choiceTag)
 	if !ok {
@@ -378,11 +378,11 @@ func bcdChooseChoiceCandidate(pkt Packet, tlv TLV, choices Choices, opts *Option
 			err = mkerr("Primitive has no codec")
 		}
 	} else {
-	        payload := tlv.Value
-	        sub := pkt.Type().New(payload...)
-	        sub.SetOffset(0)
-	        childOpts := clearChildOpts(opts)
-	        err = unmarshalValue(sub, refValueOf(candidateInst), childOpts)
+		payload := tlv.Value
+		sub := pkt.Type().New(payload...)
+		sub.SetOffset(0)
+		childOpts := clearChildOpts(opts)
+		err = unmarshalValue(sub, refValueOf(candidateInst), childOpts)
 	}
 
 	if err == nil {
