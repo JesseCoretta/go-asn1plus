@@ -5,8 +5,10 @@ str.go contains all types and methods pertaining to the registration
 and use of all string/[]byte type derivatives.
 */
 
-import "reflect"
-import "unicode/utf8"
+import (
+	"reflect"
+	"unicode/utf8"
+)
 
 /*
 TextLike is implemented through string and []byte types,
@@ -30,7 +32,12 @@ func (c *textCodec[T]) IsPrimitive() bool { return true }
 func (c *textCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func (c *textCodec[T]) getVal() any       { return c.val }
 
-func (c *textCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+func (c *textCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
+	debugEvent(EventEnter|EventCodec, c, pkt, o)
+	defer func() {
+		debugEvent(EventExit|EventCodec, newLItem(n, "bytes written"), newLItem(err))
+	}()
+
 	switch pkt.Type() {
 	case BER, DER:
 		n, err = bcdTextWrite[T](c, pkt, o)
@@ -47,16 +54,22 @@ func (c *textCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	return
 }
 
-func bcdTextWrite[T TextLike](c *textCodec[T], pkt Packet, o *Options) (off int, err error) {
+func bcdTextWrite[T TextLike](c *textCodec[T], pkt PDU, o *Options) (off int, err error) {
+	debugEvent(EventEnter|EventCodec, c, pkt, o)
+	defer func() {
+		debugEvent(EventExit|EventCodec, newLItem(off, "offset"), newLItem(err))
+	}()
 	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
+
 		var wire []byte
 		if c.encodeHook != nil {
 			wire, err = c.encodeHook(c.val)
 		} else {
 			wire = []byte(c.val)
 		}
+		debugEvent(EventCodec, newLItem(wire, "wire bytes"))
 
 		if err == nil {
 			tag, cls := effectiveTag(c.tag, 0, o)
@@ -71,7 +84,12 @@ func bcdTextWrite[T TextLike](c *textCodec[T], pkt Packet, o *Options) (off int,
 	return
 }
 
-func (c *textCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+func (c *textCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
+	debugEvent(EventEnter|EventCodec, c, pkt, newLItem(tlv, "tlv"), o)
+	defer func() {
+		debugEvent(EventExit|EventCodec, newLItem(err))
+	}()
+
 	switch pkt.Type() {
 	case BER, DER:
 		err = bcdTextRead(c, pkt, tlv, o)
@@ -87,14 +105,23 @@ func (c *textCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	return
 }
 
-func bcdTextRead[T TextLike](c *textCodec[T], pkt Packet, tlv TLV, o *Options) error {
+func bcdTextRead[T TextLike](c *textCodec[T], pkt PDU, tlv TLV, o *Options) (err error) {
+	debugEvent(EventEnter|EventCodec, c, pkt, newLItem(tlv, "tlv"), o)
+	defer func() {
+		debugEvent(EventExit|EventCodec, newLItem(err))
+	}()
 	o = deferImplicit(o)
 
-	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
-	if err == nil {
+	mask := EventCodec
+
+	var wire []byte
+	if wire, err = primitiveCheckRead(c.tag, pkt, tlv, o); err == nil {
 		decodeVerify := func() (err error) {
 			for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
 				err = c.decodeVerify[i](wire)
+				debugEvent(mask,
+					newLItem(i, "decodeVerify func"),
+					newLItem(err))
 			}
 
 			return
@@ -107,6 +134,7 @@ func bcdTextRead[T TextLike](c *textCodec[T], pkt Packet, tlv TLV, o *Options) e
 			} else {
 				val = T(append([]byte(nil), wire...))
 			}
+			debugEvent(mask, newLItem(val, "decoded"))
 
 			if err == nil {
 				if err = c.cg.Constrain(val); err == nil {
@@ -174,14 +202,16 @@ func RegisterTextAlias[T TextLike](
 
 	f := factories{
 		newEmpty: func() box {
-			return &textCodec[T]{tag: tag, cg: all,
+			return &textCodec[T]{
+				tag: tag, cg: all,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
 		},
 		newWith: func(v any) box {
 			return &textCodec[T]{
-				val: valueOf[T](v), tag: tag, cg: all,
+				val: valueOf[T](v),
+				tag: tag, cg: all,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
