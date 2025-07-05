@@ -69,8 +69,8 @@ func TestRelativeOID_customType(t *testing.T) {
 This example demonstrates the following:
 
   - Parsing a string-based OID, producing an [ObjectIdentifier] instance
-  - BER encoding the resulting [ObjectIdentifier] instance, producing a BER [Packet] instance
-  - Decoding the BER [Packet] into a new [ObjectIdentifier] instance
+  - BER encoding the resulting [ObjectIdentifier] instance, producing a BER [PDU] instance
+  - Decoding the BER [PDU] into a new [ObjectIdentifier] instance
   - Comparing the string representation between the two [ObjectIdentifier] instances to verify they match
 */
 func ExampleObjectIdentifier_roundTripBER() {
@@ -82,16 +82,16 @@ func ExampleObjectIdentifier_roundTripBER() {
 		return
 	}
 
-	// BER Encode ObjectIdentifier into Packet.
+	// BER Encode ObjectIdentifier into PDU.
 	// Supply an encoding rule other than BER
 	// if desired.
-	var pkt Packet
+	var pkt PDU
 	if pkt, err = Marshal(oid, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// BER Decode Packet into new ObjectIdentifier
+	// BER Decode PDU into new ObjectIdentifier
 	var oid2 ObjectIdentifier
 	if err = Unmarshal(pkt, &oid2); err != nil {
 		fmt.Println(err)
@@ -244,14 +244,14 @@ func TestCustomOID_withControls(t *testing.T) {
 		},
 		nil)
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next customOID
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(&cust))
 	unregisterType(refTypeOf(cust))
@@ -266,7 +266,7 @@ func TestRelativeOID_roundTripBER(t *testing.T) {
 	}
 
 	// Supply an encoding rule other than BER, if desired.
-	var pkt Packet
+	var pkt PDU
 	if pkt, err = Marshal(rel, With(BER)); err != nil {
 		t.Errorf("%s failed [DER encode]: %v", t.Name(), err)
 		return
@@ -456,14 +456,14 @@ func TestCustomRelativeOID_withControls(t *testing.T) {
 		},
 		nil)
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next relOID
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(&cust))
 	unregisterType(refTypeOf(cust))
@@ -488,58 +488,6 @@ func ExampleNewObjectIdentifier_withConstraint() {
 		fmt.Println(err)
 	}
 	// Output: Constraint violation: OID must be an ISO Org OID (must begin with 1.3)
-}
-
-func ExampleObjectIdentifier_viaGoString() {
-	opts := Options{Identifier: "oid"}
-	pkt, err := Marshal("1.3.6.1.4.1.56521",
-		With(BER, opts))
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Jesse's encoded OID: %s\n", pkt.Hex())
-
-	var oid string
-	if err = Unmarshal(pkt, &oid, With(opts)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Jesse's decoded OID: %s", oid)
-	// Output:
-	// Jesse's encoded OID: 06 08 2B0601040183B949
-	// Jesse's decoded OID: 1.3.6.1.4.1.56521
-}
-
-func ExampleObjectIdentifier_sequenceWithStringOID() {
-	type MySequence struct {
-		Name string `asn1:"descriptor"`
-		OID  string `asn1:"oid"`
-	}
-
-	mine := MySequence{"Jesse Coretta", "1.3.6.1.4.1.56521"}
-
-	pkt, err := Marshal(mine, With(BER))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Encoded sequence: %s\n", pkt.Hex())
-
-	var mine2 MySequence
-	if err = Unmarshal(pkt, &mine2); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Decoded sequence: %s, %s", mine2.Name, mine2.OID)
-	// Output:
-	// Encoded sequence: 30 19 070D4A6573736520436F726574746106082B0601040183B949
-	// Decoded sequence: Jesse Coretta, 1.3.6.1.4.1.56521
 }
 
 func BenchmarkObjectIdentifierConstructor(b *testing.B) {
