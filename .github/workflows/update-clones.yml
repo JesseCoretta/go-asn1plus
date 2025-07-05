@@ -95,8 +95,6 @@ jobs:
             >/dev/null
           echo "✅ Gist updated: badge + metadata (backup in metadata.bak.json)"
 
-      - name: Show Shields.io badge snippet
+      - name: Reveal Shields.io badge snippet
         run: |
-          echo "Copy this into your README:"
-          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${{ github.actor }}/${{ env.GIST_ID }}/raw/${{ env.BADGE_FILE }}&query=%24.message&label=clones)"
-
+          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${{ github.actor }}/${{ env.GIST_ID }}/raw/asn1plus_clones.json&query=%24.message&label=clones&color=blue)"
