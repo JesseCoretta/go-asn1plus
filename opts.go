@@ -163,7 +163,9 @@ func parseOptions(tagStr string) (opts Options, err error) {
 				goto Done
 			}
 			po.SetTag(n)
-			po.SetClass(ClassContextSpecific)
+			if po.Class() == ClassUniversal {
+				po.SetClass(ClassContextSpecific)
+			}
 
 		case isBoolKeyword(token):
 			po.setBool(token)
