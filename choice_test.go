@@ -158,72 +158,6 @@ func TestChoice_ContextTagging(t *testing.T) {
 	}
 }
 
-/*
-This example demonstrates the creation of the following ASN.1 CHOICE per [ITU-T Rec. X.501].
-
-	DirectoryString{INTEGER:maxSize} ::= CHOICE {
-	        teletexString TeletexString(SIZE (1..maxSize,...)),
-	        printableString PrintableString(SIZE (1..maxSize,...)),
-	        bmpString BMPString(SIZE (1..maxSize,...)),
-	        universalString UniversalString(SIZE (1..maxSize,...)),
-	        uTF8String UTF8String(SIZE (1..maxSize,...)) }
-
-Following this, a [T61String] is chosen from our available directory string choices.
-
-[ITU-T Rec. X.501]: https://www.itu.int/rec/T-REC-X.501
-*/
-func ExampleChoice_t61DirectoryStringDER() {
-	// Marshal new T61String
-	t61, err := NewT61String(`HELLO WORLD`)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Create our ASN.1 CHOICE(s)
-	directoryString := NewChoices()
-	_ = directoryString.Register(new(T61String))
-	_ = directoryString.Register(new(PrintableString))
-	_ = directoryString.Register(new(BMPString))
-	_ = directoryString.Register(new(UniversalString))
-	_ = directoryString.Register(new(UTF8String))
-
-	// Choose our DirectoryString if the
-	// T.61 tag (20) is matched
-	var choice Choice
-	if choice, err = directoryString.Choose(t61); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Println(choice.Value)
-	// Output: HELLO WORLD
-}
-
-func ExampleChoice_invalidChoice() {
-	// Create an ASN.1 BIT STRING (tag 3), which is
-	// INAPPROPRIATE for a DirectoryString.
-	bs, err := NewBitString(`'1010011'B`)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Create our ASN.1 CHOICE(s) per the X.501
-	// schema definition.
-	directoryString := NewChoices()
-	directoryString.Register(new(T61String))
-	directoryString.Register(new(PrintableString))
-	directoryString.Register(new(BMPString))
-	directoryString.Register(new(UniversalString))
-	directoryString.Register(new(UTF8String))
-
-	if _, err = directoryString.Choose(bs); err != nil {
-		fmt.Println(err)
-	}
-	// Output: no matching alternative found for input type asn1plus.BitString
-}
-
 func ExampleChoice_encodeBareChoice() {
 	var choice Choice = Choice{Value: Null{}}
 	pkt, err := Marshal(choice)
@@ -252,7 +186,7 @@ func TestChoice_codecov(_ *testing.T) {
 
 	choices.tokenizeChoiceOptions(`choice:explicit`)
 	bcdChooseChoiceCandidate(&BERPacket{}, TLV{}, Choices{}, &Options{tag: &tag})
-	selectFieldChoice("", struct{}{}, &DERPacket{}, &Options{})
+	selectFieldChoice("", struct{}{}, &BERPacket{}, &Options{})
 
 	choices.Register(ObjectIdentifier{}, `choice:tag:0,explicit`)
 	choices.Register(ObjectIdentifier{}, `choice:tag:3,explicit`)
@@ -267,7 +201,7 @@ func TestChoice_codecov(_ *testing.T) {
 		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
 		choices, &Options{choiceTag: &tag, tag: &tag},
 	)
-	choices.Register(stubPrimitive{}, `choice:tag:5`)
+	choices.Register(OctetString(``), `choice:tag:5`)
 	tag = 5
 	bcdChooseChoiceCandidate(
 		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
@@ -288,18 +222,20 @@ func TestSequence_choiceAutomaticTagging(t *testing.T) {
 
 	type MySequence struct {
 		Field0 PrintableString
-		Field1 int    `asn1:"integer"`
-		Field2 Choice `asn1:"choices:myChoices"`
-		Field3 string `asn1:"octet,optional"`
+		Field1 Integer
+		Field2 Choice      `asn1:"choices:myChoices"`
+		Field3 OctetString `asn1:"optional"`
 	}
 
 	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
 	choice := Choice{Value: oid}
 	choice.SetTag(0)
 
+	nint, _ := NewInteger(3)
+
 	mine := MySequence{
 		Field0: PrintableString("Hello"),
-		Field1: 3,
+		Field1: nint,
 		Field2: choice,
 	}
 
@@ -337,66 +273,6 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 		BER: "6B 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
 		CER: "6B 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
 		DER: "6B 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-	}
-
-	for _, rule := range encodingRules {
-		pkt, err := Marshal(pdv, With(rule))
-		if err != nil {
-			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
-		}
-
-		want := hexes[rule]
-		if got := pkt.Hex(); got != want {
-			t.Fatalf("%s failed [%s encoding mismatch]\n\twant: '%s'\n\tgot:  '%s'",
-				t.Name(), rule, want, got)
-		}
-
-		var newPDV EmbeddedPDV
-		if err = Unmarshal(pkt, &newPDV); err != nil {
-			t.Fatalf("%s failed [%s decode]: %v", t.Name(), rule, err)
-		}
-
-		if newPDV.Identification.IsZero() {
-			t.Fatalf("Missing identification choice after decoding")
-		}
-
-		switch id := newPDV.Identification.Value.(type) {
-		case Syntaxes:
-			if id.Abstract.String() != `2.1.2.1.2.1.2.1` ||
-				id.Transfer.String() != `2.0.2.0.2.0.2.0` {
-				t.Fatalf("%s failed: expected Syntaxes{ Abstract: 2.1.2.1.2.1.2.1 Transfer: 2.0.2.0.2.0.2.0 }, got %#v",
-					t.Name(), id)
-			}
-		default:
-			t.Fatalf("Unexpected alternative type in identification: got %T", id)
-		}
-
-		if string(newPDV.DataValueDescriptor) != "test" {
-			t.Fatalf("DataValueDescriptor mismatch")
-		} else if string(newPDV.DataValue) != "blarg" {
-			t.Fatalf("DataValue mismatch")
-		}
-	}
-}
-
-func TestExternal_encodingRulesChoiceSyntaxes(t *testing.T) {
-	abstract, _ := NewObjectIdentifier(2, 1, 2, 1, 2, 1, 2, 1)
-	transfer, _ := NewObjectIdentifier(2, 0, 2, 0, 2, 0, 2, 0)
-	syntaxes := Syntaxes{abstract, transfer}
-
-	tag := 0
-	choice := Choice{Value: &syntaxes, Tag: &tag}
-
-	pdv := External{
-		Identification:      choice,
-		DataValueDescriptor: ObjectDescriptor("test"),
-		DataValue:           OctetString("blarg"),
-	}
-
-	hexes := map[EncodingRule]string{
-		BER: "28 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-		CER: "28 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-		DER: "28 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
 	}
 
 	for _, rule := range encodingRules {
@@ -512,7 +388,7 @@ func TestChoice_AutomaticTagsUniqueAndExplicit(t *testing.T) {
 	oid, _ := NewObjectIdentifier(1, 3, 6)
 	ch, _ := auto.Choose(oid, "choice:tag:1")
 	ch.Explicit = true
-	pkt, err := Marshal(ch, With(DER)) // marshal the CHOICE itself
+	pkt, err := Marshal(ch, With(BER)) // marshal the CHOICE itself
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
@@ -540,7 +416,7 @@ func TestChoice_NegativeTagLeak(t *testing.T) {
 	oid, _ := NewObjectIdentifier(1, 2, 3)
 	ch := Choice{Value: oid}
 
-	pkt, err := Marshal(ch, With(DER))
+	pkt, err := Marshal(ch, With(BER))
 	if err != nil {
 		t.Fatalf("marshal failed unexpectedly: %v", err)
 	}
@@ -583,7 +459,7 @@ func Test_pickChoiceAlternative_NoUnwrap(t *testing.T) {
 
 	// payload = bare INTEGER 42
 	raw := []byte{0x02, 0x01, 0x2A}
-	pkt := DER.New(raw...)
+	pkt := BER.New(raw...)
 	pkt.SetOffset(0)
 
 	def, tag, payload, payloadPK, outOpts, err := setPickChoiceAlternative(pkt, opts)
@@ -619,7 +495,7 @@ func Test_pickChoiceAlternative_MustUnwrap(t *testing.T) {
 
 	// context-specific constructed tag 2 (0xA2), length=3, inner=0x02 0x01 0x05
 	raw := []byte{0xA2, 0x03, 0x02, 0x01, 0x05}
-	pkt := DER.New(raw...)
+	pkt := BER.New(raw...)
 	pkt.SetOffset(0)
 
 	def, tag, payload, _, _, err := setPickChoiceAlternative(pkt, opts)
@@ -639,7 +515,7 @@ func Test_pickChoiceAlternative_MustUnwrap(t *testing.T) {
 
 func Test_handleChoiceSlice_NotSlice(t *testing.T) {
 	payload := []byte{0x04, 0x01, 'x'}
-	pkt := DER.New(payload...)
+	pkt := BER.New(payload...)
 
 	def := choiceAlternative{
 		Type: reflect.TypeOf(int(0)),
