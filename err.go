@@ -27,7 +27,8 @@ var (
 	errorTruncatedContent      error = mkerr("packet content is truncated")
 	errorTruncatedLength       error = mkerr("packet length is truncated")
 	errorLengthTooLarge        error = mkerr("length bytes too large (>4 octets)")
-	errorRuleNotImplemented    error = mkerr("encoding rule not yet implemented")
+	errorRuleNotImplemented    error = mkerr("encoding rule not yet implemented or is deactivated")
+	errorNoEncodingRules       error = mkerr("no encoding rules loaded")
 	errorCodecNotFound         error = mkerr("codec not found")
 )
 
