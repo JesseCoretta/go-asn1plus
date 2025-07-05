@@ -133,13 +133,15 @@ func TestSequence_codecov(_ *testing.T) {
 	Unmarshal(&BERPacket{data: []byte{0x30, 0x1, 0x5}}, &bogusFieldTag{})
 }
 
-func ExamplePacket_automaticTaggingBER() {
+func ExamplePDU_automaticTaggingBER() {
 	type MySequence struct {
-		A int    `asn1:"integer"`
-		B string `asn1:"printable"`
+		A Integer         `asn1:"tag:0"`
+		B PrintableString `asn1:"tag:1"`
 	}
 
-	mine := MySequence{A: 42, B: "Hi"}
+	nint, _ := NewInteger(42) // safe to shadow error if non-string
+	ps := PrintableString("Hi")
+	mine := MySequence{A: nint, B: ps}
 	opts := Options{Automatic: true}
 
 	pkt, err := Marshal(mine, With(BER, opts))
@@ -162,11 +164,13 @@ func ExamplePacket_automaticTaggingBER() {
 
 func TestSequence_AutomaticTagging(t *testing.T) {
 	type MySequence struct {
-		A int    `asn1:"integer"`
-		B string `asn1:"printable"`
+		A Integer         `asn1:"tag:0"`
+		B PrintableString `asn1:"tag:1"`
 	}
 
-	in := MySequence{A: 42, B: "Hi"}
+	nint, _ := NewInteger(42) // safe to shadow error if non-string
+	ps := PrintableString("Hi")
+	in := MySequence{A: nint, B: ps}
 	opts := Options{Automatic: true}
 
 	// 30            -- SEQUENCE
