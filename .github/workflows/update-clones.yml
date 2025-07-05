@@ -1,0 +1,55 @@
+name: Update Clone Counter
+
+on:
+  schedule:
+    # runs at 00:05 UTC every day
+    - cron:  '5 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-clones:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch last 14-day clone stats
+        id: stats
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data } = await github.rest.repos.getClones({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per: 'day'
+            });
+            // Sum daily counts
+            const totalNew = data.clone_counts.reduce((sum, d) => sum + d.count, 0);
+            return totalNew;
+      
+      - name: Read & update gist
+        id: update
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const gistId = 'fc9283f4379c4b0b6211de82d01e2cec';
+            // 1. Fetch existing gist
+            const { data: gist } = await github.rest.gists.get({ gist_id: gistId });
+            const fileName = Object.keys(gist.files)[0];
+            const rawUrl = gist.files[fileName].raw_url;
+            
+            // 2. Download and parse JSON
+            const resp = await fetch(rawUrl);
+            const json = await resp.json();
+            
+            // 3. Update message
+            json.message = String(Number(json.message) + Number(core.getOutput('stats')));
+            
+            // 4. Patch gist
+            await github.rest.gists.update({
+              gist_id: gistId,
+              files: {
+                [fileName]: {
+                  content: JSON.stringify(json, null, 2)
+                }
+              }
+            });
