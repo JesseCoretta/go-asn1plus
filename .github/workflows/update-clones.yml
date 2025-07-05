@@ -31,36 +31,47 @@ jobs:
           echo "newClones=$newClones" >> $GITHUB_OUTPUT
 
       - name: Read & update Gist total
+        id: update_gist
         env:
-          GH_TOKEN:      ${{ secrets.CLONE_STATS_TOKEN }}
-          GIST_ID:       fc9283f4379c4b0b6211de82d01e2cec
-          NEW_CLONES:    ${{ steps.fetch.outputs.newClones }}
+          GH_TOKEN:   ${{ secrets.CLONE_STATS_TOKEN }}
+          GIST_ID:    fc9283f4379c4b0b6211de82d01e2cec
+          NEW_CLONES: ${{ steps.fetch.outputs.newClones }}
         run: |
-          # 1. Download current clones.json
-          raw_url=$(
-            curl -s -H "Authorization: token $GH_TOKEN" \
-                 "https://api.github.com/gists/$GIST_ID" \
-              | jq -r '.files[].raw_url'
-          )
+          echo "🔍 Fetching gist metadata for ID $GIST_ID"
+          resp=$(curl -s -H "Authorization: token $GH_TOKEN" "https://api.github.com/gists/$GIST_ID")
+          echo "📝 Gist metadata response:"
+          echo "$resp" | jq .
+      
+          # Extract raw_url of the first file
+          raw_url=$(echo "$resp" | jq -r '.files | keys[0] as $k | .[$k].raw_url // empty')
+          if [ -z "$raw_url" ]; then
+            echo "❌ Could not find raw_url in gist metadata"
+            exit 1
+          fi
+          echo "🔗 raw_url: $raw_url"
+      
+          # Download gist JSON
           data=$(curl -s "$raw_url")
-          echo "📝 Current gist data:"
-          echo "$data" | jq
-
-          # 2. Bump the message field
+          echo "📝 Current gist file content:"
+          echo "$data" | jq .
+      
+          # Continue with updating
           old=$(echo "$data" | jq -r '.message')
           new=$((old + NEW_CLONES))
-          echo "📝 Old total: $old →  New total: $new"
-
-          # 3. Prepare patched JSON
+          echo "📝 Old total: $old → New total: $new"
+      
           patched=$(echo "$data" | jq --arg m "$new" '.message = $m')
+          echo "📝 Patched content:"
+          echo "$patched" | jq .
+      
+          # Push the patch
+          update_resp=$(curl -s -X PATCH \
+            -H "Authorization: token $GH_TOKEN" \
+            -d "{\"files\": {\"$(echo "$resp" | jq -r '.files|keys[0]')\": {\"content\": $(printf '%s' "$patched" | jq -Rs .)}}}" \
+            "https://api.github.com/gists/$GIST_ID")
+          echo "✅ Update response:"
+          echo "$update_resp" | jq .
 
-          # 4. Push update
-          curl -s -X PATCH \
-               -H "Authorization: token $GH_TOKEN" \
-               -d "{\"files\": {\"$(echo "$data" | jq -r '.files|keys[0]')\": {\"content\": $(printf '%s' "$patched" | jq -Rs .)}}}" \
-               "https://api.github.com/gists/$GIST_ID"
-
-          echo "✅ Gist updated"
 
       - name: Show badge URL
         run: |
