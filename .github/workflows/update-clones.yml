@@ -25,33 +25,30 @@ jobs:
 
           # pick the latest day
           latest=$(echo "$resp" | jq -r '.clones | sort_by(.timestamp) | last')
-          echo "latest day data:" "$latest" | jq .
-          
           day_ts=$(echo "$latest" | jq -r .timestamp)
           day_count=$(echo "$latest" | jq -r .count)
+
           echo "day_ts=$day_ts"      >> $GITHUB_OUTPUT
           echo "day_count=$day_count" >> $GITHUB_OUTPUT
 
       - name: Read & update Gist lifetime total
-        id: update_gist
+        id: update
         env:
-          GH_TOKEN:  ${{ secrets.CLONE_STATS_TOKEN }}
-          GIST_ID:   fc9283f4379c4b0b6211de82d01e2cec
-          DAY_TS:    ${{ steps.fetch.outputs.day_ts }}
-          DAY_COUNT: ${{ steps.fetch.outputs.day_count }}
+          GH_TOKEN:   ${{ secrets.CLONE_STATS_TOKEN }}
+          GIST_ID:    fc9283f4379c4b0b6211de82d01e2cec
+          DAY_TS:     ${{ steps.fetch.outputs.day_ts }}
+          DAY_COUNT:  ${{ steps.fetch.outputs.day_count }}
         run: |
           echo "🔍 Loading gist metadata for $GIST_ID"
           meta=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/gists/$GIST_ID")
           echo "$meta" | jq .
 
-          # find the file name and raw URL
+          # get filename and raw URL
           file=$(echo "$meta" | jq -r '.files | keys[0]')
           raw_url=$(echo "$meta" | jq -r ".files[\"$file\"].raw_url")
-          echo "file=$file"           >> $GITHUB_OUTPUT
-          echo "raw_url=$raw_url"     >> $GITHUB_OUTPUT
+          echo "raw_url: $raw_url"
 
-          echo "🔗 raw_url: $raw_url"
           data=$(curl -s "$raw_url")
           echo "$data" | jq .
 
@@ -60,12 +57,12 @@ jobs:
           echo "previous total=$oldTotal, lastTimestamp=$prevTs"
 
           if [ "$prevTs" = "$DAY_TS" ]; then
-            echo "⚡️ Already recorded for $DAY_TS—exiting."
+            echo "⚡️ already recorded for $DAY_TS—exiting."
             exit 0
           fi
 
           newTotal=$((oldTotal + DAY_COUNT))
-          echo "➕ Adding $DAY_COUNT clones → newTotal=$newTotal"
+          echo "➕ adding $DAY_COUNT → newTotal=$newTotal"
 
           patched=$(jq \
             --arg m "$newTotal" \
@@ -74,7 +71,8 @@ jobs:
             <<<"$data")
           echo "$patched" | jq .
 
-          payload=$(jq -n --arg f "$file" --arg c "$patched" '{"files":{($f):{"content":$c}}}')
+          payload=$(jq -n --arg f "$file" --arg c "$patched" \
+            '{"files":{($f):{"content":$c}}}')
           echo "$payload" | jq .
 
           curl -s -X PATCH \
@@ -86,13 +84,14 @@ jobs:
 
       - name: Show badge embed snippet
         env:
-          GIST_ID: ${{ steps.update_gist.outputs.GIST_ID }}
-          FILE:    ${{ steps.update_gist.outputs.file }}
+          GIST_ID:    "your-gist-id-here"      # same ID, no slashes
+          FILE_NAME:  "asn1plus_clones.json"   # your JSON filename
         run: |
-          # ensure no trailing slash on GIST_ID
-          GIST="${GIST_ID%/}"
+          # strip any trailing slash from GIST_ID, leading slash from FILE_NAME
+          GID=${GIST_ID%/}
+          FNAME=${FILE_NAME#/}
 
-          BADGE_URL="https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST}/raw/${FILE}"
+          BADGE_URL="https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GID}/raw/${FNAME}"
           echo "Use this in your README:"
           echo "![Clones]($BADGE_URL)"
 
