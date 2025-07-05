@@ -2,26 +2,60 @@ package asn1plus
 
 /*
 er.go contains all EncodingRule abstraction elements, including
-rule-tailored Packet constructors and runtime Options envelopes.
+rule-tailored PDU constructors and runtime Options envelopes.
 */
 
 /*
 EncodingRule describes the particular ASN.1 encoding rule of a
-[Packet] qualifier type.
+[PDU] qualifier type.
 */
 type EncodingRule int
+
+/*
+DefaultEncoding declares the default [EncodingRule] to be used,
+unless otherwise instructed, for all [Marshal] operations. This
+can be changed by the end user (e.g.: use [DER] as default).
+
+If an unimplemented, disabled or otherwise unsupported [EncodingRule]
+is declared here, the package will panic.
+*/
+var DefaultEncoding EncodingRule = BER
 
 const (
 	testEncodingRule EncodingRule = iota - 1
 	invalidEncodingRule
-	BER
-	CER
-	DER
 )
 
-// for unit tests, enforcement and officiation of all supported
-// encoding rules within this package.
-var encodingRules []EncodingRule = []EncodingRule{BER, CER, DER}
+/*
+[EncodingRule] constants outline all of the supported
+(but not necessarily loaded) ASN.1 encoding rules in
+this package.
+*/
+const (
+	BER EncodingRule = 1 << iota // 1
+	CER                          // 2
+	DER                          // 4
+)
+
+/*
+activeEncodingRules represents an EncodingRule bitmask,
+detailing which rules have support compiled for them.
+*/
+var activeEncodingRules = BER
+
+/*
+for unit tests, enforcement and officiation of all supported
+encoding rules within this package.  This is essentially the
+"master list" of all possible encoding rules in this package,
+but does not reflect which rules are LOADED.
+*/
+var allEncodingRules []EncodingRule = []EncodingRule{BER, CER, DER}
+
+/*
+Enabled returns a Boolean value indicative of whether support for
+[EncodingRule] r was enabled with "-tags <rule>" at build/run time.
+*/
+func (r EncodingRule) Enabled() bool { return activeEncodingRules&r != 0 }
 
 /*
 allowsIndefinite returns a Boolean value indicative of whether the
@@ -60,18 +94,18 @@ func (r EncodingRule) Extends(e EncodingRule) (is bool) {
 }
 
 /*
-New returns a qualifying instance of [Packet] based on the receiver value.
+New returns a qualifying instance of [PDU] based on the receiver value.
 
 The variadic data input value(s) are assumed to be previously encoded bytes
 appropriate for the receiver in use. If provided, the offset will be set to
-the final byte. If none are provided, an empty (but initialized) [Packet]
+the final byte. If none are provided, an empty (but initialized) [PDU]
 is returned as-is.
 */
-func (r EncodingRule) New(src ...byte) Packet {
-	var pkt Packet = invalidPacket{}
+func (r EncodingRule) New(src ...byte) PDU {
+	var pkt PDU = invalidPacket{}
 
-	if r.In(encodingRules...) {
-		pkt = packetConstructors[r](src...)
+	if r.Enabled() {
+		pkt = pDUConstructors[r](src...)
 	}
 
 	pkt.SetOffset(-1)
@@ -111,7 +145,7 @@ submission to [Marshal] and [Unmarshal]. This function is intended to be execute
 in-line as a variadic input value to [Marshal] and [Unmarshal].
 
 It is unnecessary -- but harmless -- to include an [EncodingRule] when submitting to
-[Unmarshal], as the input [Packet] instance knows what [EncodingRule] it implements.
+[Unmarshal], as the input [PDU] instance knows what [EncodingRule] it implements.
 */
 func With(args ...any) EncodingOption {
 	var rule EncodingRule = invalidEncodingRule
@@ -120,7 +154,9 @@ func With(args ...any) EncodingOption {
 	for i := 0; i < len(args); i++ {
 		switch tv := args[i].(type) {
 		case EncodingRule:
-			rule = tv
+			if tv.Enabled() {
+				rule = tv
+			}
 		case Options:
 			opts = &tv
 		case *Options:
@@ -167,4 +203,24 @@ func (r EncodingRule) OID() ObjectIdentifier {
 	}
 
 	return oid
+}
+
+/*
+prebuilt list of enabled encoding rules for use
+in test/op iteration.
+*/
+var encodingRules []EncodingRule
+
+func init() {
+	for _, r := range allEncodingRules {
+		if r.Enabled() {
+			encodingRules = append(encodingRules, r)
+		}
+	}
+
+	if len(encodingRules) == 0 {
+		panic(errorNoEncodingRules)
+	} else if !DefaultEncoding.Enabled() {
+		panic(errorRuleNotImplemented)
+	}
 }

@@ -12,14 +12,24 @@ import (
 )
 
 /*
-Packet implements a generic ASN.1 packet of any supported codec.
+Deprecated: Packet implements a generic ASN.1 PDU of any supported codec.
 
-Qualifying instances of this interface serve two purposes:
-
-  - Provide an easy-to-use "Packet" abstraction for a payload
-  - Serve as an equivalent to [encoding/asn1.RawValue]
+Wherever variables of this type are defined, use [PDU] directly instead.
 */
-type Packet interface {
+type Packet PDU
+
+/*
+PDU implements an ASN.1 protocol data unit.
+
+The purpose of this type is to provide an easy-to-use abstraction
+(e.g.: "packet") for an ASN.1 "payload".
+*/
+type PDU interface {
+	// ID returns a unique hexadecimal debugging identifier, or
+	// a zero string if this package was not run or build with
+	// '-tags asn1debug'.
+	ID() string
+
 	// Type returns the encoding rule honored and implemented
 	// by the receiver instance.
 	Type() EncodingRule
@@ -71,7 +81,7 @@ type Packet interface {
 	// Packet returns an instance of Packet alongside an error
 	// following an attempt to extract a "sub packet" beginning
 	// at the input integer position.
-	Packet(int) (Packet, error)
+	Packet(int) (PDU, error)
 
 	// HasMoreData returns a Boolean value indicative of content
 	// existing past the point of the current offset position.
@@ -116,9 +126,10 @@ func (_ invalidPacket) FullBytes() ([]byte, error)       { return nil, errorInva
 func (_ invalidPacket) HasMoreData() bool                { return false }
 func (_ invalidPacket) Compound() (bool, error)          { return false, errorInvalidPacket }
 func (_ invalidPacket) Offset() int                      { return 0 }
-func (_ invalidPacket) Packet(_ int) (Packet, error)     { return invalidPacket{}, errorInvalidPacket }
+func (_ invalidPacket) Packet(_ int) (PDU, error)        { return invalidPacket{}, errorInvalidPacket }
 func (_ invalidPacket) SetOffset(_ ...int)               {}
 func (_ invalidPacket) Free()                            {}
+func (_ invalidPacket) ID() string                       { return `` }
 func (_ invalidPacket) Hex() string                      { return `` }
 func (_ invalidPacket) Dump(_ io.Writer, _ ...int) error { return errorInvalidPacket }
 func (_ invalidPacket) Len() int                         { return 0 }
@@ -127,7 +138,7 @@ func (_ invalidPacket) PeekTLV() (TLV, error)            { return TLV{}, errorIn
 func (_ invalidPacket) WriteTLV(_ TLV) error             { return errorInvalidPacket }
 func (_ invalidPacket) TLV() (TLV, error)                { return TLV{}, errorInvalidPacket }
 
-func extractPacket(pkt Packet, L int) (sub Packet, err error) {
+func extractPacket(pkt PDU, L int) (sub PDU, err error) {
 	sub = invalidPacket{}
 
 	if pkt.Offset()+L > pkt.Len() {
@@ -142,8 +153,7 @@ func extractPacket(pkt Packet, L int) (sub Packet, err error) {
 	return sub, err
 }
 
-func setPacketOffset(pkt Packet, offset ...int) {
-	var off int
+func setPacketOffset(pkt PDU, offset ...int) (off int) {
 	if len(offset) > 0 {
 		if offset[0] == -1 && pkt.Len() > 1 {
 			off = pkt.Len() - 1
@@ -154,14 +164,7 @@ func setPacketOffset(pkt Packet, offset ...int) {
 		off = 0
 	}
 
-	switch pkt.Type() {
-	case BER:
-		pkt.(*BERPacket).offset = off
-	case CER:
-		pkt.(*CERPacket).offset = off
-	case DER:
-		pkt.(*DERPacket).offset = off
-	}
+	return
 }
 
 func formatHex(input any) string {
@@ -170,7 +173,7 @@ func formatHex(input any) string {
 	switch tv := input.(type) {
 	case []byte:
 		data = tv
-	case Packet:
+	case PDU:
 		data = tv.Data()
 	}
 
@@ -244,6 +247,7 @@ func parseCompoundIdentifier(b []byte) (compound bool, err error) {
 }
 
 func parseTagIdentifier(b []byte) (tag int, idLen int, err error) {
+
 	if len(b) == 0 {
 		err = errorEmptyIdentifier
 		return
@@ -437,7 +441,7 @@ func parseLength(b []byte) (length int, lenLen int, err error) {
 	return
 }
 
-func getPacketClass(r Packet) (int, error) {
+func getPacketClass(r PDU) (int, error) {
 	buf := r.Data()
 	if r.Offset() >= len(buf) {
 		return 0, errorOutOfBounds
@@ -445,7 +449,7 @@ func getPacketClass(r Packet) (int, error) {
 	return parseClassIdentifier(buf[r.Offset():])
 }
 
-func getPacketTag(r Packet) (int, error) {
+func getPacketTag(r PDU) (int, error) {
 	buf := r.Data()
 	if r.Offset() >= len(buf) {
 		return 0, errorOutOfBounds
@@ -454,7 +458,7 @@ func getPacketTag(r Packet) (int, error) {
 	return tag, err
 }
 
-func getPacketCompound(r Packet) (bool, error) {
+func getPacketCompound(r PDU) (bool, error) {
 	buf := r.Data()
 	if r.Offset() >= len(buf) {
 		return false, errorOutOfBounds
@@ -473,11 +477,9 @@ var bufPool = sync.Pool{
 func getBuf() *[]byte  { return bufPool.Get().(*[]byte) }
 func putBuf(p *[]byte) { *p = (*p)[:0]; bufPool.Put(p) }
 
-var packetConstructors map[EncodingRule]func(...byte) Packet
-
 // This is mainly for maintainer convenience in the midst
 // of implementing new encoding rules.
-func panicOnMissingEncodingRuleConstructor(table map[EncodingRule]func(...byte) Packet) {
+func panicOnMissingEncodingRuleConstructor(table map[EncodingRule]func(...byte) PDU) {
 	for i := 0; i < len(encodingRules); i++ {
 		rule := encodingRules[i]
 		if _, found := table[rule]; !found {
@@ -486,7 +488,7 @@ func panicOnMissingEncodingRuleConstructor(table map[EncodingRule]func(...byte) 
 	}
 }
 
-func dumpPacket(pkt Packet, w io.Writer, wrapAt ...int) error {
+func dumpPacket(pkt PDU, w io.Writer, wrapAt ...int) error {
 	pkt.SetOffset(0)
 	width := 24
 
@@ -521,7 +523,7 @@ func dumpLevel(w io.Writer, rule EncodingRule, data []byte, depth, width int) er
 
 		length, lenLen, err := parseLength(data[offset+idLen:])
 		if err != nil {
-			return mkerrf("Packet.Dump", "error reading length: ", err.Error())
+			return mkerrf("PDU.Dump", "error reading length: ", err.Error())
 		}
 
 		name := resolveTagName(class, tag)
@@ -609,11 +611,8 @@ func dumpHexLines(w io.Writer, b []byte, depth, width int) {
 	}
 }
 
+var pDUConstructors map[EncodingRule]func(...byte) PDU = make(map[EncodingRule]func(...byte) PDU)
+
 func init() {
-	packetConstructors = map[EncodingRule]func(...byte) Packet{
-		BER: newBERPacket,
-		CER: newCERPacket,
-		DER: newDERPacket,
-	}
-	panicOnMissingEncodingRuleConstructor(packetConstructors)
+	panicOnMissingEncodingRuleConstructor(pDUConstructors)
 }

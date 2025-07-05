@@ -3,13 +3,14 @@ package asn1plus
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"reflect"
 	"sync"
 	"testing"
 )
 
 /*
-testPacket implements an invalid-ish Packet qualifier used
+testPacket implements an invalid-ish PDU qualifier used
 solely for tripping special corner-cases in unit tests.
 */
 type testPacket struct {
@@ -20,17 +21,19 @@ type testPacket struct {
 	typ    EncodingRule // hardwire a type
 }
 
-func (r testPacket) Data() []byte                  { return r.data }
-func (r testPacket) Offset() int                   { return r.offset }
-func (r *testPacket) SetOffset(i ...int)           { setPacketOffset(r, i...) }
-func (r testPacket) Len() int                      { return r.length }
-func (r testPacket) Type() EncodingRule            { return r.typ }
-func (r testPacket) Hex() string                   { return formatHex(r) }
-func (r *testPacket) HasMoreData() bool            { return r.offset < len(r.data) }
-func (r *testPacket) TLV() (TLV, error)            { return getTLV(r, nil) }
-func (r *testPacket) WriteTLV(tlv TLV) error       { return writeTLV(r, tlv, nil) }
-func (r *testPacket) Packet(L int) (Packet, error) { return extractPacket(r, L) }
-func (r *testPacket) allowsIndefinite() bool       { return r.indef }
+func (r testPacket) Data() []byte                          { return r.data }
+func (r testPacket) Offset() int                           { return r.offset }
+func (r *testPacket) SetOffset(i ...int)                   { setPacketOffset(r, i...) }
+func (r testPacket) Len() int                              { return r.length }
+func (r testPacket) Type() EncodingRule                    { return r.typ }
+func (r testPacket) Hex() string                           { return formatHex(r) }
+func (r testPacket) Dump(w io.Writer, wrapAt ...int) error { return nil }
+func (r *testPacket) HasMoreData() bool                    { return r.offset < len(r.data) }
+func (r *testPacket) TLV() (TLV, error)                    { return getTLV(r, nil) }
+func (r *testPacket) ID() string                           { return `` }
+func (r *testPacket) WriteTLV(tlv TLV) error               { return writeTLV(r, tlv, nil) }
+func (r *testPacket) Packet(L int) (PDU, error)            { return extractPacket(r, L) }
+func (r *testPacket) allowsIndefinite() bool               { return r.indef }
 
 func (r *testPacket) Bytes() ([]byte, error) {
 	return parseBody(r.Data(), r.Offset(), r.Type())
@@ -104,10 +107,10 @@ func (r *testPacket) Tag() (int, error) {
 }
 
 /*
-This example demonstrates the manual creation of a [Packet] instance using
+This example demonstrates the manual creation of a [PDU] instance using
 pre-encoded bytes as input.
 */
-func ExamplePacket_manualCreation() {
+func ExamplePDU_manualCreation() {
 	// For the purposes of this example, we chose BER to
 	// encode a UTF-8 string.
 	berBytes := []byte{
@@ -116,11 +119,7 @@ func ExamplePacket_manualCreation() {
 		0x38, 0x20, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67,
 	}
 
-	tmpBuf := getBuf()
-	defer putBuf(tmpBuf)
-	pkt := BER.New((*tmpBuf)...)
-	pkt.Append(berBytes...)
-
+	pkt := BER.New(berBytes...)
 	var u8 UTF8String
 
 	if err := Unmarshal(pkt, &u8); err != nil {
@@ -132,7 +131,160 @@ func ExamplePacket_manualCreation() {
 	// Output: this is a UTF-8 string
 }
 
-func TestPacket_invalidPacket(_ *testing.T) {
+func ExamplePDU_Dump_primitive() {
+	var oct OctetString = OctetString("Testing 123")
+	pkt, err := Marshal(oct)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var w bytes.Buffer
+	if err = pkt.Dump(&w); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("%s\n", w.String())
+	// Output:
+	// 04 0B    # OCTET STRING, len=11
+	//   54 65 73 74 69 6E 67 20 31 32 33
+}
+
+func ExamplePDU_Dump_set() {
+	var set []OctetString = []OctetString{
+		OctetString("Testing 123"),
+		OctetString("Testing 456"),
+		OctetString("Testing 789"),
+		OctetString("Testing AEF620044300EC123AAA54FFFF24542511010"),
+	}
+
+	pkt, err := Marshal(set)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var w bytes.Buffer
+	if err = pkt.Dump(&w); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("%s\n", w.String())
+	// Output:
+	// 11 56    # SET, len=86
+	//   04 0B    # OCTET STRING, len=11
+	//     54 65 73 74 69 6E 67 20 31 32 33
+	//   04 0B    # OCTET STRING, len=11
+	//     54 65 73 74 69 6E 67 20 34 35 36
+	//   04 0B    # OCTET STRING, len=11
+	//     54 65 73 74 69 6E 67 20 37 38 39
+	//   04 2D    # OCTET STRING, len=45
+	//     54 65 73 74 69 6E 67 20 41 45 46 36 32 30 30 34 34 33 30 30 45 43 31 32
+	//     33 41 41 41 35 34 46 46 46 46 32 34 35 34 32 35 31 31 30 31 30
+}
+
+func ExamplePDU_Dump_sequence() {
+
+	// Here, we implement the following ASN.1 structure ...
+
+	/*
+		DeepSequence := [CONTEXT SPECIFIC 2] EXPLICIT SEQUENCE {
+			field2 OCTET STRING
+		}
+
+		SubSequence ::= [APPLICATION 0] EXPLICIT SEQUENCE {
+		    values   SET OF OCTET STRING,
+		    deep     DeepSequence
+		}
+
+		MySequence ::= [APPLICATION 7] IMPLICIT SEQUENCE {
+		    field0   PrintableString,
+		    field1   OCTET STRING        OPTIONAL,
+		    field2   SubSequence
+		}
+	*/
+
+	// ... using Go structs and ASN.1 primitives:
+	type DeepSequence struct {
+		Field2 OctetString
+	}
+
+	type SubSequence struct {
+		Values []OctetString
+		Deep   DeepSequence `asn1:"tag:2"` // [CONTEXT SPECIFIC 2]
+	}
+
+	type MySequence struct {
+		Field0 PrintableString
+		Field1 OctetString `asn1:"optional"`
+		Field2 SubSequence `asn1:"application,tag:0"` // [APPLICATION 0]
+	}
+
+	// Now we populate with actual content ...
+	my := MySequence{
+		Field0: PrintableString("Print me"),
+		Field2: SubSequence{
+			Values: []OctetString{
+				OctetString("Zero"),
+				OctetString("One"),
+				OctetString("Two"),
+				OctetString("Three"),
+			},
+			Deep: DeepSequence{
+				Field2: OctetString("Deep value"),
+			},
+		},
+	}
+
+	// Prepare options for class/tag assignment to
+	// the top-level MySequence struct.
+	opts := Options{}
+
+	// SetClass(1) + SetTag(7) == [APPLICATION 7]
+	opts.SetClass(1)
+	opts.SetTag(7)
+
+	// BER encode MySequence
+	pkt, err := Marshal(my, With(BER, opts))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var w bytes.Buffer // implements io.Writer
+
+	// Optionally, users may pass a variadic integer to
+	// better control line-wrapping for particularly
+	// large values.
+	if err = pkt.Dump(&w); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("%s\n", w.String())
+	// Output:
+	// 07 35    # [APPLICATION 7], len=53
+	//   13 08    # PrintableString, len=8
+	//     50 72 69 6E 74 20 6D 65
+	//   04 00    # OCTET STRING, len=0
+	//   00 27    # [APPLICATION 0], len=39
+	//     11 17    # SET, len=23
+	//       04 04    # OCTET STRING, len=4
+	//         5A 65 72 6F
+	//       04 03    # OCTET STRING, len=3
+	//         4F 6E 65
+	//       04 03    # OCTET STRING, len=3
+	//         54 77 6F
+	//       04 05    # OCTET STRING, len=5
+	//         54 68 72 65 65
+	//     02 0C    # [CONTEXT SPECIFIC 2], len=12
+	//       04 0A    # OCTET STRING, len=10
+	//         44 65 65 70 20 76 61 6C 75 65
+}
+
+func TestPDU_invalidPacket(_ *testing.T) {
 	var invp invalidPacket
 	invp.Type()
 	invp.Data()
@@ -154,7 +306,7 @@ func TestPacket_invalidPacket(_ *testing.T) {
 	invp.WriteTLV(TLV{})
 }
 
-func TestPacket_PeekTLV(t *testing.T) {
+func TestPDU_PeekTLV(t *testing.T) {
 	type MySequence struct {
 		Field1 OctetString
 		Field2 PrintableString
@@ -172,7 +324,8 @@ func TestPacket_PeekTLV(t *testing.T) {
 	}
 }
 
-func TestPacket_Packet(t *testing.T) {
+// retire
+func TestPDU_Packet(t *testing.T) {
 	type MySequence struct {
 		Field1 OctetString
 		Field2 PrintableString
@@ -191,14 +344,14 @@ func TestPacket_Packet(t *testing.T) {
 			t.Fatalf("%s failed [%s TLV]: %v", t.Name(), rule, err)
 		}
 
-		//var sub Packet
+		//var sub PDU
 		if _, err = pkt.Packet(next.Length); err != nil {
 			t.Fatalf("%s failed [%s PeekTLV]: %v", t.Name(), rule, err)
 		}
 	}
 }
 
-func TestPacket_RawValueCompatSequence(t *testing.T) {
+func TestPDU_RawValueCompatSequence(t *testing.T) {
 	type MySequence struct {
 		Field1 OctetString
 		Field2 PrintableString
@@ -250,12 +403,12 @@ func TestPacket_RawValueCompatSequence(t *testing.T) {
 	}
 }
 
-func TestPacket_codecov(_ *testing.T) {
+func TestPDU_codecov(_ *testing.T) {
 	findEOC([]byte{0x14, 0x33})
 	formatHex([]byte{})
 	pktB := &BERPacket{}
 	pktB.Type().OID()
-	pktD := &DERPacket{}
+	pktD := &BERPacket{}
 	pktD.Type().OID()
 	With(&Options{})
 	tester := testPacket{}
@@ -281,7 +434,6 @@ func TestPacket_codecov(_ *testing.T) {
 	opts.SetTag(4)
 	opts.SetClass(3)
 	marshalPrepareSpecialOptions(EmbeddedPDV{}, &opts)
-	checkBadMarshalOptions(DER, &Options{Indefinite: true})
 
 	marshalValue(refValueOf(nil), &BERPacket{}, nil, 0)
 	var nill *struct{}
@@ -365,86 +517,6 @@ func TestParseTagIdentifierCornerCases(t *testing.T) {
 	}
 }
 
-func TestParseBodyCornerCases(t *testing.T) {
-	tests := []struct {
-		name string
-		der  bool   // true→DER, false→BER
-		data []byte // full packet bytes
-		exp  error
-	}{
-		{
-			"empty slice",
-			false,
-			nil,
-			errorEmptyIdentifier,
-		},
-		{
-			"definite length but truncated content",
-			false,
-			[]byte{0x02, 0x02, 0x01}, // INTEGER, len=2, only 1 byte present
-			errorTruncatedContent,
-		},
-		{
-			"indefinite length in DER is illegal",
-			true,
-			[]byte{0x30, 0x80, 0x00, 0x00}, // SEQUENCE, indefinite, empty
-			errorIndefiniteProhibited,
-		},
-		{
-			"BER indefinite missing EOC",
-			false,
-			[]byte{0x30, 0x80, 0x02, 0x01, 0x00}, // no 00 00 terminator
-			errorTruncatedContent,
-		},
-	}
-
-	for _, tc := range tests {
-		enc := BER
-		if tc.der {
-			enc = DER
-		}
-		_, err := parseBody(tc.data, 0, enc)
-		if !errorsEqual(err, tc.exp) {
-			t.Errorf("%s: got err=%v want=%v", tc.name, err, tc.exp)
-		}
-	}
-}
-
-func TestParseFullBytesCornerCases(t *testing.T) {
-	tests := []struct {
-		name string
-		typ  EncodingRule
-		data []byte
-		exp  error
-	}{
-		{
-			"DER with indefinite length",
-			DER,
-			[]byte{0x30, 0x80, 0x00, 0x00},
-			errorIndefiniteProhibited,
-		},
-		{
-			"definite length but packet truncated",
-			BER,
-			[]byte{0x04, 0x03, 0x61, 0x62}, // OCTET STRING, len=3, only 2 bytes
-			errorTruncatedContent,
-		},
-		{
-			"BER indefinite missing EOC",
-			BER,
-			[]byte{0x30, 0x80, 0x02, 0x01, 0x00},
-			errorTruncatedContent,
-		},
-	}
-
-	for _, tc := range tests {
-		_, err := parseFullBytes(tc.data, 0, tc.typ)
-		if !errorsEqual(err, tc.exp) {
-			t.Errorf("%s: got err=%v want=%v", tc.name, err, tc.exp)
-		}
-	}
-}
-
 func TestFindEOCCornerCases(t *testing.T) {
 	// Outer SEQUENCE (0x30, indefinite)
 	//   Inner SET (0x31, indefinite)
@@ -492,7 +564,7 @@ func errorsEqual(a, b error) bool {
 	}
 }
 
-func TestExtractPacketTooShort(t *testing.T) {
+func TestExtractPDUTooShort(t *testing.T) {
 	mp := &BERPacket{
 		data:   []byte{0x02, 0x01, 0x00}, // INTEGER 0
 		offset: 2,                        // already 2 bytes in ⇒ only 1 left
@@ -660,18 +732,20 @@ func TestFindEOCDepthDecrement(t *testing.T) {
 	}
 }
 
-func ExamplePacket_sequenceWithGoStringAndInteger() {
+func ExamplePDU_sequence() {
 	type MySequence struct {
-		Name string `asn1:"printable"`
-		Age  int    `asn1:"integer"`
+		Name PrintableString
+		Age  Integer
 	}
 
 	opts := Options{}
 	opts.SetClass(1) // encode sequence as APPLICATION class
 
-	mine := MySequence{"Jesse", 48}
+	nint, _ := NewInteger(48)
 
-	pkt, err := Marshal(mine, With(DER, opts))
+	mine := MySequence{PrintableString("Jesse"), nint}
+
+	pkt, err := Marshal(mine, With(BER, opts))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -685,7 +759,7 @@ func ExamplePacket_sequenceWithGoStringAndInteger() {
 		return
 	}
 
-	fmt.Printf("Decoded value: %s,%d", mine2.Name, mine2.Age)
+	fmt.Printf("Decoded value: %s,%s", mine2.Name, mine2.Age)
 	// Output:
 	// Encoded value: 60 0A 13054A65737365020130
 	// Decoded value: Jesse,48
@@ -693,12 +767,13 @@ func ExamplePacket_sequenceWithGoStringAndInteger() {
 
 func TestSequence_FieldsExplicit(t *testing.T) {
 	type mySequence struct {
-		Field0 string `asn1:"explicit,octet,tag:0"`
-		Field1 string `asn1:"explicit,octet,tag:1,optional"`
-		Field2 string `asn1:"explicit,octet,tag:2"`
+		Field0 OctetString `asn1:"explicit,tag:0"`
+		Field1 OctetString `asn1:"explicit,tag:1,optional"`
+		Field2 OctetString `asn1:"explicit,tag:2"`
 	}
 
-	mine := mySequence{"Hello", "World", "!!!"}
+	mine := mySequence{OctetString("Hello"),
+		OctetString("World"), OctetString("!!!")}
 
 	hexes := map[EncodingRule]string{
 		BER: `30 19 A007040548656C6C6FA1070405576F726C64A2050403212121`,
@@ -726,12 +801,13 @@ func TestSequence_FieldsExplicit(t *testing.T) {
 
 func TestSequence_FieldsImplicit(t *testing.T) {
 	type mySequence struct {
-		Field0 string `asn1:"octet,tag:0"`
-		Field1 string `asn1:"octet,tag:1,optional"`
-		Field2 string `asn1:"octet,tag:2"`
+		Field0 OctetString `asn1:"tag:0"`
+		Field1 OctetString `asn1:"tag:1,optional"`
+		Field2 OctetString `asn1:"tag:2"`
 	}
 
-	mine := mySequence{"Hello", "World", "!!!"}
+	mine := mySequence{OctetString("Hello"),
+		OctetString("World"), OctetString("!!!")}
 
 	hexes := map[EncodingRule]string{
 		BER: `30 13 800548656C6C6F8105576F726C648203212121`,
@@ -830,7 +906,7 @@ func TestConstructorMap_ShouldPanic(t *testing.T) {
 		}
 	}()
 
-	panicOnMissingEncodingRuleConstructor(map[EncodingRule]func(...byte) Packet{})
+	panicOnMissingEncodingRuleConstructor(map[EncodingRule]func(...byte) PDU{})
 }
 
 func BenchmarkEncodeDirectoryString(b *testing.B) {
@@ -857,7 +933,7 @@ func putTestPacket(p *testPacket) {
 	testPktPool.Put(p)
 }
 
-func BenchmarkPacket_SequenceBER(b *testing.B) {
+func BenchmarkPDU_SequenceBER(b *testing.B) {
 	type MySequence struct {
 		Name string `asn1:"printable"`
 		Age  int    `asn1:"integer"`
