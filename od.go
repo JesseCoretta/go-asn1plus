@@ -5,6 +5,8 @@ od.go contains all types and methods pertaining to the ASN.1
 OBJECT DESCRIPTOR type.
 */
 
+import "unicode"
+
 /*
 ObjectDescriptor implements the ASN.1 OBJECT DESCRIPTOR type (tag 7).
 It operates under the same principals and constraints as the ASN.1
@@ -39,7 +41,7 @@ func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (Ob
 	err = ObjectDescriptorSpec(_od)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[ObjectDescriptor] = constraints
-		err = group.Validate(_od)
+		err = group.Constrain(_od)
 	}
 
 	if err == nil {
@@ -82,6 +84,17 @@ IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
 func (r ObjectDescriptor) IsPrimitive() bool { return true }
+
+func graphicStringDecoderVerify(b []byte) (err error) {
+	runes := []rune(string(b))
+	for i := 0; i < len(runes) && err == nil; i++ {
+		ch := rune(runes[i])
+		if !unicode.IsPrint(ch) || unicode.IsControl(ch) || (ch < 128 && !(32 <= ch && ch <= 126)) {
+			err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
+		}
+	}
+	return
+}
 
 func init() {
 	RegisterTextAlias[ObjectDescriptor](TagObjectDescriptor, nil, nil, nil, ObjectDescriptorSpec)

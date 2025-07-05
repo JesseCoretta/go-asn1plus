@@ -24,14 +24,14 @@ func ExampleObjectDescriptor_dER() {
 		return
 	}
 
-	// DER encode ObjectDescriptor into Packet instance
-	var der Packet
+	// DER encode ObjectDescriptor into PDU instance
+	var der PDU
 	if der, err = Marshal(vs); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode DER Packet into new ObjectDescriptor instance
+	// Decode DER PDU into new ObjectDescriptor instance
 	var vs2 ObjectDescriptor
 	if err = Unmarshal(der, &vs2); err != nil {
 		fmt.Println(err)
@@ -74,14 +74,14 @@ func TestObjectDescriptor_encodingRules(t *testing.T) {
 			od.IsZero()
 
 			// encode our ObjectDescriptor instance
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
 			t.Logf("%T.%s :: %s\n", od, rule, pkt.Hex())
 
-			// Decode our Packet into a new ObjectDescriptor instance
+			// Decode our PDU into a new ObjectDescriptor instance
 			var other ObjectDescriptor
 			if err = Unmarshal(pkt, &other); err != nil {
 				t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
