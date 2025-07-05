@@ -98,24 +98,6 @@ func TestBERWriteTLV(t *testing.T) {
 	}
 }
 
-func TestSizeTLV(t *testing.T) {
-	// For a tag < 31 and length < 128.
-	s := sizeTLV(4, 6)
-	// Expected: 1 (tag) + 1 (length) = 2.
-	if s != 2 {
-		t.Errorf("sizeTLV(tag=4, length=6) = %d; want 2", s)
-	}
-
-	// For tag >= 31, e.g. tag=300, and length = 130.
-	s = sizeTLV(300, 130)
-	// For tag 300, base-128 encoding requires 2 additional bytes (plus the initial identifier octet),
-	// then add 1 for the short length indicator, and 1 extra for long-form (since 130>=128).
-	// Total expected = 3 (identifier) + 2 (for length) = 5.
-	if s != 5 {
-		t.Errorf("sizeTLV(tag=300, length=130) = %d; want 5", s)
-	}
-}
-
 func TestReadBase128Int(t *testing.T) {
 	// For the number 300, we expect base-128 encoding to be {0x82, 0x2C}.
 	data := []byte{0x82, 0x2C}
@@ -152,7 +134,7 @@ func TestGetTLV_BadTagIdentifier(t *testing.T) {
 
 	_, _ = getTLV(invalidPacket{}, nil)
 	_, err := getTLV(pkt, nil)
-	testWantSub(t, err, "BER Packet.TLV: error reading length: length bytes not found")
+	testWantSub(t, err, "BER PDU.TLV: error reading length: length bytes not found")
 }
 
 func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
@@ -248,31 +230,13 @@ func TestGetTLV_UnsupportedEncodingRule(t *testing.T) {
 		data:   d,
 		offset: 0,
 		length: len(d), // honest length
-		typ:    18,     // 18 ⇒ neither BER(1) nor DER(3) → default case
+		typ:    18,     // 18 ⇒ neither BER nor DER → default case
 	}
 
 	_, err := getTLV(pkt, nil)
-	if err == nil || err.Error() != errorRuleNotImplemented.Error() {
-		t.Fatalf("expected 'encoding rule not yet implemented', got %v", err)
-	}
-}
-
-func TestSizeTLV_LongLength(t *testing.T) {
-	/*
-	   tag  = 10  (< 31)  → single-octet tag
-	   len  = 1000 (>255) triggers
-	           • +1 for long-form indicator
-	           • +1 inside the ‘for length>255’ loop (1000 >> 8 = 3)
-	   Total header bytes:
-	       1 (tag) +
-	       1 (baseline length byte) +
-	       1 (long-form indicator) +
-	       1 (extra because >255) = 4
-	*/
-	got := sizeTLV(10, 1000)
-	const want = 4
-	if got != want {
-		t.Fatalf("sizeTLV(10,1000): got %d, want %d", got, want)
+	expect := errorRuleNotImplemented.Error()
+	if err == nil || err.Error() != expect {
+		t.Fatalf("expected '%s', got %v", expect, err)
 	}
 }
 
@@ -332,10 +296,9 @@ func TestEncodeTLV_PanicsOnNegativeTag(t *testing.T) {
 
 func TestEncodeTLV_codecov(t *testing.T) {
 	encodeTLV(TLV{typ: BER, Tag: 3, Class: 1}, &Options{Indefinite: true})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x80, 0x83, 0x01, 0xe4})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x03, 0x83, 0x01, 0xe4})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x04, 0x82, 0x00, 0x80, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x02, 0x81, 0x7F, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
+	tlvVerifyLengthState(&BERPacket{offset: 1}, []byte{0xa, 0x80, 0x83, 0x01, 0xe4})
+	tlvVerifyLengthState(&BERPacket{offset: 1}, []byte{0xa, 0x03, 0x83, 0x01, 0xe4})
+	tlvVerifyLengthState(&BERPacket{offset: 1}, []byte{0x04, 0x82, 0x00, 0x80, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
+	tlvVerifyLengthState(&BERPacket{offset: 1}, []byte{0x02, 0x81, 0x7F, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
 	writeTLV(&BERPacket{}, TLV{Length: -1}, &Options{Indefinite: true})
-	writeTLV(&DERPacket{}, TLV{Length: -1}, &Options{Indefinite: true})
 }

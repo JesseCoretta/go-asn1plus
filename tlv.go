@@ -45,7 +45,7 @@ func tlvEqual(a, b TLV, length ...bool) (match bool) {
 
 /*
 TLV stores discrete Type-Length-Value components. Instances of this
-type are produced through the use of any [Packet] instance's "TLV()"
+type are produced through the use of any [PDU] instance's "TLV()"
 and "PeekTLV()" methods.
 
 An instance of TLV knows what [EncodingRule] it implements (see the
@@ -77,7 +77,23 @@ func (r TLV) Eq(tlv TLV, length ...bool) bool {
 	return tlvEqual(r, tlv, length...)
 }
 
-func encodeTLV(t TLV, opts *Options) []byte {
+func encodeTLV(t TLV, opts *Options) (out []byte) {
+	debugEnter(
+		newLItem(t.Class, "class"),
+		newLItem(t.Compound, "compound"),
+		newLItem(t.Tag, "tag"),
+		newLItem(t.Length, "len"),
+		opts,
+	)
+
+	defer func() {
+		// on exit, log the output length and bytes
+		debugEvent(EventExit|EventTLV,
+			newLItem(len(out), "encoded TLV length"),
+			newLItem(out, "encoded TLV bytes"),
+		)
+	}()
+
 	bufPtr := getBuf()
 	b := *bufPtr
 	b = b[:0]
@@ -86,24 +102,51 @@ func encodeTLV(t TLV, opts *Options) []byte {
 	if t.Compound || (opts != nil && opts.Explicit) {
 		id |= 0x20
 	}
+
+	debugEvent(EventTrace|EventTLV,
+		newLItem(id, "identifier byte"),
+	)
+
 	tagVal := t.Tag
 	if opts != nil && opts.HasTag() {
 		tagVal = opts.Tag()
 	}
+
+	debugTLV(newLItem([]int{t.Tag, tagVal}, "tag orig/new"))
+
 	if tagVal < 31 {
 		b = append(b, id|byte(tagVal))
+		debugEvent(EventTrace|EventTLV,
+			newLItem(id|byte(tagVal), "single-byte tag"),
+		)
 	} else {
 		b = append(b, id|0x1F)
-		b = append(b, encodeBase128Int(tagVal)...)
+		enc := encodeBase128Int(tagVal)
+		debugEvent(EventTrace|EventTLV,
+			newLItem(id|0x1F, "high-tag marker"),
+			newLItem(enc, "base-128 tag bytes"),
+		)
+		b = append(b, enc...)
 	}
 
 	if tagVal < 0 {
 		panic("encodeTLV: negative tag reached encoder")
 	}
 
+	b4 := len(b)
 	encodeLengthInto(t.Type(), &b, t.Length)
+	debugTLV(
+		newLItem(t.Length, "value length"),
+		newLItem(len(b)-b4, "length field size"),
+	)
+
 	b = append(b, t.Value...)
-	out := make([]byte, len(b))
+
+	debugEvent(EventTrace|EventTLV,
+		newLItem(len(t.Value), "written"),
+		newLItem(t.Value, "bytes"))
+
+	out = make([]byte, len(b))
 	copy(out, b)
 	*bufPtr = b[:0]
 	putBuf(bufPtr)
@@ -126,54 +169,93 @@ func getTLVResolveOverride(class, tag int, compound bool, opts *Options) (int, i
 		}
 	}
 
+	debugEvent(EventTrace|EventTLV,
+		newLItem(class, "class override"),
+		newLItem(tag, "tag override"))
+
 	return class, tag, err
 }
 
-func getTLV(r Packet, opts *Options) (TLV, error) {
+func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
+	debugEvent(EventEnter|EventTLV,
+		newLItem(r, "PDU"),
+		opts,
+	)
+
+	defer func() {
+		debugEvent(EventExit|EventTLV,
+			newLItem(tlv, "tlv"),
+			newLItem(err),
+		)
+	}()
 
 	if r.Offset() >= r.Len() {
-		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: no data available at offset ",
+		err = mkerrf(r.Type().String(), " PDU.TLV: no data available at offset ",
 			itoa(r.Offset()), " (len:", itoa(r.Len()), ")")
+		return
 	}
 
 	d := r.Data()
+	debugEvent(EventTrace|EventTLV,
+		newLItem(len(d), "len"),
+		newLItem(d, "bytes"),
+	)
 
 	sub := d[r.Offset():]
+	debugEvent(EventTrace|EventTLV,
+		newLItem(sub, "chopped"),
+	)
 
 	// Parse class.
-	class, err := parseClassIdentifier(sub)
-	if err != nil {
-		return TLV{}, err
+	var (
+		tag,
+		class,
+		idLen,
+		lenLen,
+		length int
+		compound bool
+	)
+
+	if class, err = parseClassIdentifier(sub); err != nil {
+		return
+	}
+	debugEvent(EventTrace|EventTLV, newLItem(class, "class"))
+
+	compound, _ = parseCompoundIdentifier(sub)
+	debugEvent(EventTrace|EventTLV, newLItem(compound, "compound"))
+
+	if tag, idLen, err = parseTagIdentifier(sub); err != nil {
+		err = mkerrf(r.Type().String(), " PDU.TLV: error reading tag: ", err.Error())
+		return
 	}
 
-	// Parse compound flag.
-	compound, _ := parseCompoundIdentifier(sub)
+	debugEvent(EventTrace|EventTLV,
+		newLItem(tag, "tag"),
+		newLItem(idLen, "idLen"))
 
-	// Parse tag.
-	tag, idLen, err := parseTagIdentifier(sub)
-	if err != nil {
-		return TLV{}, mkerrf(r.Type().String(), " Packet.TLV: error reading tag: ", err.Error())
-	}
+	debugEvent(EventTrace|EventTLV,
+		newLItem([]int{r.Offset(), r.Offset() + idLen}, "offset orig/new"))
 
 	r.SetOffset(r.Offset() + idLen)
 
 	// restore implicit/explicit override here
-	class, tag, err = getTLVResolveOverride(class, tag, compound, opts)
-	if err != nil {
-		return TLV{}, err
+	if class, tag, err = getTLVResolveOverride(class, tag, compound, opts); err != nil {
+		return
 	}
 
 	// Parse length.
-	var length, lenLen int
 	if length, lenLen, err = tlvVerifyLengthState(r, d); err != nil {
-		return TLV{}, err
+		return
 	}
+
+	debugEvent(EventTrace|EventTLV,
+		newLItem([]int{r.Offset(), r.Offset() + lenLen}, "offset orig/new"))
 
 	r.SetOffset(r.Offset() + lenLen)
 
 	if !r.Type().In(encodingRules...) {
 		err = errorRuleNotImplemented
-		return TLV{}, err
+		return
 	}
 
 	start := r.Offset()
@@ -183,32 +265,54 @@ func getTLV(r Packet, opts *Options) (TLV, error) {
 		// definite-length
 		end := start + length
 		if end > len(d) {
-			return TLV{}, mkerrf("TLV: unexpected truncation of definite length value (", itoa(end), " > ", itoa(len(d)), ")")
+			err = mkerrf("TLV: unexpected truncation of definite length value (", itoa(end), " > ", itoa(len(d)), ")")
+			return
 		}
 		valueBytes = d[start:end]
+		debugEvent(EventTrace|EventTLV,
+			newLItem(start, "value start"),
+			newLItem(end, "value end"),
+		)
 	} else {
 		// indefinite-length (BER)
 		buf := d[start:]
 		eocIdx := bytes.Index(buf, []byte{0x00, 0x00})
 		if eocIdx < 0 {
-			return TLV{}, mkerr("TLV: missing end-of-contents for indefinite value")
+			err = mkerr("TLV: missing end-of-contents for indefinite value")
+			return
 		}
 		valueBytes = buf[:eocIdx]
+		debugEvent(EventTrace|EventTLV,
+			newLItem(start, "value start"),
+			newLItem(eocIdx, "EOC index"),
+		)
 	}
 
-	var tlv TLV
 	switch r.Type() {
 	case BER, CER, DER:
 		tlv = r.Type().newTLV(class, tag, length, compound, valueBytes...)
+		debugTLV(tlv)
 	}
 
-	return tlv, err
+	return
 }
 
-func tlvVerifyLengthState(r Packet, d []byte) (length, lenLen int, err error) {
+func tlvVerifyLengthState(r PDU, d []byte) (length, lenLen int, err error) {
+	debugEvent(EventEnter|EventTLV,
+		newLItem(r, "PDU"),
+		newLItem(d, "bytes"))
+
+	defer func() {
+		debugEvent(EventExit|EventTLV,
+			newLItem(length, "len"),
+			newLItem(lenLen, "lenLen"),
+			newLItem(err),
+		)
+	}()
+
 	if length, lenLen, err = parseLength(d[r.Offset():]); err != nil {
 		err = mkerrf(r.Type().String(),
-			" Packet.TLV: error reading length: ", err.Error())
+			" PDU.TLV: error reading length: ", err.Error())
 	} else if !r.Type().allowsIndefinite() && length < 0 {
 		err = errorIndefiniteProhibited
 	} else if r.Type() == DER {
@@ -223,7 +327,17 @@ func tlvVerifyLengthState(r Packet, d []byte) (length, lenLen int, err error) {
 	return
 }
 
-func writeTLV(pkt Packet, t TLV, opts *Options) (err error) {
+func writeTLV(pkt PDU, t TLV, opts *Options) (err error) {
+	debugEvent(EventEnter|EventTLV,
+		newLItem(pkt, "PDU"),
+		newLItem(t, "tlv"),
+		opts)
+
+	defer func() {
+		debugEvent(EventExit|EventTLV,
+			newLItem(err))
+	}()
+
 	var indefBytes []byte
 	if (opts != nil && opts.Indefinite) || t.Length < 0 {
 		if !pkt.Type().allowsIndefinite() {
@@ -232,7 +346,7 @@ func writeTLV(pkt Packet, t TLV, opts *Options) (err error) {
 		}
 		indefBytes = []byte{0x00, 0x00}
 	} else if !t.Type().In(encodingRules...) {
-		err = mkerrf(pkt.Type().String(), " Packet.WriteTLV: expected ",
+		err = mkerrf(pkt.Type().String(), " PDU.WriteTLV: expected ",
 			pkt.Type().String(), ", got ", t.Type().String())
 		return
 	}
@@ -248,30 +362,11 @@ func writeTLV(pkt Packet, t TLV, opts *Options) (err error) {
 	return
 }
 
-func sizeTLV(tag int, length int) (size int) {
-	size = 1
-	if tag >= 31 {
-		for i := tag; i > 0; i >>= 7 {
-			size++
-		}
-	}
-
-	size += 1
-	if length >= 128 {
-		size += 1
-		for length > 255 {
-			size++
-			length >>= 8
-		}
-	}
-	return
-}
-
 /*
 readBase128Int returns the decoded base-128 integer,
 used for tags >= 31.
 */
-func readBase128Int(pkt Packet) (int, error) {
+func readBase128Int(pkt PDU) (int, error) {
 	result := 0
 	for {
 		if pkt.Offset() >= pkt.Len() {
@@ -288,7 +383,7 @@ func readBase128Int(pkt Packet) (int, error) {
 }
 
 // encodeBase128Int builds the tag field in a fixed [10]byte buffer.
-// It never allocates or shifts—just writes from the end down.
+// It never allocates or shifts, just writes from the end down.
 func encodeBase128Int(value int) []byte {
 	var buf [10]byte
 	i := len(buf) - 1
@@ -306,9 +401,7 @@ func encodeLengthInto(rule EncodingRule, dst *[]byte, n int) {
 	switch rule {
 	case BER:
 		encodeBERLengthInto(dst, n)
-	case CER:
-		encodeCERLengthInto(dst, n)
-	case DER:
-		encodeDERLengthInto(dst, n)
+	case CER, DER:
+		encodeBCDLengthInto(dst, n)
 	}
 }
