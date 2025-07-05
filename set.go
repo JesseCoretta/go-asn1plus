@@ -33,7 +33,7 @@ func isSet(target any, opts *Options) (set bool) {
 marshalSet returns an error following an attempt to encode a SET.
 Each element is encoded with its own implicit defaults.
 */
-func marshalSet(v reflect.Value, pkt Packet, opts *Options, depth int) (err error) {
+func marshalSet(v reflect.Value, pkt PDU, opts *Options, depth int) (err error) {
 	v = derefValuePtr(v)
 	if v.Kind() == reflect.Struct {
 		found := false
@@ -98,7 +98,7 @@ unmarshalSet returns an error following an attempt to decode a SET
 from pkt into the value v. v is expected to be either a slice (e.g.
 []Integer) or a struct whose first exported field is a slice.
 */
-func unmarshalSet(v reflect.Value, pkt Packet, opts *Options) (err error) {
+func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 	// Locate the underlying slice.
 	if v.Kind() == reflect.Struct {
@@ -200,7 +200,7 @@ func unmarshalSequenceAsSet(v reflect.Value) (reflect.Value, error) {
 	return v, err
 }
 
-func unmarshalSetOfChoiceHeaderLength(start int, pkt Packet) (data []byte, headerLen int) {
+func unmarshalSetOfChoiceHeaderLength(start int, pkt PDU) (data []byte, headerLen int) {
 	// Compute headerLen = identifier + length octets
 	data = pkt.Data()
 	if data[start+1]&0x80 != 0 {
@@ -222,13 +222,13 @@ func unmarshalSetOfChoiceGetTag(tlv TLV, fullWrapper []byte) (tag int) {
 }
 
 func setPickChoiceAlternative(
-	pkt Packet,
+	pkt PDU,
 	parentOpts *Options,
 ) (
 	def choiceAlternative,
 	tag int,
 	payload []byte,
-	payloadPK Packet,
+	payloadPK PDU,
 	newOpts *Options,
 	err error,
 ) {
@@ -298,7 +298,7 @@ func setPickChoiceAlternative(
 func setDecodeChoiceSingle(
 	tmp reflect.Value,
 	def choiceAlternative,
-	payloadPK Packet,
+	payloadPK PDU,
 	opts *Options,
 	elemType reflect.Type,
 ) (reflect.Value, error) {
@@ -333,7 +333,7 @@ func handleChoiceSlice(
 	tmp reflect.Value,
 	alt choiceAlternative,
 	payload []byte,
-	payloadPK Packet,
+	payloadPK PDU,
 	opts *Options,
 ) (reflect.Value, bool, error) {
 	if alt.Type.Kind() != reflect.Slice {
@@ -393,7 +393,7 @@ func handleChoiceSlice(
 }
 
 func unmarshalSetOfChoice(
-	pkt Packet,
+	pkt PDU,
 	tmp reflect.Value,
 	parentOpts *Options,
 	elemType reflect.Type,

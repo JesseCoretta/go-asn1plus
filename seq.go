@@ -12,7 +12,7 @@ import "reflect"
 marshalSequence returns an error following an
 attempt to marshal sequence (struct) v into pkt.
 */
-func marshalSequence(v reflect.Value, pkt Packet, globalOpts *Options, depth int) (err error) {
+func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options, depth int) (err error) {
 	if isSet(v.Interface(), globalOpts) {
 		err = marshalSet(v, pkt, globalOpts, depth)
 		return
@@ -78,24 +78,30 @@ func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool)
 	return
 }
 
-func marshalSequenceWrap(sub, pkt Packet, opts *Options, depth, seqTag int) (err error) {
-	var tlv TLV
+func marshalSequenceWrap(sub, pkt PDU, opts *Options, depth, seqTag int) (err error) {
 	sub.SetOffset(0)
-	if depth == 1 && opts != nil {
-		content := sub.Data()
-		tlv = pkt.Type().newTLV(opts.Class(), seqTag, len(content), true, content...)
-		encoded := encodeTLV(tlv, opts)
-		pkt.Append(encoded...)
-	} else {
-		content := sub.Data()
-		tlv := pkt.Type().newTLV(ClassUniversal, TagSequence, len(content), true, content...)
-		pkt.Append(encodeTLV(tlv, nil)...)
+	content := sub.Data()
+
+	class := ClassUniversal
+	tag := TagSequence
+
+	if opts != nil {
+		if depth == 1 {
+			class = opts.Class()
+			tag = seqTag
+		} else if opts.HasTag() {
+			class = opts.Class()
+			tag = opts.Tag()
+		}
 	}
+
+	tlv := pkt.Type().newTLV(class, tag, len(content), true, content...)
+	pkt.Append(encodeTLV(tlv, opts)...)
 
 	return
 }
 
-func marshalSequenceChoiceField(opts *Options, ch Choice, sub Packet, depth int) (err error) {
+func marshalSequenceChoiceField(opts *Options, ch Choice, sub PDU, depth int) (err error) {
 	if ch.Tag != nil {
 		opts.choiceTag = ch.Tag
 		opts.SetClass(ClassContextSpecific)
@@ -110,7 +116,7 @@ func marshalSequenceChoiceField(opts *Options, ch Choice, sub Packet, depth int)
 	return
 }
 
-func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub Packet, depth int) (err error) {
+func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub PDU, depth int) (err error) {
 	tmp := sub.Type().New()
 	defer tmp.Free()
 	if err = marshalValue(refValueOf(ch.Value), tmp, opts, depth+1); err == nil {
@@ -132,7 +138,7 @@ func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub Packet
 	return
 }
 
-func marshalSequenceChoiceFieldPrimitive(opts *Options, ch Choice, sub Packet) (err error) {
+func marshalSequenceChoiceFieldPrimitive(opts *Options, ch Choice, sub PDU) (err error) {
 	// COVERAGE: unreachable
 	//if c, ok := toPtr(refValueOf(ch.Value)).Interface().(codecRW); ok {
 	//_, err = c.write(sub, opts)
@@ -173,7 +179,7 @@ func marshalSequenceSetChoiceTag(class int, tag *int) (id byte) {
 /*
 unmarshalSequence returns an error following an attempt to write pkt into sequence (struct) v.
 */
-func unmarshalSequence(v reflect.Value, pkt Packet, options *Options) (err error) {
+func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
