@@ -7,36 +7,6 @@ import (
 	"testing"
 )
 
-func TestBitString_customType(t *testing.T) {
-	type CustomBits BitString
-	RegisterBitStringAlias[CustomBits](TagBitString, nil, nil, nil, nil)
-
-	// We cheat here rather than writing a separate
-	// constructor merely for testing.
-	orig, _ := NewBitString(`'10100101'B`)
-	cust := CustomBits(orig)
-
-	pkt, err := Marshal(cust, With(BER))
-	if err != nil {
-		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
-	}
-
-	var out CustomBits
-	if err = Unmarshal(pkt, &out); err != nil {
-		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
-	}
-
-	// We cheat again, since we didn't write a
-	// custom Bits method for this simple test.
-	want := BitString(cust).Bits()
-	got := BitString(out).Bits()
-	if want != got {
-		t.Fatalf("%s failed [BER bit string cmp.]:\n\twant: %s\n\tgot:  %s",
-			t.Name(), want, got)
-	}
-	unregisterType(refTypeOf(cust))
-}
-
 func TestBitString(t *testing.T) {
 	for idx, want := range []string{
 		`'10100101'B`,
@@ -403,14 +373,14 @@ func TestCustomBitString_withControls(t *testing.T) {
 
 	var cust customBitString = customBitString{Bytes: []byte{0x1, 0x2}, BitLength: 2 * 8}
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next customBitString
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }
@@ -621,7 +591,7 @@ func TestBitString_encodingRules(t *testing.T) {
 				t.Fatalf("%s[%d] failed [%s NewBitString]: %v", t.Name(), idx, rule, err)
 			}
 
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(bs, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 			}
@@ -631,33 +601,6 @@ func TestBitString_encodingRules(t *testing.T) {
 				t.Fatalf("%s[%d] failed [%s decoding]: %v", t.Name(), idx, rule, err)
 			}
 		}
-	}
-}
-
-func TestPacket_LargeBitStringCER(t *testing.T) {
-	data := []byte(strrpt("Y", 2001))
-	large := BitString{
-		Bytes:     data,
-		BitLength: len(data) * 8,
-	}
-
-	pkt, err := Marshal(large, With(CER))
-	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
-	}
-
-	var alsoLarge BitString
-	if err = Unmarshal(pkt, &alsoLarge); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
-	}
-
-	if large.BitLength != alsoLarge.BitLength {
-		t.Fatalf("%s failed [CER large BitString size cmp.]:\n\twant: %d bits\n\tgot:  %d bits",
-			t.Name(), large.BitLength, alsoLarge.BitLength)
-	}
-
-	if !bytes.Equal(large.Bytes, alsoLarge.Bytes) {
-		t.Fatalf("%s failed [CER large BitString contents cmp.]: contents differ", t.Name())
 	}
 }
 

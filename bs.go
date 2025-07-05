@@ -454,7 +454,7 @@ func (c *bitStringCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 func toBitString[T any](v T) BitString   { return *(*BitString)(unsafe.Pointer(&v)) }
 func fromBitString[T any](i BitString) T { return *(*T)(unsafe.Pointer(&i)) }
 
-func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+func (c *bitStringCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 	switch pkt.Type() {
 	case BER, DER:
 		n, err = bcdBitStringWrite(c, pkt, o)
@@ -471,7 +471,7 @@ func (c *bitStringCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	return
 }
 
-func bcdBitStringWrite[T any](c *bitStringCodec[T], pkt Packet, o *Options) (off int, err error) {
+func bcdBitStringWrite[T any](c *bitStringCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
 	if err = c.cg.Constrain(c.val); err == nil {
@@ -503,22 +503,16 @@ func bcdBitStringWrite[T any](c *bitStringCodec[T], pkt Packet, o *Options) (off
 	return
 }
 
-func (c *bitStringCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+func (c *bitStringCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
 	case BER, DER:
 		err = bcdBitStringRead(c, pkt, tlv, o)
 	case CER:
 		if tlv.Compound && tlv.Length < 0 && tlv.Tag == TagBitString {
-			// pass the OUTER TLV straight into the segment reader
 			err = cerSegmentedBitStringRead(c, pkt, tlv, o)
 		} else {
 			err = bcdBitStringRead(c, pkt, tlv, o)
 		}
-		//if tlv.Compound && tlv.Length < 0 && c.Tag() == TagBitString {
-		//	err = cerSegmentedBitStringRead(c, pkt, o)
-		//} else {
-		//	err = bcdBitStringRead(c, pkt, tlv, o)
-		//}
 	default:
 		err = errorRuleNotImplemented
 	}
@@ -526,7 +520,7 @@ func (c *bitStringCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	return
 }
 
-func bcdBitStringRead[T any](c *bitStringCodec[T], pkt Packet, tlv TLV, o *Options) error {
+func bcdBitStringRead[T any](c *bitStringCodec[T], pkt PDU, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
 	// Reject primitives encoded with indefinite length
@@ -630,126 +624,6 @@ func RegisterBitStringAlias[T any](
 	rt := refTypeOf((*T)(nil)).Elem()
 	registerType(rt, f)
 	registerType(reflect.PointerTo(rt), f)
-}
-
-func cerSegmentedBitStringReadLoop(sub Packet) (lastUnused byte, full []byte, err error) {
-	for sub.HasMoreData() {
-		var seg TLV
-		if seg, err = sub.TLV(); err == nil {
-			if seg.Class == ClassUniversal && seg.Tag == 0 && seg.Length == 0 {
-				break
-			}
-
-			if len(seg.Value) == 0 {
-				err = mkerr("inner BIT STRING segment too short")
-				return
-			}
-			lastUnused = seg.Value[0]
-			full = append(full, seg.Value[1:]...)
-			sub.SetOffset(sub.Offset() + seg.Length)
-		}
-	}
-
-	return
-}
-
-func cerSegmentedBitStringRead[T any](
-	c *bitStringCodec[T],
-	pkt Packet,
-	outer TLV,
-	opts *Options,
-) (err error) {
-	if outer.Class != ClassUniversal ||
-		outer.Tag != TagBitString ||
-		!outer.Compound ||
-		outer.Length != -1 {
-		return mkerr("cerSegmentedBitStringRead: not CER indefinite BIT STRING")
-	}
-
-	sub := pkt.Type().New(outer.Value...)
-	sub.SetOffset(0)
-
-	var lastUnused byte
-	var full []byte
-	if lastUnused, full, err = cerSegmentedBitStringReadLoop(sub); err != nil {
-		return
-	}
-
-	bitLength := len(full)*8 - int(lastUnused)
-
-	for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
-		err = c.decodeVerify[i](full)
-	}
-
-	if err == nil {
-		var out T
-		if c.decodeHook != nil {
-			out, err = c.decodeHook(append([]byte{lastUnused}, full...))
-		} else {
-			out = fromBitString[T](BitString{
-				Bytes:     append([]byte(nil), full...),
-				BitLength: bitLength,
-			})
-		}
-
-		if err == nil {
-			if err = c.cg.Constrain(out); err == nil {
-				c.val = out
-			}
-		}
-	}
-
-	return err
-}
-
-func cerSegmentedBitStringWrite[T any](
-	c *bitStringCodec[T],
-	pkt Packet,
-	opts *Options,
-) (n int, err error) {
-	const maxSegData = 1000
-
-	bs := toBitString(c.val)
-	data := bs.Bytes
-	total := len(data)
-	remBits := bs.BitLength % 8
-	overallUnused := 0
-	if remBits != 0 {
-		overallUnused = 8 - remBits
-	}
-
-	hdr := []byte{byte(TagBitString) | 0x20, 0x80}
-	pkt.Append(hdr...)
-	n += len(hdr)
-
-	for off := 0; off < total; off += maxSegData {
-		end := off + maxSegData
-		if end > total {
-			end = total
-		}
-		segUnused := 0
-		if end == total {
-			segUnused = overallUnused
-		}
-
-		val := make([]byte, 1+(end-off))
-		val[0] = byte(segUnused)
-		copy(val[1:], data[off:end])
-
-		prim := pkt.Type().newTLV(
-			ClassUniversal, TagBitString,
-			len(val), false,
-			val...,
-		)
-		enc := encodeTLV(prim, nil)
-		pkt.Append(enc...)
-		n += len(enc)
-	}
-
-	pkt.Append(0x00, 0x00)
-	n += 2
-
-	return n, nil
 }
 
 func init() {
