@@ -56,7 +56,7 @@ type Primitive interface {
 	IsPrimitive() bool
 }
 
-func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
+func primitiveCheckExplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
 		err = mkerrf("Invalid explicit ", TagNames[tag], " header in ",
 			pkt.Type().String(), " packet; received TLV: ", tlv.String())
@@ -86,7 +86,7 @@ func primitiveCheckExplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (da
 	return
 }
 
-func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
+func primitiveCheckImplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 
 	overlay := opts.HasTag() || opts.HasClass()
 
@@ -113,7 +113,7 @@ func primitiveCheckImplicitRead(tag int, pkt Packet, tlv TLV, opts *Options) (da
 	return full, nil
 }
 
-func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
+func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	if tlv.Length < 0 || (opts != nil && opts.Indefinite) {
 		return nil, mkerr("prohibited: indefinite length on primitive")
 	}
@@ -122,7 +122,7 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byt
 
 	if data, err = primitiveCheckReadOverride(tag, pkt, tlv, opts); err == nil {
 		// Chop the indefinite 0x00 0x00 markers IF we're
-		// in INDEFINITE mode AND if Packet type is BER
+		// in INDEFINITE mode AND if PDU type is BER
 		// WITH a length of 0x80.
 		//
 		// TODO: revisit this approach.
@@ -136,13 +136,13 @@ func primitiveCheckRead(tag int, pkt Packet, tlv TLV, opts *Options) (data []byt
 
 	if len(data) == 0 && !canBeEmpty {
 		err = mkerrf("Empty ", TagNames[tag], " content in ",
-			pkt.Type().String(), " Packet")
+			pkt.Type().String(), " PDU")
 	}
 
 	return
 }
 
-func primitiveCheckReadOverride(tag int, pkt Packet, tlv TLV, opts *Options) (data []byte, err error) {
+func primitiveCheckReadOverride(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	// If a tagging override was provided, handle it.
 	if opts != nil && opts.HasTag() {
 		if opts.Explicit {

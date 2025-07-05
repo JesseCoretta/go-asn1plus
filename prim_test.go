@@ -13,7 +13,7 @@ func TestPrimitive_codecov(t *testing.T) {
 	primitiveCheckReadOverride(1, &BERPacket{}, TLV{Class: 0, Tag: 2, Compound: false}, &Options{Explicit: true, tag: &tag})
 	primitiveCheckReadOverride(1, &BERPacket{}, TLV{Class: 1, Tag: 2, Compound: false}, nil)
 	primitiveCheckReadOverride(1, &BERPacket{}, TLV{Class: 0, Tag: 1, Compound: false}, nil)
-	primitiveCheckRead(0, &DERPacket{}, TLV{}, &Options{Indefinite: true})
+	primitiveCheckRead(0, &BERPacket{}, TLV{}, &Options{Indefinite: true})
 	class := 0
 	primitiveCheckExplicitRead(3,
 		&BERPacket{data: []byte{
