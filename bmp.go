@@ -30,11 +30,10 @@ type BMPString []byte
 NewBMPString returns an instance of [BMPString] alongside an error following
 an attempt to marshal x.
 */
-// ––– NewBMPString –––
 func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, err error) {
 	if tv, ok := x.(BMPString); ok {
 		if len(tv) == 0 {
-			bmp = BMPString{0x1E, 0x00}
+			bmp = BMPString{byte(TagBMPString), 0x00}
 			return
 		}
 		if err = BMPSpec(tv); err != nil {
@@ -58,7 +57,7 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 	}
 
 	if len(e) == 0 {
-		return BMPString{0x1E, 0x00}, nil
+		return BMPString{byte(TagBMPString), 0x00}, nil
 	}
 
 	var out []byte
@@ -70,7 +69,7 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 
 	var group ConstraintGroup[BMPString]
 	group = append(group, constraints...)
-	if err = group.Validate(_bmp); err == nil {
+	if err = group.Constrain(_bmp); err == nil {
 		bmp = _bmp
 	}
 	return
@@ -124,7 +123,7 @@ This involves unmarshaling the receiver into a string return value.
 */
 func (r BMPString) String() string {
 	var s string
-	if len(r) < 3 || r[0] != 0x1E {
+	if len(r) < 3 || r[0] != byte(TagBMPString) {
 		return s
 	}
 
@@ -154,11 +153,11 @@ func init() {
 		if len(o) == 0 {
 			return
 		} else if len(o) == 2 {
-			if o[0] != 0x1E || o[1] != 0x0 {
+			if o[0] != byte(TagBMPString) || o[1] != 0x0 {
 				err = mkerr("Invalid ASN.1 tag or length octet for empty string")
 			}
 		} else {
-			if o[0] != 0x1E {
+			if o[0] != byte(TagBMPString) {
 				err = mkerr("Invalid ASN.1 tag")
 			} else if int(o[1])*2 != len(o[2:]) {
 				err = mkerr("input string encoded length does not match length octet")
