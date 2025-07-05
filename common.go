@@ -22,7 +22,6 @@ import (
 official import aliases.
 */
 var (
-	mkerr      func(string) error                       = errors.New
 	itoa       func(int) string                         = strconv.Itoa
 	atoi       func(string) (int, error)                = strconv.Atoi
 	fmtUint    func(uint64, int) string                 = strconv.FormatUint
@@ -31,14 +30,14 @@ var (
 	puint      func(string, int, int) (uint64, error)   = strconv.ParseUint
 	pbool      func(string) (bool, error)               = strconv.ParseBool
 	pfloat     func(string, int) (float64, error)       = strconv.ParseFloat
-	lc         func(string) string                      = strings.ToLower
-	uc         func(string) string                      = strings.ToUpper
 	appInt     func([]byte, int64, int) []byte          = strconv.AppendInt
 	appUint    func([]byte, uint64, int) []byte         = strconv.AppendUint
+	lc         func(string) string                      = strings.ToLower
+	uc         func(string) string                      = strings.ToUpper
 	split      func(string, string) []string            = strings.Split
 	join       func([]string, string) string            = strings.Join
 	idxr       func(string, rune) int                   = strings.IndexRune
-	hexstr     func([]byte) string                      = hex.EncodeToString
+	lidx       func(string, string) int                 = strings.LastIndex
 	stridxb    func(string, byte) int                   = strings.IndexByte
 	replace    func(string, string, string, int) string = strings.Replace
 	replaceAll func(string, string, string) string      = strings.ReplaceAll
@@ -49,13 +48,16 @@ var (
 	trimS      func(string) string                      = strings.TrimSpace
 	trim       func(string, string) string              = strings.Trim
 	cntns      func(string, string) bool                = strings.Contains
+	countstr   func(string, string) int                 = strings.Count
 	streq      func(string, string) bool                = strings.EqualFold
-	isCtrl     func(rune) bool                          = unicode.IsControl
-	isPrint    func(rune) bool                          = unicode.IsPrint
 	streqf     func(string, string) bool                = strings.EqualFold
 	strrpt     func(string, int) string                 = strings.Repeat
+	mkerr      func(string) error                       = errors.New
+	isCtrl     func(rune) bool                          = unicode.IsControl
+	isPrint    func(rune) bool                          = unicode.IsPrint
 	utf16Enc   func([]rune) []uint16                    = utf16.Encode
 	utf8OK     func(string) bool                        = utf8.ValidString
+	hexstr     func([]byte) string                      = hex.EncodeToString
 	newBigInt  func(int64) *big.Int                     = big.NewInt
 	refTypeOf  func(any) reflect.Type                   = reflect.TypeOf
 	refValueOf func(any) reflect.Value                  = reflect.ValueOf
@@ -82,6 +84,17 @@ func bool2str(b bool) (s string) {
 		s = `true`
 	}
 	return
+}
+
+func valueOf[T any](v any) T {
+	switch t := v.(type) {
+	case T:
+		return t
+	case *T:
+		return *t
+	default:
+		panic("asn1plus: factory received incompatible type")
+	}
 }
 
 func derefTypePtr(t reflect.Type) reflect.Type {
