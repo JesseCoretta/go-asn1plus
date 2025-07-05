@@ -1,3 +1,5 @@
+//go:build !asn1_no_constr_pf
+
 package asn1plus
 
 import (
@@ -9,8 +11,10 @@ import (
 
 // sequence is an unexported type used only in examples.
 // It implements the Lengthy interface.
-type exampleSeqOf []string
-type exampleSetOf []string
+type (
+	exampleSeqOf []string
+	exampleSetOf []string
+)
 
 func (s exampleSeqOf) Len() int {
 	return len(s)
@@ -598,7 +602,7 @@ func ExampleConstraintGroup_octetString() {
 
 	// Validate each test value.
 	for _, tc := range tests {
-		err := group.Validate(tc.val)
+		err := group.Constrain(tc.val)
 		if err != nil {
 			fmt.Printf("%s: %v\n", tc.name, err)
 		} else {
@@ -656,4 +660,101 @@ func TestConstraint_codecov(t *testing.T) {
 
 	RegisterTaggedConstraintGroup("duplicateConstraints", ConstraintGroup[OctetString]{})
 	RegisterTaggedConstraintGroup("duplicateConstraints", ConstraintGroup[OctetString]{})
+}
+
+func ExampleDuration_secondsMustBe30() {
+	// Define a constraint that forces the seconds component to equal 30.
+	secondsMustBe30 := DurationComponentConstraint(func(d Duration) error {
+		if d.Seconds != 30 {
+			return fmt.Errorf("seconds component %v is not equal to 30", d.Seconds)
+		}
+		return nil
+	})
+
+	// Parse a duration that should pass.
+	d1, err := NewDuration("P1Y2M3DT4H5M30S")
+	if err != nil {
+		fmt.Println("Duration error:", err)
+		return
+	}
+	if err := secondsMustBe30(d1); err != nil {
+		fmt.Printf("duration %v fails: %v\n", d1.String(), err)
+	} else {
+		fmt.Printf("duration %v passes secondsMustBe30\n", d1.String())
+	}
+
+	// Parse a duration that should fail.
+	d2, err := NewDuration("P1Y2M3DT4H5M45S")
+	if err != nil {
+		fmt.Println("Duration error:", err)
+		return
+	}
+	if err := secondsMustBe30(d2); err != nil {
+		fmt.Printf("duration %v fails: %v\n", d2.String(), err)
+	} else {
+		fmt.Printf("duration %v passes secondsMustBe30\n", d2.String())
+	}
+
+	// Output:
+	// duration P1Y2M3DT4H5M30S passes secondsMustBe30
+	// duration P1Y2M3DT4H5M45S fails: seconds component 45 is not equal to 30
+}
+
+func ExampleDate_weekendConstraint() {
+	// Define a weekend property constraint for Date.
+	weekend := PropertyConstraint(func(d Date) error {
+		// Use the underlying time.Time to check the weekday.
+		weekday := time.Time(d).Weekday()
+		if weekday != time.Saturday && weekday != time.Sunday {
+			return fmt.Errorf("date %v does not fall on a weekend", d)
+		}
+		return nil
+	})
+
+	// Parse a date that is a weekend:
+	d1, err := NewDate("2021-09-18") // 18 September 2021 is a Saturday.
+	if err != nil {
+		fmt.Println("ParseDate error:", err)
+		return
+	}
+	if err := weekend(d1); err != nil {
+		fmt.Printf("%v is not a weekend: %v\n", d1, err)
+	} else {
+		fmt.Printf("%v is a weekend\n", d1)
+	}
+
+	// Parse a date that is a weekday:
+	d2, err := NewDate("2021-09-15") // 15 September 2021 is a Wednesday.
+	if err != nil {
+		fmt.Println("ParseDate error:", err)
+		return
+	}
+	if err := weekend(d2); err != nil {
+		fmt.Printf("%v is not a weekend: %v\n", d2, err)
+	} else {
+		fmt.Printf("%v is a weekend\n", d2)
+	}
+
+	// Output:
+	// 2021-09-18 is a weekend
+	// 2021-09-15 is not a weekend: date 2021-09-15 does not fall on a weekend
+}
+
+func TestNewDuration_validInputs(t *testing.T) {
+	for _, in := range []any{
+		"P1Y2M3DT4H5M6S",                // string
+		[]byte("P2DT12H"),               // []byte
+		time.Duration(90 * time.Minute), // time.Duration
+	} {
+		if _, err := NewDuration(in, DurationRangeConstraint(Duration{}, Duration{Years: 9})); err != nil {
+			t.Errorf("NewDuration(%#v) returned error: %v", in, err)
+		}
+	}
+}
+
+func TestNewDuration_constraintViolation(t *testing.T) {
+	tooBig := "P20Y" // 20 years, well above maxDur
+	if _, err := NewDuration(tooBig, DurationRangeConstraint(Duration{}, Duration{Years: 9})); err == nil {
+		t.Fatalf("expected range-constraint error for %q, got nil", tooBig)
+	}
 }
