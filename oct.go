@@ -28,7 +28,7 @@ func NewOctetString(x any, constraints ...Constraint[OctetString]) (oct OctetStr
 	err = OctetSpec(_oct)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[OctetString] = constraints
-		err = group.Validate(_oct)
+		err = group.Constrain(_oct)
 	}
 
 	if err == nil {
@@ -81,116 +81,6 @@ func (r OctetString) Len() int {
 		l = len(r)
 	}
 	return l
-}
-
-// ----------------------------------------------------------------
-// 1) CER‐writer: unchanged
-func cerSegmentedOctetStringWrite[T TextLike](
-	c *textCodec[T],
-	pkt Packet,
-	opts *Options,
-) (written int, err error) {
-	const maxSegSize = 1000
-
-	// get raw bytes
-	var wire []byte
-	if c.encodeHook != nil {
-		wire, err = c.encodeHook(c.val)
-	} else {
-		wire = []byte(c.val)
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	// outer header: OCTET STRING|constructed, indefinite
-	hdr := []byte{byte(TagOctetString) | 0x20, 0x80}
-	pkt.Append(hdr...)
-	written += len(hdr)
-
-	// break into 1000‐byte primitive‐OCTET‐STRING TLVs
-	for off := 0; off < len(wire); off += maxSegSize {
-		end := off + maxSegSize
-		if end > len(wire) {
-			end = len(wire)
-		}
-		prim := pkt.Type().newTLV(
-			ClassUniversal, TagOctetString,
-			end-off, false,
-			wire[off:end]...,
-		)
-		enc := encodeTLV(prim, nil)
-		pkt.Append(enc...)
-		written += len(enc)
-	}
-
-	// EOC
-	pkt.Append(0x00, 0x00)
-	written += 2
-
-	return written, nil
-}
-
-func cerOctetStringReadBadTLV(outer TLV) (err error) {
-	if outer.Class != ClassUniversal ||
-		outer.Tag != TagOctetString ||
-		!outer.Compound ||
-		outer.Length != -1 {
-		err = mkerr("cerSegmentedOctetStringRead: not CER indefinite OCTET STRING")
-	}
-
-	return
-}
-
-func cerSegmentedOctetStringRead[T TextLike](
-	c *textCodec[T],
-	pkt Packet,
-	outer TLV,
-	opts *Options,
-) (err error) {
-	// a) validate the outer TLV
-	if err = cerOctetStringReadBadTLV(outer); err != nil {
-		return
-	}
-
-	sub := pkt.Type().New(outer.Value...)
-	sub.SetOffset(0)
-
-	var full []byte
-	for sub.HasMoreData() && err == nil {
-		var seg TLV
-		if seg, err = sub.TLV(); err == nil {
-			if seg.Class == ClassUniversal && seg.Tag == 0 && seg.Length == 0 {
-				break
-			}
-
-			full = append(full, seg.Value...)
-			sub.SetOffset(sub.Offset() + seg.Length)
-		}
-	}
-
-	if err == nil {
-		for i := 0; i < len(c.decodeVerify) && err == nil; i++ {
-			err = c.decodeVerify[i](full)
-		}
-
-		if err == nil {
-			var val T
-			if c.decodeHook != nil {
-				val, err = c.decodeHook(full)
-			} else {
-				// copy to avoid aliasing original slice
-				val = T(append([]byte(nil), full...))
-			}
-			if err == nil {
-				if err = c.cg.Constrain(val); err == nil {
-					c.val = val
-				}
-			}
-		}
-	}
-
-	return
 }
 
 func init() {

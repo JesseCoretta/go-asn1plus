@@ -32,17 +32,8 @@ func TestOctetString_codecov(_ *testing.T) {
 	oc.Tag()
 	_ = oc.String()
 	tpkt := &testPacket{}
-	cpkt := &CERPacket{}
 	_, _ = oc.write(tpkt, nil)
-	_, _ = oc.write(cpkt, nil)
 	oc.read(tpkt, TLV{}, nil)
-	cerSegmentedOctetStringWrite(oc, cpkt, nil)
-	cpkt.offset = 100
-	cerSegmentedOctetStringRead(oc, cpkt, TLV{}, nil)
-	cpkt.data = nil
-	cerSegmentedOctetStringRead(oc, cpkt, TLV{}, nil)
-	cpkt.data = []byte{0x00}
-	cerSegmentedOctetStringRead(oc, cpkt, TLV{}, nil)
 }
 
 func TestOctetString_encodingRules(t *testing.T) {
@@ -64,12 +55,12 @@ func TestOctetString_encodingRules(t *testing.T) {
 			od.IsZero()
 
 			// encode our OctetString instance
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
-			// Decode our Packet into a new OctetString instance
+			// Decode our PDU into a new OctetString instance
 			var other OctetString
 			if err = Unmarshal(pkt, &other); err != nil {
 				t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
@@ -120,110 +111,6 @@ func ExampleOctetString_withConstraints() {
 	// Output:
 	// Constraint violation: policy prohibits digits
 	// Constraint violation: policy prohibits lower-case ASCII
-}
-
-func ExampleOctetString_viaGoStringWithTaggedConstraint() {
-	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
-		func(o OctetString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
-			}
-			return
-		})
-
-	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
-		func(o OctetString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
-			}
-			return
-		})
-
-	// Create a single constraint group and register it
-	// as a tagged function. We can put as many constraint
-	// functions in a group as we please.
-	RegisterTaggedConstraintGroup("octetStringConstraints", ConstraintGroup[OctetString]{
-		digitConstraint,
-		caseConstraint,
-	})
-
-	var options Options = Options{
-		Identifier:  "octet",
-		Constraints: []string{`octetStringConstraints`},
-	}
-
-	pkt, err := Marshal(`test48`,
-		With(DER, options))
-
-	// We violated to the "no digits" policy.
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	// Lets try again
-	pkt, err = Marshal(`test`,
-		With(DER, options))
-
-	// We passed the "no digits" policy, but violated
-	// the "no lower case" policy.
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	pkt, err = Marshal(`TEST`,
-		With(DER, options))
-
-	// Third time's a charm?
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// We passed all constraints.
-
-	fmt.Printf("Encoded value: %s\n", pkt.Hex())
-
-	var out string
-	if err = Unmarshal(pkt, &out, With(options)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Decoded value: %s", out)
-	// Output:
-	// Constraint violation: policy prohibits digits
-	// Constraint violation: policy prohibits lower-case ASCII
-	// Encoded value: 04 04 54455354
-	// Decoded value: TEST
-}
-
-func TestPacket_LargeOctetStringCER(t *testing.T) {
-	var large OctetString = OctetString(strrpt("X", 2001)) // X*2001 times
-
-	pkt, err := Marshal(large, With(CER))
-	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
-	}
-
-	var alsoLarge OctetString
-	if err = Unmarshal(pkt, &alsoLarge); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
-	}
-
-	want := large.Len()
-	got := alsoLarge.Len()
-	if want != got {
-		t.Fatalf("%s failed [CER large OctetString size cmp.]:\n\twant: %d bytes\n\tgot:  %d bytes",
-			t.Name(), want, got)
-	}
 }
 
 func BenchmarkOctetStringConstructor(b *testing.B) {
