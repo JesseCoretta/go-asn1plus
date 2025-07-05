@@ -24,14 +24,14 @@ func TestCustomEnumerated_withControls(t *testing.T) {
 		func(enum) error { return nil },
 		func(enum) error { return nil })
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next enum
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }
@@ -113,7 +113,7 @@ func TestEnumerated_codecov(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		var pkt Packet
+		var pkt PDU
 		var err error
 		if pkt, err = Marshal(e, With(rule)); err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
