@@ -2,49 +2,53 @@ name: Update Clone Counter
 
 on:
   schedule:
-    # runs at 00:05 UTC every day
-    - cron:  '5 0 * * *'
+    - cron: '5 0 * * *'       # daily at 00:05 UTC
   workflow_dispatch:
 
 jobs:
   update-clones:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
     steps:
-      - name: Fetch last 14-day clone stats
-        id: stats
+      # Step 1: Fetch new clones
+      - id: stats
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.CLONE_STATS_TOKEN }}
           script: |
-            const { data } = await github.rest.repos.getClones({
+            const res = await github.rest.repos.getClones({
               owner: context.repo.owner,
-              repo: context.repo.repo,
-              per: 'day'
+              repo:  context.repo.repo,
+              per:   'day'
             });
-            const days = Array.isArray(res.data.clones) ? res.data.clones : [];
-            const totalNew = days.reduce((sum, d) => sum + d.count, 0);
-            return totalNew;
-      
-      - name: Read & update gist
-        id: update
+            console.log('API payload:', JSON.stringify(res.data, null, 2));
+            const days = res.data.clones || [];
+            const newCount = days.reduce((sum, d) => sum + d.count, 0);
+            return newCount;
+
+      - name: Update Gist
         uses: actions/github-script@v6
+        env:
+          NEW_CLONES: ${{ steps.stats.outputs.result }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.CLONE_STATS_TOKEN }}
           script: |
             const gistId = 'fc9283f4379c4b0b6211de82d01e2cec';
-            // 1. Fetch existing gist
             const { data: gist } = await github.rest.gists.get({ gist_id: gistId });
+
             const fileName = Object.keys(gist.files)[0];
-            const rawUrl = gist.files[fileName].raw_url;
-            
-            // 2. Download and parse JSON
+            const rawUrl   = gist.files[fileName].raw_url;
+
             const resp = await fetch(rawUrl);
             const json = await resp.json();
-            
-            // 3. Update message
-            json.message = String(Number(json.message) + Number(core.getOutput('stats')));
-            
-            // 4. Patch gist
+
+            const totalBefore = Number(json.message);
+            const totalAfter  = totalBefore + Number(process.env.NEW_CLONES);
+            json.message = String(totalAfter);
+
             await github.rest.gists.update({
               gist_id: gistId,
               files: {
