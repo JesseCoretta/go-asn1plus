@@ -144,6 +144,8 @@ var classKeywords = map[string]struct{}{
 	"private":          {},
 }
 
+const hexDigits = "0123456789ABCDEF"
+
 func init() {
 	*ptrClassUniversal = ClassUniversal
 	*ptrClassContextSpecific = ClassContextSpecific
