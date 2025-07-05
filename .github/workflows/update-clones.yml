@@ -72,8 +72,8 @@ jobs:
           echo "✅ Update response:"
           echo "$update_resp" | jq .
 
-
-      - name: Show badge URL
-        run: |
-          echo "Use this in your README:"
-          echo "![Clones](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/${{ github.actor }}/$GIST_ID/raw/clones.json)"
+     - name: Show badge URL
+       run: |
+         echo "![Clones](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/${{ github.actor }}/${{ env.GIST_ID }}/raw/clones.json)"
+       env:
+         GIST_ID: fc9283f4379c4b0b6211de82d01e2cec
