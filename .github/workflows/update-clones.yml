@@ -32,6 +32,8 @@ jobs:
             }
             const newClones = data.clones.reduce((sum, day) => sum + (day.count || 0), 0);
             core.setOutput('newClones', String(newClones));
+            console.log('➕ New clones in last 14 days:', newClones);
+            core.setOutput('newClones', String(newClones));
 
       - name: Update Gist total
         uses: actions/github-script@v6
