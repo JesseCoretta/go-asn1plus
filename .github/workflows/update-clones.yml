@@ -9,83 +9,69 @@ on:
 jobs:
   update-clones:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Fetch 14-day clone stats
         id: fetch
         env:
           GH_TOKEN: ${{ secrets.CLONE_STATS_TOKEN }}
         run: |
-          echo "🔍 Fetching clone stats…"
           resp=$(
             curl -s -H "Authorization: token $GH_TOKEN" \
-                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/clones?per=day"
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/clones?per=day"
           )
-          echo "$resp" | jq .
-
-          # total clones in the last 14 days
           windowTotal=$(echo "$resp" | jq '.count // 0')
           echo "windowTotal=$windowTotal" >> $GITHUB_OUTPUT
 
-      - name: Update Gist with lifetime count
-        id: update_gist
+      - name: Read & update Gist lifetime
         env:
-          GH_TOKEN: ${{ secrets.CLONE_STATS_TOKEN }}
-          GIST_ID: fc9283f4379c4b0b6211de82d01e2cec
-          WINDOW_TOTAL: ${{ steps.fetch.outputs.windowTotal }}
+          GH_TOKEN:   ${{ secrets.CLONE_STATS_TOKEN }}
+          GIST_ID:    fc9283f4379c4b0b6211de82d01e2cec
+          WINDOW:     ${{ steps.fetch.outputs.windowTotal }}
         run: |
-          echo "🔍 Fetching gist metadata for $GIST_ID"
+          # 1. Load current gist
           meta=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/gists/$GIST_ID")
-          echo "$meta" | jq .
-
-          # extract raw_url of the JSON file
-          raw_url=$(echo "$meta" | jq -r '.files | keys[0] as $k | .[$k].raw_url')
-          echo "🔗 raw_url: $raw_url"
-
-          # download existing gist content
+          raw_url=$(echo "$meta" | jq -r '.files|keys[0] as $k|.[$k].raw_url')
           data=$(curl -s "$raw_url")
-          echo "$data" | jq .
 
-          # parse existing values
-          oldLifetime=$(echo "$data" | jq -r '.message // "0"')
-          prevWindow=$(echo "$data" | jq -r '.lastCount // "0"')
-          echo "💡 previous lifetime: $oldLifetime, previous windowTotal: $prevWindow"
+          # 2. Extract old values (if any)
+          oldLife=$(echo "$data" | jq -r '.message // "0"')
+          prevWin=$(echo "$data" | jq -r '.lastCount // empty')
+          echo "🔍 prevLife=$oldLife, prevWindow=$prevWin"
 
-          # calculate difference and new lifetime
-          diff=$((WINDOW_TOTAL - prevWindow))
-          if [ "$diff" -lt 0 ]; then diff=0; fi
-          newLifetime=$((oldLifetime + diff))
-          echo "➕ diff: $diff → new lifetime: $newLifetime"
+          # 3. Decide initialization vs. delta
+          if [ -z "$prevWin" ]; then
+            # first run: seed both
+            newLife=$WINDOW
+            newPrev=$WINDOW
+            echo "🛠 first run – seeding to $WINDOW"
+          else
+            diff=$((WINDOW - prevWin))
+            [ $diff -lt 0 ] && diff=0
+            newLife=$((oldLife + diff))
+            newPrev=$WINDOW
+            echo "➕ diff=$diff → newLife=$newLife"
+          fi
 
-          # build patched JSON
+          # 4. Patch JSON
           patched=$(jq \
-            --arg m "$newLifetime" \
-            --arg l "$WINDOW_TOTAL" \
+            --arg m "$newLife" \
+            --arg l "$newPrev" \
             '.message = $m | .lastCount = $l' \
             <<<"$data")
-          echo "$patched" | jq .
 
-          # update the gist
-          filename=$(echo "$meta" | jq -r '.files | keys[0]')
-          payload=$(jq -n --arg f "$filename" --arg c "$patched" \
-            '{"files": {($f): {"content": $c}}}')
-          echo "$payload" | jq .
-
+          # 5. Push update
+          file=$(echo "$meta" | jq -r '.files|keys[0]')
+          payload=$(jq -n --arg f "$file" --arg c "$patched" '{"files":{($f):{"content":$c}}}')
           curl -s -X PATCH \
             -H "Authorization: token $GH_TOKEN" \
             -d "$payload" \
             "https://api.github.com/gists/$GIST_ID" \
             | jq .
-          echo "✅ Gist updated"
 
-      - name: Show badge URL
+      - name: Output badge URL
         env:
           GIST_ID: fc9283f4379c4b0b6211de82d01e2cec
         run: |
-          echo "Use this in your README:"
           echo "![Clones](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST_ID}/raw/clones.json)"
 
