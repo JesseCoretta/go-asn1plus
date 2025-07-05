@@ -21,8 +21,8 @@ jobs:
               repo: context.repo.repo,
               per: 'day'
             });
-            // Sum daily counts
-            const totalNew = data.clone_counts.reduce((sum, d) => sum + d.count, 0);
+            const days = Array.isArray(res.data.clones) ? res.data.clones : [];
+            const totalNew = days.reduce((sum, d) => sum + d.count, 0);
             return totalNew;
       
       - name: Read & update gist
