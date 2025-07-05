@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.CLONE_STATS_TOKEN }}
-      GIST_ID:  YOUR_GIST_ID      # ← replace with your Gist’s ID (no slashes)
+      GIST_ID:  fc9283f4379c4b0b6211de82d01e2cec
 
     steps:
       - name: Fetch 14-day clone stats
@@ -30,15 +30,12 @@ jobs:
 
       - name: Read & update Gist badge + metadata
         run: |
-          # 1. load gist metadata
           meta=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/gists/$GIST_ID")
 
-          # 2. grab raw URLs
           badge_url=$(echo "$meta" | jq -r '.files["asn1plus_clones.json"].raw_url // empty')
           meta_url=$(echo "$meta" | jq -r '.files["asn1plus_clones_meta.json"].raw_url // empty')
 
-          # 3. load existing data (or seed)
           if [ -n "$meta_url" ]; then
             meta_data=$(curl -s "$meta_url")
             oldLife=$(echo "$meta_data" | jq -r '.lifetime // "0"')
@@ -48,7 +45,6 @@ jobs:
             prevTs=""
           fi
 
-          # 4. compute diff only for new day
           if [ "$prevTs" = "${{ steps.fetch.outputs.latestTs }}" ]; then
             diff=0
           else
@@ -56,18 +52,15 @@ jobs:
           fi
           newLife=$((oldLife + diff))
 
-          # 5. build badge JSON (only valid fields)
           badge_json=$(jq -n \
             --arg m "$newLife" \
             '{ schemaVersion: 1, label: "clones", message: $m, color: "blue" }')
 
-          # 6. build meta JSON
           meta_json=$(jq -n \
             --arg l "$newLife" \
             --arg t "${{ steps.fetch.outputs.latestTs }}" \
             '{ lifetime: $l, lastTimestamp: $t }')
 
-          # 7. patch both files
           payload=$(jq -n \
             --arg b "$badge_json" \
             --arg m "$meta_json" \
@@ -86,6 +79,5 @@ jobs:
 
       - name: Show Shields.io badge snippet
         run: |
-          echo "Use this in your README:"
-          echo "![Clones](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST_ID}/raw/asn1plus_clones.json)"
+          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST_ID}/raw/asn1plus_clones.json&query=$.message)"
 
