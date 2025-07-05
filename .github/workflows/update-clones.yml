@@ -1,0 +1,68 @@
+# .github/workflows/update-clones.yml
+name: Update Clone Counter
+
+on:
+  schedule:
+    - cron: '5 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-clones:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch last 14-day clone stats
+        id: fetch
+        env:
+          GH_TOKEN: ${{ secrets.CLONE_STATS_TOKEN }}
+        run: |
+          # 1. Grab the raw JSON from GitHub API
+          resp=$(
+            curl -s -H "Authorization: token $GH_TOKEN" \
+                 "https://api.github.com/repos/${{ github.repository }}/traffic/clones?per=day"
+          )
+          echo "🧐 API response:"
+          echo "$resp" | jq
+
+          # 2. Sum up `.clones[].count`
+          newClones=$(echo "$resp" | jq '[.clones[].count] | add // 0')
+          echo "➕ New clones in last 14 days: $newClones"
+
+          # 3. Expose for next step
+          echo "newClones=$newClones" >> $GITHUB_OUTPUT
+
+      - name: Read & update Gist total
+        env:
+          GH_TOKEN:      ${{ secrets.CLONE_STATS_TOKEN }}
+          GIST_ID:       fc9283f4379c4b0b6211de82d01e2cec
+          NEW_CLONES:    ${{ steps.fetch.outputs.newClones }}
+        run: |
+          # 1. Download current clones.json
+          raw_url=$(
+            curl -s -H "Authorization: token $GH_TOKEN" \
+                 "https://api.github.com/gists/$GIST_ID" \
+              | jq -r '.files[].raw_url'
+          )
+          data=$(curl -s "$raw_url")
+          echo "📝 Current gist data:"
+          echo "$data" | jq
+
+          # 2. Bump the message field
+          old=$(echo "$data" | jq -r '.message')
+          new=$((old + NEW_CLONES))
+          echo "📝 Old total: $old →  New total: $new"
+
+          # 3. Prepare patched JSON
+          patched=$(echo "$data" | jq --arg m "$new" '.message = $m')
+
+          # 4. Push update
+          curl -s -X PATCH \
+               -H "Authorization: token $GH_TOKEN" \
+               -d "{\"files\": {\"$(echo "$data" | jq -r '.files|keys[0]')\": {\"content\": $(printf '%s' "$patched" | jq -Rs .)}}}" \
+               "https://api.github.com/gists/$GIST_ID"
+
+          echo "✅ Gist updated"
+
+      - name: Show badge URL
+        run: |
+          echo "Use this in your README:"
+          echo "![Clones](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/${{ github.actor }}/$GIST_ID/raw/clones.json)"
