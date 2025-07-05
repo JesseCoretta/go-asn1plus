@@ -79,5 +79,5 @@ jobs:
 
       - name: Show Shields.io badge snippet
         run: |
-          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST_ID}/raw/asn1plus_clones.json&query=$.message)"
+          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST_ID}/raw/asn1plus_clones.json&query=%24.message)"
 
