@@ -1,3 +1,5 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 import (
@@ -16,7 +18,7 @@ func ExampleGeneralString() {
 	// Output: Jesse
 }
 
-func ExampleGeneralString_dER() {
+func ExampleGeneralString_bER() {
 	// Parse string into a GeneralString instance
 	vs, err := NewGeneralString("Jesse")
 	if err != nil {
@@ -24,14 +26,14 @@ func ExampleGeneralString_dER() {
 		return
 	}
 
-	// DER encode GeneralString into Packet instance
-	var der Packet
-	if der, err = Marshal(vs, With(DER)); err != nil {
+	// BER encode GeneralString into PDU instance
+	var der PDU
+	if der, err = Marshal(vs, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode DER Packet into new GeneralString instance
+	// Decode BER PDU into new GeneralString instance
 	var vs2 GeneralString
 	if err = Unmarshal(der, &vs2); err != nil {
 		fmt.Println(err)
@@ -75,12 +77,12 @@ func TestGeneralString_encodingRules(t *testing.T) {
 			od.IsZero()
 
 			// encode our GeneralString instance
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
-			// Decode our Packet into a new GeneralString instance
+			// Decode our PDU into a new GeneralString instance
 			var other GeneralString
 			if err = Unmarshal(pkt, &other); err != nil {
 				t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)

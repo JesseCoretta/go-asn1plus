@@ -1,3 +1,5 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 /*
@@ -35,7 +37,7 @@ func NewGeneralString(x any, constraints ...Constraint[GeneralString]) (gen Gene
 	err = GeneralSpec(_gen)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[GeneralString] = constraints
-		err = group.Validate(_gen)
+		err = group.Constrain(_gen)
 	}
 
 	if err == nil {

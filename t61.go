@@ -1,3 +1,5 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 /*
@@ -72,7 +74,7 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 	err = T61Spec(_t61)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[T61String] = constraints
-		err = group.Validate(_t61)
+		err = group.Constrain(_t61)
 	}
 
 	if err == nil {

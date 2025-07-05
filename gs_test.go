@@ -1,3 +1,5 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 import (
@@ -24,14 +26,14 @@ func ExampleGraphicString_dER() {
 		return
 	}
 
-	// DER encode GraphicString into Packet instance
-	var der Packet
+	// DER encode GraphicString into PDU instance
+	var der PDU
 	if der, err = Marshal(vs); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode DER Packet into new GraphicString instance
+	// Decode DER PDU into new GraphicString instance
 	var vs2 GraphicString
 	if err = Unmarshal(der, &vs2); err != nil {
 		fmt.Println(err)
@@ -85,12 +87,12 @@ func TestGraphicString_encodingRules(t *testing.T) {
 			od.IsZero()
 
 			// encode our GraphicString instance
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
-			// Decode our Packet into a new GraphicString instance
+			// Decode our PDU into a new GraphicString instance
 			var other GraphicString
 			if err = Unmarshal(pkt, &other); err != nil {
 				t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)

@@ -1,9 +1,10 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 import (
 	"fmt"
 	"testing"
-	//"time"
 )
 
 func TestVideotexString_encodingRules(t *testing.T) {

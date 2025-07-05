@@ -1,11 +1,11 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 /*
 gs.go contains all types and methods pertaining to the ASN.1
 GRAPHIC STRING type.
 */
-
-import "unicode"
 
 /*
 Deprecated: GraphicString implements the ASN.1 GRAPHIC STRING type (tag 25).
@@ -37,7 +37,7 @@ func NewGraphicString(x any, constraints ...Constraint[GraphicString]) (gs Graph
 	err = GraphicSpec(_gs)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[GraphicString] = constraints
-		err = group.Validate(_gs)
+		err = group.Constrain(_gs)
 	}
 
 	if err == nil {
@@ -80,17 +80,6 @@ IsPrimitive returns true, indicating the receiver instance is a
 known ASN.1 primitive.
 */
 func (r GraphicString) IsPrimitive() bool { return true }
-
-func graphicStringDecoderVerify(b []byte) (err error) {
-	runes := []rune(string(b))
-	for i := 0; i < len(runes) && err == nil; i++ {
-		ch := rune(runes[i])
-		if !unicode.IsPrint(ch) || unicode.IsControl(ch) || (ch < 128 && !(32 <= ch && ch <= 126)) {
-			err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
-		}
-	}
-	return
-}
 
 func init() {
 	RegisterTextAlias[GraphicString](TagGraphicString, graphicStringDecoderVerify, nil, nil, GraphicSpec)

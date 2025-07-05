@@ -2,7 +2,7 @@ package asn1plus
 
 /*
 pdv.go contains all types and methods pertaining to the ASN.1
-EMBEDDED PDV and EXTERNAL types.
+EMBEDDED PDV type.
 */
 
 /*
@@ -103,30 +103,6 @@ func embeddedPDVSpecial() *Options {
 	opts := &Options{}
 	opts.SetClass(1)
 	opts.SetTag(TagEmbeddedPDV)
-	return opts
-}
-
-/*
-Deprecated: External implements the ASN.1 EXTERNAL type (tag 8).
-
-This type is implemented within this package for historical/legacy purposes
-and should not be used in modern systems. Use [EmbeddedPDV] instead.
-*/
-type External struct {
-	Identification      Choice
-	DataValueDescriptor ObjectDescriptor `asn1:"optional"`
-	DataValue           OctetString
-}
-
-/*
-Tag returns the integer constant [TagExternal].
-*/
-func (r External) Tag() int { return TagExternal }
-
-func externalSpecial() *Options {
-	opts := &Options{}
-	opts.SetClass(0)
-	opts.SetTag(TagExternal)
 	return opts
 }
 

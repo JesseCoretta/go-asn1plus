@@ -1,3 +1,5 @@
+//go:build !asn1_no_dprc
+
 package asn1plus
 
 /*
@@ -49,7 +51,7 @@ func NewVideotexString(x any, constraints ...Constraint[VideotexString]) (Videot
 	err = VideotexSpec(_vts)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[VideotexString] = constraints
-		err = group.Validate(_vts)
+		err = group.Constrain(_vts)
 	}
 
 	if err == nil {

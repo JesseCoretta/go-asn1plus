@@ -27,6 +27,4 @@ func TestEmbeddedPDV_SyntaxesEncodingRules(t *testing.T) {
 func TestEmbeddedPDV_codecov(_ *testing.T) {
 	var pdv EmbeddedPDV
 	pdv.Tag()
-	var ext External
-	ext.Tag()
 }
