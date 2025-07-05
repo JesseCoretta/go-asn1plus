@@ -26,9 +26,9 @@ func ExampleBMPString_roundTripBER() {
 	}
 
 	// BER encode our ASN.1 BMP STRING instance
-	// into a Packet. Alternatively, substitute
+	// into a PDU. Alternatively, substitute
 	// BER with another encoding rule if desired.
-	var pkt Packet
+	var pkt PDU
 	if pkt, err = Marshal(bmp, With(BER)); err != nil {
 		fmt.Println(err)
 		return
