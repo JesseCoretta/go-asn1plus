@@ -28,11 +28,46 @@ This package has no dependence upon the `encoding/asn1` package, as this package
 ## Features
 
  - Fast ASN.1 [BER](## "Basic Encoding Rules"), [CER](## "Canonical Encoding Rules") and [DER](## "Distinguished Encoding Rules") encoding/decoding
+ - Flexible build system
  - Full ASN.1 primitive type support -- twenty six (26) types are implemented, such as `OctetString`, `Time`, `Real` and many others (including legacy/deprecated types)
  - `SET` and `SEQUENCE` support
  - Constraints -- Flexible ASN.1 constraint logic has been implemented for maximum control
  - Intuitive, easy to use
  - Well documented, containing many useful examples
+
+## Build Tags
+
+This package supports flexible build instructions. By default, this package enables all features _except_ debugging.
+
+But in certain cases it may be advantageous to disable certain elements, such as [CER](## "Canonical Encoding Rules") or [DER](## "Distinguished Encoding Rules") encoding, or even to disable deprecated ASN.1 types.
+
+Regardless of the permutation, this package offers build tags to make the task easy. Whether you're building an executable -- even a simple `main.go` -- or, if you're running the included test suite directly, it is painless to enable/disable select features.
+
+| Build Tag       | Description |
+| :-------------  | :---------- |
+| `asn1_no_adapter_pf` | Do not implement prefabricated type bindings  |
+| `asn1_no_cer`      | Do not implement [CER](## "Canonical Encoding Rules") encoding |
+| `asn1_no_constr_pf` | Do not implement prefabricated constraint functions |
+| `asn1_debug`    | Enable debug tracer; use with extreme caution |
+| `asn1_no_der`      | Do not implement [DER](## "Distinguished Encoding Rules") encoding |
+| `asn1_no_dprc`     | Do not implement deprecated/obsolete ASN.1 types |
+
+To utilize these tags, simply invoke the `-tags` command-line option when executing the `go` binary, e.g.:
+
+```
+## Test without type adapters prefabs and without deprecated types
+$ go test -tags asn1_no_adapter_pf,asn1_no_dprc ./...
+
+## Build main.go without CER support
+$ go build -tags asn1_no_cer main.go
+
+## Run main.go without constraint prefabs
+$ go run -tags asn1_no_constr_pf main.go
+```
+
+Depending on the tags invoked, the elapsed time of subsequent runs of the test suite will vary.
+
+Note that certain features -- namely [BER](## "Basic Encoding Rules") encoding -- cannot be disabled.
 
 ## Dependencies
 
@@ -43,10 +78,13 @@ This package relies upon the following packages from the standard library:
   - `encoding/hex`
   - `errors`
   - `fmt`<sup><sup>†</sup></sup>
+  - `io`
   - `math`
   - `math/big`
   - `math/bits`
-  - `reflect`
+  - `math/rand` <sup><sup>‡</sup></sup>
+  - `os` <sup><sup>‡</sup></sup>
+  - `runtime` <sup><sup>‡</sup></sup>
   - `slices`
   - `strconv`
   - `strings`
@@ -61,11 +99,12 @@ This package relies upon the following packages from the standard library:
 
 This package relies upon the following packages from the `golang/x/exp` library:
 
-  - `constraints`<sup><sup>††</sup></sup>
+  - `constraints`<sup><sup>⹋</sup></sup>
 
 <sup>
-  <sup><b>†</b>  - used ONLY for testing/examples</sup><br>
-  <sup><b>††</b> - WARNING: Experimental!</sup><br>
+  <sup><b>†</b>   - used ONLY for testing/examples</sup><br>
+  <sup><b>‡</b>  - used ONLY when debugging is enabled</sup><br>
+  <sup><b>⹋</b> - used ONLY when prefabricated constraints are loaded</sup><br>
 </sup>
 
 ## Constraints
@@ -82,6 +121,8 @@ A `Constraint` may be used ad hoc, or as part of a `ConstraintGroup`, which iter
 When using any number of `Constraint`s via `Options`, the `Constraint` function MUST be pre-registered using the package-level `RegisterTaggedConstraint` or `RegisterTaggedConstraintGroup` functions.
 
 There are many examples compiled into the package on this topic.
+
+Prefabricated `Constraint` instances can be excluded from builds using the `asn1_no_constr_pf` build tag.
 
 ## Native Go Type Support
 
@@ -108,6 +149,8 @@ type MySequence struct {
 Subsequent encoded values will be identical.
 
 The caveat to using tagged instructions in this manner -- as opposed to actual ASN.1 types as used in the first `MySequence` example -- is that the `Unmarshal` function will need to receive the same instructions which `Marshal` received. Thus, if we attempt to `Unmarshal` into a `SEQUENCE` with untagged string fields and without instructions, defaults may be erroneously applied (e.g.: a UTF-8 STRING is mistaken for an OCTET STRING, or some other such permutation). This is not an issue when using actual ASN.1 types, as the compiler will recognize them and decode them properly automatically.
+
+Prefabricated adapter bindings can be excluded from builds using the `asn1_no_adapter_pf` build tag.
 
 ## Performance
 
