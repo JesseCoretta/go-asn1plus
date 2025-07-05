@@ -16,11 +16,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CLONE_STATS_TOKEN }}
         run: |
-          echo "🔍 Fetching 14-day clone stats…"
-          resp=$(curl -s -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/clones?per=day")
-          echo "$resp" | jq .
-
+          resp=$(
+            curl -s -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/clones?per=day"
+          )
           windowTotal=$(echo "$resp" | jq '.count // 0')
           echo "windowTotal=$windowTotal" >> $GITHUB_OUTPUT
 
@@ -31,43 +30,36 @@ jobs:
           GIST_ID:      fc9283f4379c4b0b6211de82d01e2cec
           WINDOW_TOTAL: ${{ steps.fetch.outputs.windowTotal }}
         run: |
-          echo "🔍 Loading gist metadata for $GIST_ID"
           meta=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/gists/$GIST_ID")
-          echo "$meta" | jq .
-
-          raw_url=$(echo "$meta" | jq -r '.files | keys[0] as $k | .[$k].raw_url')
-          echo "raw_url: $raw_url"
+          raw_url=$(echo "$meta" | jq -r '.files|keys[0] as $k|.[$k].raw_url')
           data=$(curl -s "$raw_url")
-          echo "$data" | jq .
 
           oldTotal=$(echo "$data" | jq -r '.message // "0"')
           prevWindow=$(echo "$data" | jq -r '.lastCount // "0"')
-
           diff=$((WINDOW_TOTAL - prevWindow))
           [ $diff -lt 0 ] && diff=0
           newTotal=$((oldTotal + diff))
-          echo "➕ Adding $diff → new lifetime: $newTotal"
 
           patched=$(jq --arg m "$newTotal" --arg l "$WINDOW_TOTAL" \
             '.message = $m | .lastCount = $l' <<<"$data")
 
-          file=$(echo "$meta" | jq -r '.files | keys[0]')
+          file=$(echo "$meta" | jq -r '.files|keys[0]')
           payload=$(jq -n --arg f "$file" --arg c "$patched" \
             '{"files":{($f):{"content":$c}}}')
-          echo "$payload" | jq .
 
           curl -s -X PATCH \
             -H "Authorization: token $GH_TOKEN" \
             -d "$payload" \
             "https://api.github.com/gists/$GIST_ID" \
-            | jq .
-          echo "✅ Gist updated"
+            >/dev/null
 
       - name: Show badge embed snippet
         env:
           GIST_ID: fc9283f4379c4b0b6211de82d01e2cec
         run: |
-          echo "Use this in your README:"
-          echo "![Clones](https://gist.githubusercontent.com/${{ github.actor }}/${{ env.GIST_ID }}/raw/asn1plus_clones.json)"
+          # confirm values
+          echo "DEBUG: GITHUB_ACTOR=${GITHUB_ACTOR}, GIST_ID=${GIST_ID}"
+          # build the one-slash URL
+          echo "![Clones](https://gist.githubusercontent.com/${GITHUB_ACTOR}/${GIST_ID}/raw/asn1plus_clones.json)"
 
