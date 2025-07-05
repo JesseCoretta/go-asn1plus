@@ -41,16 +41,16 @@ func ExampleVisibleString_bER() {
 		return
 	}
 
-	// DER encode VisibleString into Packet instance.
+	// DER encode VisibleString into PDU instance.
 	// If desired, substitute BER with another encoding
 	// rule.
-	var pkt Packet
+	var pkt PDU
 	if pkt, err = Marshal(vs, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode DER Packet into new VisibleString instance
+	// Decode DER PDU into new VisibleString instance
 	var vs2 VisibleString
 	if err = Unmarshal(pkt, &vs2); err != nil {
 		fmt.Println(err)
@@ -83,7 +83,7 @@ func TestVisibleString_codecov(t *testing.T) {
 			vs.IsPrimitive()
 			_ = vs.String()
 
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(vs, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v",
 					t.Name(), idx, rule, err)

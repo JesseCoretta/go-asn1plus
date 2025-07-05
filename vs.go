@@ -39,7 +39,7 @@ func NewVisibleString(x any, constraints ...Constraint[VisibleString]) (VisibleS
 	err = VisibleSpec(_vs)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[VisibleString] = constraints
-		err = group.Validate(_vs)
+		err = group.Constrain(_vs)
 	}
 
 	if err == nil {

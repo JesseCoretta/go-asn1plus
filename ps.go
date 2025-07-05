@@ -81,7 +81,7 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 	err = PrintableSpec(_ps)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[PrintableString] = constraints
-		err = group.Validate(PrintableString(raw))
+		err = group.Constrain(PrintableString(raw))
 	}
 
 	if err == nil {

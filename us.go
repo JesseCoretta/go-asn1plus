@@ -58,7 +58,7 @@ func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (Univ
 	group := append(
 		ConstraintGroup[UniversalString]{UniversalSpec}, // built-in
 		constraints...)
-	err = group.Validate(_us)
+	err = group.Constrain(_us)
 	if err == nil {
 		us = _us
 	}

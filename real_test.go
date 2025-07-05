@@ -61,7 +61,7 @@ func TestReal_encodingRules(t *testing.T) {
 		rOrig.Tag()
 		rOrig.IsPrimitive()
 
-		var pkt Packet
+		var pkt PDU
 		if pkt, err = Marshal(rOrig, With(rule)); err != nil {
 			t.Errorf("%s failed [%s encode]: %v", t.Name(), rule, err)
 			return
@@ -97,7 +97,7 @@ func TestRealSpecial_encodingRules(t *testing.T) {
 		NewRealMinusInfinity(),
 	} {
 		for _, rule := range encodingRules {
-			var pkt Packet
+			var pkt PDU
 			var err error
 			if pkt, err = Marshal(inf, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encode infinity]: %v", t.Name(), rule, err)
@@ -175,7 +175,7 @@ func TestRealDeepEqual_encodingRules(t *testing.T) {
 			t.Fatalf("%s failed [%s NewReal]: %v", t.Name(), rule, err)
 		}
 
-		var pkt Packet
+		var pkt PDU
 		if pkt, err = Marshal(rOne, With(rule)); err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
@@ -212,7 +212,7 @@ func TestRealDeepEqual_encodingRules(t *testing.T) {
 
 func TestRealDecodeErrors(t *testing.T) {
 	// Prepare an invalid DER packet: truncated REAL.
-	pkt := &DERPacket{data: []byte{byte(TagReal), 2, 0x80}, offset: 0}
+	pkt := &BERPacket{data: []byte{byte(TagReal), 2, 0x80}, offset: 0}
 	var out Real
 	err := Unmarshal(pkt, &out)
 	if err == nil {
@@ -301,14 +301,14 @@ func TestCustomReal_withControls(t *testing.T) {
 		},
 		nil)
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next customReal
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }

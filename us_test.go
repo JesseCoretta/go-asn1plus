@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-func TestUniversalString_EncodingContentDER(t *testing.T) {
+func TestUniversalString_EncodingContentBER(t *testing.T) {
 	str := "ABC"
 	us, err := NewUniversalString(str)
 	if err != nil {
 		t.Fatalf("NewUniversalString(%q) failed: %v", str, err)
 	}
 
-	var pkt Packet
-	if pkt, err = Marshal(us, With(DER)); err != nil {
+	var pkt PDU
+	if pkt, err = Marshal(us, With(BER)); err != nil {
 		t.Fatalf("%s failed: %v", t.Name(), err)
 	}
 
@@ -50,7 +50,7 @@ func TestUniversalString_encodingRules(t *testing.T) {
 				t.Fatalf("%s failed [%s NewUniversalString] error: %v", t.Name(), rule, err)
 			}
 
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(usOrig, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
@@ -77,7 +77,7 @@ func TestUniversalString_UCS4Conversion(t *testing.T) {
 		t.Fatal("Input string is not valid UTF8")
 	}
 
-	var pkt Packet
+	var pkt PDU
 	if pkt, err = Marshal(us); err != nil {
 		t.Fatalf("%s failed: %v", t.Name(), err)
 	}

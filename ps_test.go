@@ -15,7 +15,7 @@ func TestPrintableString_encodingRules(t *testing.T) {
 				t.Fatalf("%s failed [%s NewPrintableString]: %v", t.Name(), rule, err)
 			}
 
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(ps, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
@@ -126,14 +126,14 @@ func TestCustomPrintableString_withControls(t *testing.T) {
 	cust.IsPrimitive()
 	_ = cust.String()
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next customPrintable
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }

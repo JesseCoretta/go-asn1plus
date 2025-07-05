@@ -68,7 +68,7 @@ func NewUTF8String(x any, constraints ...Constraint[UTF8String]) (u8 UTF8String,
 	err = UTF8Spec(_u8)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[UTF8String] = constraints
-		err = group.Validate(_u8)
+		err = group.Constrain(_u8)
 	}
 
 	if err == nil {

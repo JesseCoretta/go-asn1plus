@@ -18,7 +18,7 @@ func ExampleUTF8String() {
 	// Output: this is a UTF-8 string
 }
 
-func ExampleUTF8String_dER() {
+func ExampleUTF8String_bER() {
 	// Parse value into new UTF8String instance
 	u8, err := NewUTF8String(`this is a UTF-8 string`)
 	if err != nil {
@@ -26,16 +26,16 @@ func ExampleUTF8String_dER() {
 		return
 	}
 
-	// DER encode UTF8String instance into Packet. You
-	// may substitute BER with another encoding rule,
+	// BER encode UTF8String instance into PDU. You
+	// may substitute DER with another encoding rule,
 	// if desired.
-	var pkt Packet
-	if pkt, err = Marshal(u8, With(DER)); err != nil {
+	var pkt PDU
+	if pkt, err = Marshal(u8, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode DER Packet into new UTF8String instance
+	// Decode BER PDU into new UTF8String instance
 	var ut UTF8String
 	if err = Unmarshal(pkt, &ut); err != nil {
 		fmt.Println(err)
