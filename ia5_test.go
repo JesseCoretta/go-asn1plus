@@ -40,13 +40,13 @@ func ExampleIA5String_roundTripDER() {
 	}
 
 	// DER encode our IA5String instance
-	var der Packet
+	var der PDU
 	if der, err = Marshal(ia5); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode our DER Packet into a new IA5String instance
+	// Decode our DER PDU into a new IA5String instance
 	var other IA5String
 	if err = Unmarshal(der, &other); err != nil {
 		fmt.Println(err)
@@ -75,12 +75,12 @@ func TestIA5String_encodingRules(t *testing.T) {
 			ia5.Tag()
 
 			// encode our IA5String instance
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(ia5, With(rule)); err != nil {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
-			// Decode our Packet into a new IA5String instance
+			// Decode our PDU into a new IA5String instance
 			var other IA5String
 			if err = Unmarshal(pkt, &other); err != nil {
 				t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)

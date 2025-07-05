@@ -296,7 +296,7 @@ func (c *integerCodec[T]) getVal() any       { return c.val }
 func (c *integerCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 
 // NOTE: called for both Integer and Enumerated
-func (c *integerCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
+func (c *integerCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 	switch pkt.Type() {
 	case BER, CER, DER:
 		n, err = bcdIntegerWrite(c, pkt, o)
@@ -306,7 +306,7 @@ func (c *integerCodec[T]) write(pkt Packet, o *Options) (n int, err error) {
 	return
 }
 
-func bcdIntegerWrite[T any](c *integerCodec[T], pkt Packet, o *Options) (off int, err error) {
+func bcdIntegerWrite[T any](c *integerCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
 	intVal := toInt(c.val)
@@ -339,7 +339,7 @@ func bcdIntegerWrite[T any](c *integerCodec[T], pkt Packet, o *Options) (off int
 }
 
 // NOTE: called for both Integer and Enumerated
-func (c *integerCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
+func (c *integerCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
 	switch pkt.Type() {
 	case BER, CER, DER:
 		err = bcdIntegerRead(c, pkt, tlv, o)
@@ -349,7 +349,7 @@ func (c *integerCodec[T]) read(pkt Packet, tlv TLV, o *Options) (err error) {
 	return
 }
 
-func bcdIntegerRead[T any](c *integerCodec[T], pkt Packet, tlv TLV, o *Options) error {
+func bcdIntegerRead[T any](c *integerCodec[T], pkt PDU, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)

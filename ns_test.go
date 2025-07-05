@@ -86,7 +86,7 @@ func TestNumericString_codecov(_ *testing.T) {
 	convertToNumericString(NumericString(``))
 }
 
-func ExampleNumericString_dER() {
+func ExampleNumericString_bER() {
 	// Parse value into new NumericString instance
 	ns, err := NewNumericString("0 123 456 789")
 	if err != nil {
@@ -94,14 +94,14 @@ func ExampleNumericString_dER() {
 		return
 	}
 
-	// DER encode NumericString instance
-	var pkt Packet
-	if pkt, err = Marshal(ns, With(DER)); err != nil {
+	// BER encode NumericString instance
+	var pkt PDU
+	if pkt, err = Marshal(ns, With(BER)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	// Decode DER Packet into new NumericString instance
+	// Decode BER PDU into new NumericString instance
 	var ns2 NumericString
 	if err = Unmarshal(pkt, &ns2); err != nil {
 		fmt.Println(err)
@@ -133,13 +133,13 @@ func TestNumericString_encodingRules(t *testing.T) {
 			od.IsZero()
 
 			// encode our NumericString instance
-			var pkt Packet
+			var pkt PDU
 			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 			}
 			t.Logf("%T.%s hex::%s\n", od, rule, pkt.Hex())
 
-			// Decode our Packet into a new NumericString instance
+			// Decode our PDU into a new NumericString instance
 			var other NumericString
 			if err = Unmarshal(pkt, &other); err != nil {
 				t.Fatalf("%s[%d] failed [%s decoding]: %v", t.Name(), idx, rule, err)

@@ -63,7 +63,7 @@ func NewIA5String(x any, constraints ...Constraint[IA5String]) (ia5 IA5String, e
 	err = IA5Spec(_ia5)
 	if len(constraints) > 0 && err == nil {
 		var group ConstraintGroup[IA5String] = constraints
-		err = group.Validate(_ia5)
+		err = group.Constrain(_ia5)
 	}
 
 	if err == nil {

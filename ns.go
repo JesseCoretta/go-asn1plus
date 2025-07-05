@@ -56,7 +56,7 @@ func NewNumericString(x any, constraints ...Constraint[NumericString]) (ns Numer
 		err = NumericSpec(_ns)
 		if len(constraints) > 0 && err == nil {
 			var group ConstraintGroup[NumericString] = constraints
-			err = group.Validate(_ns)
+			err = group.Constrain(_ns)
 		}
 
 		if err == nil {

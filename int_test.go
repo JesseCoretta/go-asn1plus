@@ -321,14 +321,14 @@ func TestCustomInteger_withControls(t *testing.T) {
 		},
 		nil)
 
-	pkt, err := Marshal(cust, With(CER))
+	pkt, err := Marshal(cust, With(BER))
 	if err != nil {
-		t.Fatalf("%s failed [CER encoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
 	var next customInteger
 	if err = Unmarshal(pkt, &next); err != nil {
-		t.Fatalf("%s failed [CER decoding]: %v", t.Name(), err)
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }
