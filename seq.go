@@ -12,9 +12,9 @@ import "reflect"
 marshalSequence returns an error following an
 attempt to marshal sequence (struct) v into pkt.
 */
-func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options, depth int) (err error) {
+func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) {
 	if isSet(v.Interface(), globalOpts) {
-		err = marshalSet(v, pkt, globalOpts, depth)
+		err = marshalSet(v, pkt, globalOpts)
 		return
 	}
 
@@ -45,16 +45,23 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options, depth int) (
 			if fieldOpts, err = extractOptions(field, i, auto); err != nil {
 				return
 			}
+			fieldOpts.copyDepth(globalOpts)
 
 			fv := v.Field(i)
+
+			if fieldOpts.hasRegisteredDefault() && fieldOpts.defaultEquals(fv.Interface()) {
+				// omit this field from the sequence
+				continue
+			}
 
 			if err = checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional); err == nil {
 				if ch, ok := fv.Interface().(Choice); ok {
 					// CHOICE field: do our explicit CHOICE handling.
-					err = marshalSequenceChoiceField(fieldOpts, ch, sub, depth)
+					err = marshalSequenceChoiceField(fieldOpts, ch, sub)
 				} else {
 					// For all non-CHOICE fields, recurse marshalSequence
-					err = marshalValue(fv, sub, fieldOpts, depth+1)
+					fieldOpts.incDepth()
+					err = marshalValue(fv, sub, fieldOpts)
 				}
 			}
 		}
@@ -62,7 +69,7 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options, depth int) (
 
 	if err == nil {
 		// wrap the entire sequence from the sub-packet.
-		err = marshalSequenceWrap(sub, pkt, globalOpts, depth, seqTag)
+		err = marshalSequenceWrap(sub, pkt, globalOpts, seqTag)
 	}
 
 	return
@@ -71,14 +78,14 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options, depth int) (
 func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool) (err error) {
 	if !optional {
 		if fv.Kind() == reflect.Invalid || fv.Interface() == nil {
-			err = mkerrf("marshalSequence: missing required value for field ", name)
+			err = mkerrf(errorSeqEmptyNonOptField.Error(), ": ", name)
 		}
 	}
 
 	return
 }
 
-func marshalSequenceWrap(sub, pkt PDU, opts *Options, depth, seqTag int) (err error) {
+func marshalSequenceWrap(sub, pkt PDU, opts *Options, seqTag int) (err error) {
 	sub.SetOffset(0)
 	content := sub.Data()
 
@@ -86,7 +93,7 @@ func marshalSequenceWrap(sub, pkt PDU, opts *Options, depth, seqTag int) (err er
 	tag := TagSequence
 
 	if opts != nil {
-		if depth == 1 {
+		if opts.depth == 1 {
 			class = opts.Class()
 			tag = seqTag
 		} else if opts.HasTag() {
@@ -101,7 +108,7 @@ func marshalSequenceWrap(sub, pkt PDU, opts *Options, depth, seqTag int) (err er
 	return
 }
 
-func marshalSequenceChoiceField(opts *Options, ch Choice, sub PDU, depth int) (err error) {
+func marshalSequenceChoiceField(opts *Options, ch Choice, sub PDU) (err error) {
 	if ch.Tag != nil {
 		opts.choiceTag = ch.Tag
 		opts.SetClass(ClassContextSpecific)
@@ -110,16 +117,17 @@ func marshalSequenceChoiceField(opts *Options, ch Choice, sub PDU, depth int) (e
 	if isPrimitive(ch.Value) {
 		err = marshalSequenceChoiceFieldPrimitive(opts, ch, sub)
 	} else {
-		err = marshalSequenceChoiceFieldNonPrimitive(opts, ch, sub, depth)
+		err = marshalSequenceChoiceFieldNonPrimitive(opts, ch, sub)
 	}
 
 	return
 }
 
-func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub PDU, depth int) (err error) {
+func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub PDU) (err error) {
 	tmp := sub.Type().New()
 	defer tmp.Free()
-	if err = marshalValue(refValueOf(ch.Value), tmp, opts, depth+1); err == nil {
+	opts.incDepth()
+	if err = marshalValue(refValueOf(ch.Value), tmp, opts); err == nil {
 		innerEnc := tmp.Data()
 
 		// Now build an explicit wrapper using opts.
@@ -224,6 +232,7 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 			opts.ChoicesMap = choicesMap
 
 			fv := v.Field(i)
+
 			switch fv.Interface().(type) {
 			case Choice, *Choice:
 				var alt Choice
@@ -232,9 +241,15 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 				}
 			default:
 				if err = unmarshalValue(sub, fv, opts); err != nil {
-					err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
-					if berr := checkSequenceFieldCriticality(field.Name, fv, opts.Optional); berr == nil {
-						err = berr
+					if opts.Default != nil && opts.defaultKeyword != "" {
+						fv.Set(reflect.ValueOf(opts.Default))
+						err = nil
+					} else {
+						// TODO: I still don't like this.
+						err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
+						if berr := checkSequenceFieldCriticality(field.Name, fv, opts.Optional); berr == nil {
+							err = berr
+						}
 					}
 				}
 			}

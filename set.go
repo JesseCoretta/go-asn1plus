@@ -33,7 +33,7 @@ func isSet(target any, opts *Options) (set bool) {
 marshalSet returns an error following an attempt to encode a SET.
 Each element is encoded with its own implicit defaults.
 */
-func marshalSet(v reflect.Value, pkt PDU, opts *Options, depth int) (err error) {
+func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	v = derefValuePtr(v)
 	if v.Kind() == reflect.Struct {
 		found := false
@@ -63,7 +63,8 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options, depth int) (err error) 
 		tmp := pkt.Type().New()
 		subOpts := clearChildOpts(opts)
 
-		if err = marshalValue(v.Index(i), tmp, subOpts, depth+1); err == nil {
+		subOpts.incDepth()
+		if err = marshalValue(v.Index(i), tmp, subOpts); err == nil {
 			elements = append(elements, tmp.Data())
 		}
 	}

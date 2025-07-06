@@ -102,7 +102,7 @@ func TestSequence_codecov(_ *testing.T) {
 	type badSequence struct {
 		PrintableString `asn1:"AUTOMATIC,EXPLICIT"`
 	}
-	marshalSequence(refValueOf(badSequence{PrintableString("Yo")}), &BERPacket{}, &Options{Automatic: true, Explicit: true}, 0)
+	marshalSequence(refValueOf(badSequence{PrintableString("Yo")}), &BERPacket{}, &Options{Automatic: true, Explicit: true})
 
 	type choiceSequence struct {
 		PrintableString `asn1:"AUTOMATIC,EXPLICIT"`

@@ -29,13 +29,15 @@ type Options struct {
 	Choices     string             // Name of ChoicesMap key for the associated Choices of a single SEQUENCE field or other context
 	Identifier  string             // "ia5", "numeric", "utf8" etc. (for string fields)
 	Constraints []string           // references to registered Constraint/ConstraintGroup instances
-	Default     any                // default value
+	Default     any                // manual default value (not recommended, use RegisterDefaultValue)
 	ChoicesMap  map[string]Choices // map of Choices for any number of Choice fields (maps to tag "choices:<name>")
 
 	tag, // if non-nil, indicates an alternative tag number.
 	class, // represents the ASN.1 class: universal, application, context-specific, or private.
 	choiceTag *int // tag for choice selection, if provided
-	unidentified []string // for unidentified or superfluous keywords
+	depth          int      // recursion depth
+	defaultKeyword string   // the discovered DEFAULT keyword for registered lookup
+	unidentified   []string // for unidentified or superfluous keywords
 }
 
 func implicitOptions() *Options {
@@ -78,12 +80,25 @@ func stringifyDefault(d any) string {
 	}
 }
 
+func (r *Options) copyDepth(o *Options) {
+	if r != nil && o != nil {
+		r.depth = o.depth
+	}
+}
+
+func (r *Options) incDepth() {
+	if r != nil {
+		r.depth++
+	}
+}
+
 /*
 String returns the string representation of the receiver instance.
 */
 func (r Options) String() string {
 	var parts []string
 
+	addStringConfigValue(&parts, r.depth > 0, "depth:"+itoa(r.depth))
 	addStringConfigValue(&parts, r.Tag() >= 0, "tag:"+itoa(r.Tag()))
 	addStringConfigValue(&parts, validClass(r.Class()) && r.Class() > 0, lc(ClassNames[r.Class()]))
 	if r.choiceTag != nil {
@@ -110,6 +125,12 @@ func (r Options) String() string {
 
 	return join(parts, ",")
 }
+
+func (r Options) hasRegisteredDefault() bool {
+	return r.Default != nil && r.defaultKeyword != ""
+}
+
+func (r Options) defaultEquals(x any) bool { return deepEq(r.Default, x) }
 
 /*
 NewOptions returns a new instance of [Options] alongside an error
@@ -246,15 +267,29 @@ func (r *Options) parseOptionDefault(token string) {
 	}
 
 	defStr := trimPfx(token, "default:")
+
+	if hasPfx(defStr, `:`) {
+		// Double-colon found. Use defaults
+		// registry instead of taking the
+		// inefficient legacy path.
+		defStr = trimPfx(defStr, `:`)
+		defVal, err := lookupDefaultValue(defStr)
+		if err == nil {
+			r.defaultKeyword = defStr
+			r.Default = defVal
+		}
+		return
+	}
+
+	// legacy path is inefficient - use of default
+	// registry is highly recommended.
+
 	switch {
 	case isNumber(defStr):
 		r.Default, _ = NewInteger(defStr)
 	case isBool(defStr):
 		r.Default, _ = pbool(defStr)
 	default:
-		// TODO : string fall-back is too broad.
-		// Add other cases to reduce ineffective
-		// use of string.
 		r.Default = defStr
 	}
 }

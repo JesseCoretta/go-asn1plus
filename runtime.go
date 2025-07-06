@@ -37,7 +37,7 @@ func Marshal(x any, with ...EncodingOption) (pkt PDU, err error) {
 	if err = marshalCheckBadOptions(cfg.rule, cfg.opts); err == nil {
 		cfg.opts = marshalPrepareSpecialOptions(x, cfg.opts)
 		pkt = cfg.rule.New()
-		err = marshalValue(reflect.ValueOf(x), pkt, cfg.opts, 0)
+		err = marshalValue(reflect.ValueOf(x), pkt, cfg.opts)
 	}
 
 	return
@@ -96,8 +96,11 @@ func marshalCheckBadOptions(rule EncodingRule, o *Options) (err error) {
 	return
 }
 
-func marshalValue(v reflect.Value, pkt PDU, opts *Options, depth int) (err error) {
-	defer debugPath(v, opts, newLItem(depth, "depth"))(newLItem(err))
+func marshalValue(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, pkt, opts)
+	defer func() {
+		debugExit(newLItem(err))
+	}()
 
 	switch {
 	case v.Kind() == reflect.Invalid:
@@ -109,62 +112,76 @@ func marshalValue(v reflect.Value, pkt PDU, opts *Options, depth int) (err error
 	}
 	v = derefValuePtr(v)
 
-	// CHOICE unwrap
-	if ch, ok := v.Interface().(Choice); ok {
-		debugChoice(ch)
-		chv := refValueOf(ch.Value)
-		if !ch.Explicit {
-			err = marshalValue(chv, pkt, opts, depth+1)
-			debugChoice(ch, newLItem(err))
-			return
-		} else if ch.Tag == nil {
-			err = mkerr("choice tag undefined")
-			debugChoice(ch, newLItem(err))
-			return
-		}
-
-		tmp := pkt.Type().New()
-		debugTrace(newLItem(tmp, "ALLOC::"+pkt.Type().String()))
-
-		if err = marshalValue(chv, tmp, opts, depth+1); err == nil {
-			inner := tmp.Data()
-			cht := *ch.Tag
-			id := byte(ClassContextSpecific<<6) | 0x20 | byte(cht)
-			debugChoice(newLItem(id, "CHOICE tag"))
-			pkt.Append(id)
-			bufPtr := getBuf()
-			encodeLengthInto(pkt.Type(), bufPtr, len(inner))
-			pkt.Append(*bufPtr...)
-			putBuf(bufPtr)
-			pkt.Append(inner...)
-			debugTrace(newLItem(inner, "APPEND::"+pkt.Type().String()))
-		}
-		return
-	}
-
 	var handled bool
 
-	// Primitive path
-	if handled, err = marshalPrimitive(v, pkt, opts); handled {
-		return err
-	}
-
-	// Adapter path
-	if handled, err = marshalViaAdapter(v, pkt, opts); handled {
-		return err
+	for _, funk := range []func(reflect.Value, PDU, *Options) (bool, error){
+		marshalChoice,     // Choice (recursion) path
+		marshalPrimitive,  // ASN.1 Primitive path
+		marshalViaAdapter, // Adapter path
+	} {
+		if handled, err = funk(v, pkt, opts); handled {
+			return
+		}
 	}
 
 	// Composite types
 	switch v.Kind() {
 	case reflect.Slice:
-		err = marshalSet(v, pkt, opts, depth+1)
+		opts.incDepth()
+		err = marshalSet(v, pkt, opts)
 	case reflect.Struct:
-		err = marshalSequence(v, pkt, opts, depth+1)
+		opts.incDepth()
+		err = marshalSequence(v, pkt, opts)
 	default:
 		err = mkerrf("marshalValue: unsupported type ", v.Kind().String())
 	}
 	pkt.SetOffset(0)
-	return err
+
+	return
+}
+
+// CHOICE unwrap
+func marshalChoice(v reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
+	ch, ok := v.Interface().(Choice)
+	if !ok {
+		return // no error, not handled
+	}
+	handled = true
+
+	debugChoice(ch)
+	chv := refValueOf(ch.Value)
+	if !ch.Explicit {
+		opts.incDepth()
+		err = marshalValue(chv, pkt, opts)
+		debugChoice(ch, newLItem(err))
+		return
+	} else if ch.Tag == nil {
+		err = mkerr("choice tag undefined")
+		debugChoice(ch, newLItem(err))
+		return
+	}
+
+	tmp := pkt.Type().New()
+	debugEvent(EventChoice|EventTrace,
+		newLItem(tmp, "ALLOC::"+pkt.Type().String()))
+
+	opts.incDepth()
+	if err = marshalValue(chv, tmp, opts); err == nil {
+		inner := tmp.Data()
+		cht := *ch.Tag
+		id := byte(ClassContextSpecific<<6) | 0x20 | byte(cht)
+		debugChoice(newLItem(id, "CHOICE tag"))
+		pkt.Append(id)
+		bufPtr := getBuf()
+		encodeLengthInto(pkt.Type(), bufPtr, len(inner))
+		pkt.Append(*bufPtr...)
+		putBuf(bufPtr)
+		pkt.Append(inner...)
+		debugEvent(EventChoice|EventTrace,
+			newLItem(inner, "APPEND::"+pkt.Type().String()))
+	}
+
+	return
 }
 
 func marshalViaAdapter(v reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {

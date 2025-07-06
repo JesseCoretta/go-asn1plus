@@ -161,8 +161,8 @@ func TestSet_codecov(_ *testing.T) {
 		Oct: OctetString(`Hello world`),
 		PS:  PrintableString(`Hello world`),
 	}
-	_ = marshalSet(refValueOf(struct{}{}), nil, nil, 0)
-	_ = marshalSet(refValueOf(rune(66)), nil, nil, 0)
+	_ = marshalSet(refValueOf(struct{}{}), nil, nil)
+	_ = marshalSet(refValueOf(rune(66)), nil, nil)
 
 	type incompatibleSequence struct {
 		Byte byte
