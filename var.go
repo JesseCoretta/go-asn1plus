@@ -133,6 +133,7 @@ var boolKeywords = map[string]struct{}{
 	"optional":   {},
 	"automatic":  {},
 	"set":        {},
+	"sequence":   {},
 	"omitempty":  {},
 	"indefinite": {},
 }
