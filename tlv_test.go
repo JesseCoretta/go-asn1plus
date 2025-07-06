@@ -1,9 +1,6 @@
 package asn1plus
 
-import (
-	"reflect"
-	"testing"
-)
+import "testing"
 
 func TestTLVEqual_BER(t *testing.T) {
 	a := TLV{
@@ -47,7 +44,7 @@ func TestTLVEncode(t *testing.T) {
 	encoded := encodeTLV(a, nil)
 	// Expect: identifier octet: 0x04 (0<<6 | 0x04), then length 0x06, then "Hello0".
 	expected := append([]byte{0x04, 0x06}, []byte("Hello0")...)
-	if !reflect.DeepEqual(encoded, expected) {
+	if !deepEq(encoded, expected) {
 		t.Errorf("TLV Encode() = %x; want %x", encoded, expected)
 	}
 }
@@ -90,7 +87,7 @@ func TestBERWriteTLV(t *testing.T) {
 		t.Fatalf("writeTLV error: %v", err)
 	}
 	expected := encodeTLV(tlv, nil)
-	if !reflect.DeepEqual(pkt.data, expected) {
+	if !deepEq(pkt.data, expected) {
 		t.Errorf("berWriteTLV: pkt.data = %x; want %x", pkt.data, expected)
 	}
 	if pkt.Offset() != len(pkt.data) {
