@@ -18,7 +18,7 @@ one or more of:
   - [EncodingOption] (e.g.: to declare a value to be of an INDEFINITE-LENGTH, or for a class override)
 
 If an [EncodingRule] is not specified, the value of [DefaultEncoding] is used,
-which is [DER] by default.
+which is [BER] by default.
 
 See also [Unmarshal] and [With].
 */

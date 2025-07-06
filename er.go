@@ -148,7 +148,7 @@ It is unnecessary -- but harmless -- to include an [EncodingRule] when submittin
 [Unmarshal], as the input [PDU] instance knows what [EncodingRule] it implements.
 */
 func With(args ...any) EncodingOption {
-	var rule EncodingRule = invalidEncodingRule
+	var rule EncodingRule = DefaultEncoding
 	var opts *Options
 
 	for i := 0; i < len(args); i++ {
