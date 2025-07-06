@@ -84,6 +84,7 @@ This package relies upon the following packages from the standard library:
   - `math/bits`
   - `math/rand` <sup><sup>‡</sup></sup>
   - `os` <sup><sup>‡</sup></sup>
+  - `reflect`
   - `runtime` <sup><sup>‡</sup></sup>
   - `slices`
   - `strconv`
@@ -102,8 +103,8 @@ This package relies upon the following packages from the `golang/x/exp` library:
   - `constraints`<sup><sup>⹋</sup></sup>
 
 <sup>
-  <sup><b>†</b>   - used ONLY for testing/examples</sup><br>
-  <sup><b>‡</b>  - used ONLY when debugging is enabled</sup><br>
+  <sup><b>†</b> - used ONLY for testing/examples</sup><br>
+  <sup><b>‡</b> - used ONLY when debugging is enabled</sup><br>
   <sup><b>⹋</b> - used ONLY when prefabricated constraints are loaded</sup><br>
 </sup>
 
