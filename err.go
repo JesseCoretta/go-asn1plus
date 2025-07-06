@@ -30,7 +30,17 @@ var (
 	errorRuleNotImplemented    error = mkerr("encoding rule not yet implemented or is deactivated")
 	errorNoEncodingRules       error = mkerr("no encoding rules loaded")
 	errorCodecNotFound         error = mkerr("codec not found")
+	errorDefaultNotFound       error = mkerr("defaultValue not found")
+	errorSeqEmptyNonOptField   error = mkerr("SEQUENCE: missing required value for field")
 )
+
+func errorNamedDefaultNotFound(name string) (err error) {
+	if len(name) == 0 {
+		name = "unknown default"
+	}
+	err = mkerrf(errorDefaultNotFound.Error(), ": ", name)
+	return
+}
 
 func errorBadTypeForConstructor(asn1Type string, inputType any) (err error) {
 	var inName string = "<nil>" // sensible default
