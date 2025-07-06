@@ -435,11 +435,11 @@ func TestPDU_codecov(_ *testing.T) {
 	opts.SetClass(3)
 	marshalPrepareSpecialOptions(EmbeddedPDV{}, &opts)
 
-	marshalValue(refValueOf(nil), &BERPacket{}, nil, 0)
+	marshalValue(refValueOf(nil), &BERPacket{}, nil)
 	var nill *struct{}
-	marshalValue(refValueOf(nill), &BERPacket{}, nil, 0)
-	marshalValue(refValueOf(OctetString("test")), &BERPacket{}, nil, 0)
-	marshalValue(refValueOf(Choice{Value: nil, Explicit: true}), &BERPacket{}, nil, 0)
+	marshalValue(refValueOf(nill), &BERPacket{}, nil)
+	marshalValue(refValueOf(OctetString("test")), &BERPacket{}, nil)
+	marshalValue(refValueOf(Choice{Value: nil, Explicit: true}), &BERPacket{}, nil)
 
 	unmarshalHandleTag("octet", &BERPacket{}, &TLV{Tag: 4, Length: 4000}, &opts)
 	berBytes := []byte{
