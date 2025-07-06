@@ -61,6 +61,7 @@ var (
 	newBigInt  func(int64) *big.Int                     = big.NewInt
 	refTypeOf  func(any) reflect.Type                   = reflect.TypeOf
 	refValueOf func(any) reflect.Value                  = reflect.ValueOf
+	deepEq	   func(any,any) bool			    = reflect.DeepEqual
 )
 
 /*

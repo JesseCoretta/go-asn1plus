@@ -4,7 +4,6 @@ package asn1plus
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -347,7 +346,7 @@ func TestWrapOIDCtor(t *testing.T) {
 	}
 
 	want := testMust(NewObjectIdentifier(1, 2, 3))
-	if !reflect.DeepEqual(oid, want) {
+	if !deepEq(oid, want) {
 		t.Fatalf("returned OID mismatch: got %v want %v", oid, want)
 	}
 

@@ -3,7 +3,6 @@ package asn1plus
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"testing"
 )
 
@@ -160,7 +159,7 @@ func TestRightAlign(t *testing.T) {
 	}
 	rightAligned := bs.RightAlign()
 	expected := []byte{42}
-	if !reflect.DeepEqual(rightAligned, expected) {
+	if !deepEq(rightAligned, expected) {
 		t.Errorf("RightAlign: expected %v, got %v", expected, rightAligned)
 	}
 }
@@ -230,7 +229,7 @@ func TestNamedBits_SetUnsetAndNames(t *testing.T) {
 
 	expectedNames := []string{"alpha", "gamma"}
 	gotNames := nb.Names()
-	if !reflect.DeepEqual(gotNames, expectedNames) {
+	if !deepEq(gotNames, expectedNames) {
 		t.Errorf("Expected Names() = %v, got %v", expectedNames, gotNames)
 	}
 
@@ -241,7 +240,7 @@ func TestNamedBits_SetUnsetAndNames(t *testing.T) {
 
 	expectedNames = []string{"gamma"}
 	gotNames = nb.Names()
-	if !reflect.DeepEqual(gotNames, expectedNames) {
+	if !deepEq(gotNames, expectedNames) {
 		t.Errorf("After unshift, expected Names() = %v, got %v", expectedNames, gotNames)
 	}
 }

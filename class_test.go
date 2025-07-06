@@ -2,7 +2,6 @@ package asn1plus
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 )
 
@@ -110,7 +109,7 @@ func TestClass(t *testing.T) {
 	}
 
 	got, ok := cl.Field("&answer")
-	if !ok || !reflect.DeepEqual(*got, valCF) {
+	if !ok || !deepEq(*got, valCF) {
 		t.Fatalf("Field lookup mismatch: ok=%v got=%+v want=%+v", ok, got, valCF)
 	}
 
