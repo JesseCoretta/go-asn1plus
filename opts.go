@@ -23,7 +23,8 @@ type Options struct {
 	Explicit    bool               // if true, wrap the field in an explicit tag
 	Optional    bool               // if true, the field is optional
 	OmitEmpty   bool               // whether to ignore empty slice values
-	Set         bool               // if true, encode as SET instead of SEQUENCE (for collections)
+	Set         bool               // if true, encode as SET instead of SEQUENCE (for collections); mutex of Sequence
+	Sequence    bool               // If true, encode as SEQUENCE OF instead of SET OF; mutex of Set
 	Indefinite  bool               // whether a field is known to be of an indefinite length
 	Automatic   bool               // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
 	Choices     string             // Name of ChoicesMap key for the associated Choices of a single SEQUENCE field or other context
@@ -108,6 +109,7 @@ func (r Options) String() string {
 	addStringConfigValue(&parts, r.Optional, "optional")
 	addStringConfigValue(&parts, r.Automatic, "automatic")
 	addStringConfigValue(&parts, r.Set, "set")
+	addStringConfigValue(&parts, r.Sequence, "sequence")
 
 	// constraints (leave the single loop ‑ counts as one branch)
 	for _, c := range r.Constraints {
@@ -235,6 +237,10 @@ func (r *Options) setBool(name string) {
 		r.Optional = true
 	case name == "set":
 		r.Set = true
+		r.Sequence = false
+	case name == "sequence":
+		r.Set = false
+		r.Sequence = true
 	case name == "indefinite":
 		r.Indefinite = true
 	}

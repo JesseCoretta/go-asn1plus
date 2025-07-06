@@ -75,6 +75,30 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 	return
 }
 
+func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
+	sub := pkt.Type().New()
+	for i := 0; i < v.Len() && err == nil; i++ {
+		err = marshalValue(v.Index(i), sub, implicitOptions())
+	}
+
+	if err == nil {
+		// Construct the identifier byte: class + constructed bit + tag number
+		id := byte(ClassUniversal<<6) | 0x20 | byte(TagSequence)
+		pkt.Append(id)
+		content := sub.Data()
+
+		// Encode the length
+		bufPtr := getBuf()
+		encodeLengthInto(pkt.Type(), bufPtr, len(content))
+		pkt.Append(*bufPtr...)
+		putBuf(bufPtr)
+
+		pkt.Append(content...)
+	}
+
+	return
+}
+
 func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool) (err error) {
 	if !optional {
 		if fv.Kind() == reflect.Invalid || fv.Interface() == nil {

@@ -6,6 +6,56 @@ import (
 	"testing"
 )
 
+func TestSequenceOf_roundTrip(t *testing.T) {
+	type partialAttribute struct {
+		Type OctetString
+		Vals []OctetString
+	}
+
+	type modifyRequestChange struct {
+		Operation    Enumerated
+		Modification partialAttribute
+	}
+
+	mrc := []modifyRequestChange{
+		{
+			Operation: 0,
+			Modification: partialAttribute{
+				Type: OctetString("objectClass"),
+				Vals: []OctetString{
+					OctetString("account"),
+				},
+			},
+		},
+		{
+			Operation: 2,
+			Modification: partialAttribute{
+				Type: OctetString("cn"),
+				Vals: []OctetString{
+					OctetString("xyz"),
+				},
+			},
+		},
+	}
+
+	opts := &Options{Sequence: true}
+	pkt, err := Marshal(mrc, With(opts))
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	//strb := newStrBuilder()
+	//pkt.Dump(&strb)
+	//t.Logf("BER encoding: %s\n", strb.String())
+
+	var mrc2 []modifyRequestChange
+	if err = Unmarshal(pkt, &mrc2, With(opts)); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	t.Logf("%#v\n", mrc2)
+}
+
 func TestMarshal_SequenceEncodingRulesWith(t *testing.T) {
 	type MySequence struct {
 		Field1 OctetString

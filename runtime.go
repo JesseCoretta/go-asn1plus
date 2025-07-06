@@ -128,7 +128,11 @@ func marshalValue(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	switch v.Kind() {
 	case reflect.Slice:
 		opts.incDepth()
-		err = marshalSet(v, pkt, opts)
+		if opts != nil && opts.Sequence {
+			err = marshalSequenceOfSlice(v, pkt, opts)
+		} else {
+			err = marshalSet(v, pkt, opts)
+		}
 	case reflect.Struct:
 		opts.incDepth()
 		err = marshalSequence(v, pkt, opts)
@@ -390,11 +394,54 @@ func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
 
 	switch v.Kind() {
 	case reflect.Slice:
-		err = unmarshalSetBranch(v, pkt, opts)
+		if opts.Sequence {
+			err = unmarshalSequenceBranch(v, pkt, opts)
+		} else {
+			err = unmarshalSetBranch(v, pkt, opts)
+		}
 	case reflect.Struct:
 		err = unmarshalSequence(v, pkt, opts)
 	default:
 		err = mkerrf("unmarshalValue: unsupported type ", v.Kind().String())
+	}
+
+	return
+}
+
+func unmarshalSequenceBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	var tlv TLV
+	if tlv, err = pkt.TLV(); err != nil {
+		err = mkerrf("unmarshalSequenceBranch: no SEQUENCE header: ", err.Error())
+		return
+	}
+	if tlv.Class != ClassUniversal || tlv.Tag != TagSequence {
+		err = mkerrf("expected SEQUENCE (16); got ", itoa(tlv.Class), "/", itoa(tlv.Tag))
+		return
+	}
+	start := pkt.Offset()
+	end := start + tlv.Length
+	if end > pkt.Len() {
+		err = mkerr("unmarshalSequenceBranch: truncated content")
+		return
+	}
+
+	data := pkt.Data()[start:end]
+	pkt.SetOffset(end)
+
+	sub := pkt.Type().New(data...)
+	sub.SetOffset(0)
+
+	elemOpts := *opts
+	elemOpts.Sequence = false
+
+	elemType := v.Type().Elem()
+	for sub.Offset() < len(data) {
+		// create a zero‐value element
+		elem := reflect.New(elemType).Elem()
+		if err = unmarshalValue(sub, elem, &elemOpts); err != nil {
+			return mkerrf("unmarshalSequenceBranch: element decode failed: ", err.Error())
+		}
+		v.Set(reflect.Append(v, elem))
 	}
 
 	return
