@@ -502,10 +502,8 @@ func fmtPDUArg(v PDU) (s string) {
 		s = v.Type().String() + " PACKET"
 		off := "[OFF:" + itoa(v.Offset()) + ", LEN:" + itoa(v.Len()) + "]"
 		if ok {
-			b := newStrBuilder()
 			if v.Len() > 0 {
-				v.Dump(&b)
-				s += " DUMP " + off + ":\n" + b.String()
+				s += " HEX " + off + ":" + v.Hex()
 			} else {
 				s += " <empty, initialized>"
 			}
@@ -528,7 +526,7 @@ func init() {
 					sp[i] = "seq/set"
 				}
 				vars = append(vars, sp[i])
-			} else if n <= 65535 {
+			} else if n <= int(EventAll) {
 				if n < 0 {
 					vars = []any{int(EventAll)}
 					break
