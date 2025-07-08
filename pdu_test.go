@@ -439,7 +439,6 @@ func TestPDU_codecov(_ *testing.T) {
 	var nill *struct{}
 	marshalValue(refValueOf(nill), &BERPacket{}, nil)
 	marshalValue(refValueOf(OctetString("test")), &BERPacket{}, nil)
-	marshalValue(refValueOf(Choice{Value: nil, Explicit: true}), &BERPacket{}, nil)
 
 	unmarshalHandleTag("octet", &BERPacket{}, &TLV{Tag: 4, Length: 4000}, &opts)
 	berBytes := []byte{
@@ -909,21 +908,23 @@ func TestConstructorMap_ShouldPanic(t *testing.T) {
 	panicOnMissingEncodingRuleConstructor(map[EncodingRule]func(...byte) PDU{})
 }
 
+/*
 func BenchmarkEncodeDirectoryString(b *testing.B) {
-	dir := Choice{Value: PrintableString("Hello")}
+	dir := NewChoice(PrintableString("Hello"))
 	for n := 0; n < b.N; n++ {
 		_, _ = Marshal(dir)
 	}
 }
 
 func BenchmarkDecodeDirectoryString(b *testing.B) {
-	pkt, _ := Marshal(Choice{Value: PrintableString("Hello")})
+	pkt, _ := Marshal(NewChoice(PrintableString("Hello")))
 	var out Choice
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		_ = Unmarshal(pkt, &out)
 	}
 }
+*/
 
 var testPktPool = sync.Pool{New: func() any { return &testPacket{} }}
 
