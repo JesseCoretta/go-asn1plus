@@ -113,7 +113,7 @@ func (r BERPacket) Data() []byte { return r.data }
 Append appends data to the receiver instance.
 */
 func (r *BERPacket) Append(data ...byte) {
-	id := newLItem(r.ID(), r.Type(), "PDU")
+	id := newLItem(r.id, r.Type(), "PDU")
 	debugEnter(data)
 	defer func() { debugExit() }()
 
@@ -197,9 +197,7 @@ func (r *BERPacket) PeekTLV() (TLV, error) {
 	var tlv TLV
 	var err error
 	debugEnter(r)
-	defer func() {
-		debugExit(tlv, newLItem(err))
-	}()
+	defer func() { debugExit(tlv, newLItem(err)) }()
 
 	sub := r.Type().New(r.Data()...)
 	sub.(*BERPacket).id = r.id
@@ -222,9 +220,7 @@ func (r *BERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }
 
 func newBERPacket(src ...byte) (pkt PDU) {
 	debugEnter(src)
-	defer func() {
-		debugExit(pkt)
-	}()
+	defer func() { debugExit(pkt) }()
 
 	b := bcdPktPool.Get().(*BERPacket)
 	b.id = makePacketID()
