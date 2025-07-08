@@ -55,9 +55,10 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 			}
 
 			if err = checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional); err == nil {
-				if ch, ok := fv.Interface().(Choice); ok {
+				if isChoice(fv, fieldOpts) {
+					err = marshalChoiceWrapper(fv, sub, fieldOpts, fv)
 					// CHOICE field: do our explicit CHOICE handling.
-					err = marshalSequenceChoiceField(fieldOpts, ch, sub)
+					//err = marshalSequenceChoiceField(fieldOpts, ch, sub)
 				} else {
 					// For all non-CHOICE fields, recurse marshalSequence
 					fieldOpts.incDepth()
@@ -132,82 +133,6 @@ func marshalSequenceWrap(sub, pkt PDU, opts *Options, seqTag int) (err error) {
 	return
 }
 
-func marshalSequenceChoiceField(opts *Options, ch Choice, sub PDU) (err error) {
-	if ch.Tag != nil {
-		opts.choiceTag = ch.Tag
-		opts.SetClass(ClassContextSpecific)
-	}
-
-	if isPrimitive(ch.Value) {
-		err = marshalSequenceChoiceFieldPrimitive(opts, ch, sub)
-	} else {
-		err = marshalSequenceChoiceFieldNonPrimitive(opts, ch, sub)
-	}
-
-	return
-}
-
-func marshalSequenceChoiceFieldNonPrimitive(opts *Options, ch Choice, sub PDU) (err error) {
-	tmp := sub.Type().New()
-	defer tmp.Free()
-	opts.incDepth()
-	if err = marshalValue(refValueOf(ch.Value), tmp, opts); err == nil {
-		innerEnc := tmp.Data()
-
-		// Now build an explicit wrapper using opts.
-		// The identifier for an explicit context-specific tag is computed as:
-		//    (opts.Class << 6) | 0x20 | byte((*opts.choiceTag))
-		// use context tag [N] (opts.choiceTag), and **NOT** the type tag
-		id := marshalSequenceSetChoiceTag(opts.Class(), opts.choiceTag)
-		sub.Append(id)
-		bufPtr := getBuf()
-		encodeLengthInto(sub.Type(), bufPtr, len(innerEnc))
-		sub.Append(*bufPtr...)
-		putBuf(bufPtr)
-		sub.Append(innerEnc...)
-	}
-
-	return
-}
-
-func marshalSequenceChoiceFieldPrimitive(opts *Options, ch Choice, sub PDU) (err error) {
-	// COVERAGE: unreachable
-	//if c, ok := toPtr(refValueOf(ch.Value)).Interface().(codecRW); ok {
-	//_, err = c.write(sub, opts)
-	if bx, ok := createCodecForPrimitive(ch.Value); ok {
-		_, err = bx.write(sub, opts)
-	} else {
-		err = mkerr("marshalSequence: no codec for CHOICE primitive")
-	}
-
-	if err == nil && ch.Explicit {
-		inner := sub.Data()[sub.Offset():]
-		// rebuild the sub-packet to insert the wrapper
-		wrapped := sub.Type().New()
-		wrapped.Append(marshalSequenceSetChoiceTag(ClassContextSpecific, ch.Tag))
-		bufPtr := getBuf()
-		encodeLengthInto(sub.Type(), bufPtr, len(inner))
-		wrapped.Append(*bufPtr...)
-		putBuf(bufPtr)
-		wrapped.Append(inner...)
-
-		// replace the old bytes in sub
-		nsub := sub.Type().New(sub.Data()[:sub.Offset()]...)
-		nsub.Append(wrapped.Data()...)
-		sub = nsub
-	}
-
-	return
-}
-
-func marshalSequenceSetChoiceTag(class int, tag *int) (id byte) {
-	if tag == nil {
-		tag = new(int)
-	}
-	id = byte(class<<6) | 0x20 | byte(*tag)
-	return
-}
-
 /*
 unmarshalSequence returns an error following an attempt to write pkt into sequence (struct) v.
 */
@@ -232,13 +157,7 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 	sub.SetOffset(0)
 
 	// Whether automatic tagging is enabled.
-	var auto bool
-	var choicesMap map[string]Choices
-
-	if options != nil {
-		auto = options.Automatic
-		choicesMap = options.ChoicesMap
-	}
+	var auto bool = options != nil && options.Automatic
 
 	typ := v.Type()
 	for i := 0; i < v.NumField() && err == nil; i++ {
@@ -253,27 +172,16 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 		}
 
 		if err == nil {
-			opts.ChoicesMap = choicesMap
-
 			fv := v.Field(i)
-
-			switch fv.Interface().(type) {
-			case Choice, *Choice:
-				var alt Choice
-				if alt, err = selectFieldChoice(field.Name, v.Interface(), sub, opts); err == nil {
-					fv.Set(refValueOf(Choice{Value: alt.Value}))
-				}
-			default:
-				if err = unmarshalValue(sub, fv, opts); err != nil {
-					if opts.Default != nil && opts.defaultKeyword != "" {
-						fv.Set(reflect.ValueOf(opts.Default))
-						err = nil
-					} else {
-						// TODO: I still don't like this.
-						err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
-						if berr := checkSequenceFieldCriticality(field.Name, fv, opts.Optional); berr == nil {
-							err = berr
-						}
+			if err = unmarshalValue(sub, fv, opts); err != nil {
+				if opts.Default != nil && opts.defaultKeyword != "" {
+					fv.Set(refValueOf(opts.Default))
+					err = nil
+				} else {
+					// TODO: I still don't like this.
+					err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
+					if berr := checkSequenceFieldCriticality(field.Name, fv, opts.Optional); berr == nil {
+						err = berr
 					}
 				}
 			}

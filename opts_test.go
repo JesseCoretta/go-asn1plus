@@ -51,7 +51,6 @@ func TestOptions_codecov(_ *testing.T) {
 	opts.Default = struct{}{}
 	_ = opts.String()
 	opts, _ = NewOptions(`asn1:"application,tag:2,default:thanks"`)
-	opts.choiceTag = new(int)
 	_ = opts.String()
 	field := reflect.StructField{Tag: "blarg"}
 	_, _ = NewOptions("asn1:")

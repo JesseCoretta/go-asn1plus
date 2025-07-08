@@ -84,7 +84,7 @@ across different protocols.
 [ITU-T Rec. X.680]: https://www.itu.int/rec/T-REC-X.680
 */
 type EmbeddedPDV struct {
-	Identification      Choice
+	Identification      Choice           `asn1:"choices:identification"`
 	DataValueDescriptor ObjectDescriptor `asn1:"optional"`
 	DataValue           OctetString
 	//Extensions          []Packet
@@ -110,10 +110,13 @@ func init() {
 	// Initialize an EmbeddedPDV/External Identification
 	// CHOICE registry at start of runtime.
 	identification = NewChoices()
-	identification.Register(new(Syntaxes), "choice:syntaxes,tag:0,universal-tag:16")
-	identification.Register(new(ObjectIdentifier), "choice:syntax,tag:1,universal-tag:6")
-	identification.Register(new(Integer), "choice:presentation-context-id,tag:2,universal-tag:2")
-	identification.Register(new(ContextNegotiation), "choice:context-negotiation,tag:3,universal-tag:16")
-	identification.Register(new(ObjectIdentifier), "choice:transfer-syntax,tag:4,universal-tag:6")
-	identification.Register(new(Null), "choice:fixed,tag:5,universal-tag:5")
+	o := &Options{Explicit: true}
+
+	identification.Register(nil, Syntaxes{}, o.SetTag(0))
+	identification.Register(nil, ObjectIdentifier{}, o.SetTag(1))
+	identification.Register(nil, Integer{}, o.SetTag(2))
+	identification.Register(nil, ContextNegotiation{}, o.SetTag(3))
+	identification.Register(nil, ObjectIdentifier{}, o.SetTag(4))
+	identification.Register(nil, Null{}, o.SetTag(5))
+	RegisterChoices("identification", identification)
 }

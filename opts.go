@@ -20,22 +20,21 @@ of this type serve two purposes.
   - Simplify package internals by having a portable storage type for parsed struct field instructions which bear the "asn1:" tag prefix
 */
 type Options struct {
-	Explicit    bool               // if true, wrap the field in an explicit tag
-	Optional    bool               // if true, the field is optional
-	OmitEmpty   bool               // whether to ignore empty slice values
-	Set         bool               // if true, encode as SET instead of SEQUENCE (for collections); mutex of Sequence
-	Sequence    bool               // If true, encode as SEQUENCE OF instead of SET OF; mutex of Set
-	Indefinite  bool               // whether a field is known to be of an indefinite length
-	Automatic   bool               // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
-	Choices     string             // Name of ChoicesMap key for the associated Choices of a single SEQUENCE field or other context
-	Identifier  string             // "ia5", "numeric", "utf8" etc. (for string fields)
-	Constraints []string           // references to registered Constraint/ConstraintGroup instances
-	Default     any                // manual default value (not recommended, use RegisterDefaultValue)
-	ChoicesMap  map[string]Choices // map of Choices for any number of Choice fields (maps to tag "choices:<name>")
+	Explicit    bool     // if true, wrap the field in an explicit tag
+	Optional    bool     // if true, the field is optional
+	OmitEmpty   bool     // whether to ignore empty slice values
+	Set         bool     // if true, encode as SET instead of SEQUENCE (for collections); mutex of Sequence
+	Sequence    bool     // If true, encode as SEQUENCE OF instead of SET OF; mutex of Set
+	Indefinite  bool     // whether a field is known to be of an indefinite length
+	Automatic   bool     // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
+	Choices     string   // Name of key for the associated Choices of a single SEQUENCE field or other context
+	Identifier  string   // "ia5", "numeric", "utf8" etc. (for string fields)
+	Constraints []string // references to registered Constraint/ConstraintGroup instances
+	Default     any      // manual default value (not recommended, use RegisterDefaultValue)
 
 	tag, // if non-nil, indicates an alternative tag number.
 	class, // represents the ASN.1 class: universal, application, context-specific, or private.
-	choiceTag *int // tag for choice selection, if provided
+	choiceTag *int
 	depth          int      // recursion depth
 	defaultKeyword string   // the discovered DEFAULT keyword for registered lookup
 	unidentified   []string // for unidentified or superfluous keywords
@@ -364,11 +363,14 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 /*
 SetTag assigns n to the receiver instance. n MUST be greater
 than zero (0).
+
+This is a fluent method.
 */
-func (r *Options) SetTag(n int) {
+func (r *Options) SetTag(n int) *Options {
 	if n >= 0 {
 		r.tag = &n
 	}
+	return r
 }
 
 /*
@@ -382,20 +384,24 @@ Tag returns the tag integer residing within the receiver
 instance. If unset, -1 (invalid) is returned.
 */
 func (r Options) Tag() int {
+	var t int = -1 // NO valid default
 	if r.tag != nil {
-		return *r.tag
+		t = *r.tag
 	}
-	return -1 // NO valid default
+	return t
 }
 
 /*
 SetClass assigns n to the receiver instance. n MUST be within
-the bounds of 0..4.
+the bounds of [ClassUniversal] (0) and [ClassPrivate] (3).
+
+This is a fluent method.
 */
-func (r *Options) SetClass(n int) {
-	if n >= 0 {
+func (r *Options) SetClass(n int) *Options {
+	if ClassUniversal <= n && n <= ClassPrivate {
 		r.class = &n
 	}
+	return r
 }
 
 /*
@@ -409,10 +415,11 @@ Class returns the class integer residing within the receiver
 instance. If unset, 0 ([ClassUniversal]) is returned.
 */
 func (r Options) Class() int {
+	var c int // default UNIVERSAL class
 	if r.class != nil {
-		return *r.class
+		c = *r.class
 	}
-	return 0 // UNIVERSAL default
+	return c
 }
 
 /*

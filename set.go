@@ -74,10 +74,8 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		return
 	}
 
-	if pkt.Type() == DER {
-		slices.SortFunc(elements, func(a, b []byte) int {
-			return bytes.Compare(a, b)
-		})
+	if pkt.Type().canonicalOrdering() {
+		slices.SortFunc(elements, func(a, b []byte) int { return bytes.Compare(a, b) })
 	}
 
 	bufPtr := getBuf()
@@ -132,17 +130,18 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	var elements []reflect.Value
 
 	subOpts := clearChildOpts(opts)
-	isChoice := unmarshalSetIsChoice(elemType)
+	isCh := isChoice(v, opts)
+	//isChoice := unmarshalSetIsChoice(elemType)
 
 	for pkt.HasMoreData() {
 		var tmp reflect.Value
 		if elemType.Kind() == reflect.Ptr {
-			tmp = reflect.New(elemType.Elem())
+			tmp = refNew(elemType.Elem())
 		} else {
-			tmp = reflect.New(elemType).Elem()
+			tmp = refNew(elemType).Elem()
 		}
 
-		if isChoice {
+		if isCh {
 			tmp, err = unmarshalSetOfChoice(pkt, tmp, subOpts, elemType)
 		} else {
 			err = unmarshalValue(pkt, tmp, subOpts)
@@ -154,7 +153,7 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		elements = append(elements, tmp)
 	}
 
-	newSlice := reflect.MakeSlice(v.Type(), len(elements), len(elements))
+	newSlice := refMkSl(v.Type(), len(elements), len(elements))
 	for i, el := range elements {
 		newSlice.Index(i).Set(el)
 	}
@@ -165,7 +164,7 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 func unmarshalSetIsChoice(elemType reflect.Type) (isChoice bool) {
 	// Determine if the element type is (or points to) a Choice.
-	var choiceType = reflect.TypeOf(Choice{})
+	var choiceType = refTypeOf(Choice(nil))
 	if elemType.Kind() == reflect.Ptr {
 		isChoice = elemType.Elem() == choiceType
 	} else {
@@ -226,171 +225,48 @@ func setPickChoiceAlternative(
 	pkt PDU,
 	parentOpts *Options,
 ) (
-	def choiceAlternative,
 	tag int,
 	payload []byte,
 	payloadPK PDU,
-	newOpts *Options,
+	childOpts *Options,
 	err error,
 ) {
-	start := pkt.Offset()
+	// 1) If the next TLV is a universal SET, strip it and recurse
+	if tlv, pe := pkt.PeekTLV(); pe == nil &&
+		tlv.Class == ClassUniversal && tlv.Tag == TagSet {
+		// consume the SET tag
+		if _, err = pkt.TLV(); err != nil {
+			return
+		}
+		// recurse into its contents
+		sub := pkt.Type().New(tlv.Value...)
+		sub.SetOffset(0)
+		return setPickChoiceAlternative(sub, parentOpts)
+	}
+
+	// 2) Consume the context-specific wrapper TLV ([n] EXPLICIT)
 	outer, err := pkt.TLV()
 	if err != nil {
-		return def, 0, nil, nil, nil, err
+		return
 	}
+	pkt.SetOffset(pkt.Offset() + len(outer.Value))
 
-	allData, hdrLen := unmarshalSetOfChoiceHeaderLength(start, pkt)
-	end := start + hdrLen + outer.Length
-	raw := allData[start:end]
-	pkt.SetOffset(end)
+	// 3) Clone parent opts but keep the registry name
+	childOpts = clearChildOpts(parentOpts)
+	childOpts.Choices = parentOpts.Choices
 
-	opts := clearChildOpts(parentOpts)
-	reg, ok := opts.ChoicesMap[opts.Choices]
-	if !ok {
-		return def, 0, nil, nil, nil, errorNoChoicesAvailable
-	}
+	// 4) outer.Value already contains the full inner TLV
+	//    (universal tag + length + bytes), so just reuse it
+	payload = outer.Value
 
-	outerTag := outer.Tag
-	def, found := reg.byTag(&outerTag)
+	// 5) The CHOICE selector is the wrapper’s tag number
+	tag = outer.Tag
 
-	mustUnwrap := (found && def.Opts.Explicit) ||
-		(!found && outer.Class != ClassUniversal && outer.Compound)
+	// 6) Build a PDU over payload so unmarshalValue sees a valid TLV
+	payloadPK = pkt.Type().New(payload...)
+	payloadPK.SetOffset(0)
 
-	if mustUnwrap {
-		innerBytes := raw[hdrLen:]
-		innerPK := pkt.Type().New(innerBytes...)
-		innerPK.SetOffset(0)
-
-		itlv, err := innerPK.TLV()
-		if err != nil {
-			return def, 0, nil, nil, nil, err
-		}
-		tag = itlv.Tag
-
-		_, innerHdr := unmarshalSetOfChoiceHeaderLength(0, innerPK)
-		payload = innerBytes[innerHdr:]
-		payloadPK = innerPK
-
-		def, found = reg.byTag(&tag)
-		if !found {
-			return def, tag, nil, nil, nil,
-				mkerrf("no CHOICE variant for tag ", itoa(tag))
-		}
-
-	} else {
-		tag = outer.Tag
-		payload = raw[hdrLen:]
-		payloadPK = pkt.Type().New(payload...)
-		payloadPK.SetOffset(0)
-
-		if !found {
-			return def, tag, nil, nil, nil,
-				mkerrf("no CHOICE variant for tag ", itoa(tag))
-		}
-	}
-
-	opts.choiceTag = new(int)
-	*opts.choiceTag = tag
-	opts.SetTag(tag)
-
-	return def, tag, payload, payloadPK, opts, nil
-}
-
-func setDecodeChoiceSingle(
-	tmp reflect.Value,
-	def choiceAlternative,
-	payloadPK PDU,
-	opts *Options,
-	elemType reflect.Type,
-) (reflect.Value, error) {
-	var dest reflect.Value
-	if def.Type.Kind() == reflect.Ptr {
-		dest = reflect.New(def.Type.Elem())
-	} else {
-		dest = reflect.New(def.Type)
-	}
-
-	childOpts := *opts
-	childOpts.tag = nil
-	if err := unmarshalValue(payloadPK, dest, &childOpts); err != nil {
-		return tmp, mkerrf("inner decode failed: ", err.Error())
-	}
-
-	val := dest.Elem().Interface()
-	var out Choice
-	out.Value = val
-	out.Explicit = def.Opts.Explicit
-	out.SetTag(def.Opts.Tag)
-
-	if elemType.Kind() == reflect.Ptr {
-		tmp.Elem().Set(reflect.ValueOf(out))
-	} else {
-		tmp.Set(reflect.ValueOf(out))
-	}
-	return tmp, nil
-}
-
-func handleChoiceSlice(
-	tmp reflect.Value,
-	alt choiceAlternative,
-	payload []byte,
-	payloadPK PDU,
-	opts *Options,
-) (reflect.Value, bool, error) {
-	if alt.Type.Kind() != reflect.Slice {
-		return tmp, false, nil
-	}
-	elemT := alt.Type.Elem()
-	sample := reflect.Zero(elemT).Interface()
-
-	if _, ok := sample.(codecRW); !ok {
-		if _, ok := createCodecForPrimitive(sample); !ok {
-			return tmp, false, nil
-		}
-	}
-
-	sliceVal := reflect.MakeSlice(alt.Type, 0, 0)
-	for payloadPK.HasMoreData() {
-		off := payloadPK.Offset()
-		tlv2, err := payloadPK.TLV()
-		if err != nil {
-			return tmp, true, mkerrf("slice-element TLV: ", err.Error())
-		}
-		raw2 := payload[off:]
-		var h2 int
-		if raw2[1]&0x80 != 0 {
-			h2 = 2 + int(raw2[1]&0x7F)
-		} else {
-			h2 = 2
-		}
-		total := h2 + tlv2.Length
-		part := raw2[:total]
-
-		subPK := payloadPK.Type().New(part...)
-		subPK.SetOffset(0)
-
-		childOpts := *opts
-		childOpts.tag = nil
-
-		ptr := reflect.New(elemT)
-		if err := unmarshalValue(subPK, ptr, &childOpts); err != nil {
-			return tmp, true, mkerrf("slice decode: ", err.Error())
-		}
-		sliceVal = reflect.Append(sliceVal, ptr.Elem())
-		payloadPK.SetOffset(off + total)
-	}
-
-	var out Choice
-	out.Value = sliceVal.Interface()
-	out.Explicit = alt.Opts.Explicit
-	out.SetTag(alt.Opts.Tag)
-
-	if elemT.Kind() == reflect.Ptr {
-		tmp.Elem().Set(reflect.ValueOf(out))
-	} else {
-		tmp.Set(reflect.ValueOf(out))
-	}
-	return tmp, true, nil
+	return
 }
 
 func unmarshalSetOfChoice(
@@ -399,16 +275,59 @@ func unmarshalSetOfChoice(
 	parentOpts *Options,
 	elemType reflect.Type,
 ) (reflect.Value, error) {
-	def, _, payload, payloadPK, opts, err := setPickChoiceAlternative(pkt, parentOpts)
+
+	// pull out the tag, payload PK and child opts
+	tag, _, payloadPK, opts, err := setPickChoiceAlternative(pkt, parentOpts)
 	if err != nil {
 		return tmp, err
 	}
 
-	if out, handled, err := handleChoiceSlice(tmp, def, payload, payloadPK, opts); err != nil {
-		return tmp, err
-	} else if handled {
-		return out, nil
+	// decode a single choice element:
+	return setDecodeChoiceSingle(tmp, tag, payloadPK, opts, elemType)
+}
+
+// 2) new setDecodeChoiceSingle
+func setDecodeChoiceSingle(
+	tmp reflect.Value,
+	tag int,
+	payloadPK PDU,
+	opts *Options,
+	elemType reflect.Type,
+) (reflect.Value, error) {
+	// lookup registry for this SET’s CHOICE wrapper
+	choices, ok := GetChoices(opts.Choices)
+	if !ok || choices.Len() == 0 {
+		return tmp, mkerr("no CHOICE registry for SET element")
+	}
+	choiceIface := refTypeOf((*Choice)(nil)).Elem()
+	cd, ok := choices.lookupDescriptorByInterface(choiceIface)
+	if !ok {
+		return tmp, mkerr("no CHOICE registry for SET element")
 	}
 
-	return setDecodeChoiceSingle(tmp, def, payloadPK, opts, elemType)
+	// find the concrete Go type for this tag
+	altT, ok := cd.tagToType[tag]
+	if !ok {
+		return tmp, mkerrf("no CHOICE variant for tag ", itoa(tag))
+	}
+
+	// allocate and unmarshal inner value
+	destPtr := reflect.New(altT)
+	childOpts := *opts
+	childOpts.tag = nil
+
+	if err := unmarshalValue(payloadPK, destPtr.Elem(), &childOpts); err != nil {
+		return tmp, mkerrf("inner decode failed: ", err.Error())
+	}
+
+	// wrap in the new Choice alias
+	outChoice := NewChoice(destPtr.Elem().Interface())
+
+	// store into the tmp slot
+	if elemType.Kind() == reflect.Ptr {
+		tmp.Elem().Set(refValueOf(outChoice))
+	} else {
+		tmp.Set(refValueOf(outChoice))
+	}
+	return tmp, nil
 }

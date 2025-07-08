@@ -161,8 +161,8 @@ func TestSequence_codecov(_ *testing.T) {
 
 	checkSequenceFieldCriticality("bogus", refValueOf(nil), false)
 
-	marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: OctetString(`theChosenOne`)}, &BERPacket{})
-	marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: `theChosenOne`}, &BERPacket{})
+	//marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: OctetString(`theChosenOne`)}, &BERPacket{})
+	//marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: `theChosenOne`}, &BERPacket{})
 
 	dat := []byte{
 		0x30, 0x1a, 0x04, 0x06, 0x48, 0x65, 0x6c, 0x6c,

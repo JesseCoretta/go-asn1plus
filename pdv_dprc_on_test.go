@@ -9,11 +9,8 @@ func TestExternal_encodingRulesChoiceSyntaxes(t *testing.T) {
 	transfer, _ := NewObjectIdentifier(2, 0, 2, 0, 2, 0, 2, 0)
 	syntaxes := Syntaxes{abstract, transfer}
 
-	tag := 0
-	choice := Choice{Value: &syntaxes, Tag: &tag}
-
 	pdv := External{
-		Identification:      choice,
+		Identification:      NewChoice(syntaxes, 0),
 		DataValueDescriptor: ObjectDescriptor("test"),
 		DataValue:           OctetString("blarg"),
 	}
@@ -41,11 +38,11 @@ func TestExternal_encodingRulesChoiceSyntaxes(t *testing.T) {
 			t.Fatalf("%s failed [%s decode]: %v", t.Name(), rule, err)
 		}
 
-		if newPDV.Identification.IsZero() {
+		if newPDV.Identification.Value() == nil {
 			t.Fatalf("Missing identification choice after decoding")
 		}
 
-		switch id := newPDV.Identification.Value.(type) {
+		switch id := newPDV.Identification.Value().(type) {
 		case Syntaxes:
 			if id.Abstract.String() != `2.1.2.1.2.1.2.1` ||
 				id.Transfer.String() != `2.0.2.0.2.0.2.0` {

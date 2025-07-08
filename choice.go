@@ -1,430 +1,413 @@
 package asn1plus
 
-/*
-choice.go contains all functionality pertaining to the ASN.1 CHOICE
-type.
-*/
-
-import "reflect"
+import (
+	"reflect"
+	"sync"
+)
 
 /*
-Choice implements a "transport" mechanism for ASN.1 CHOICE types
-residing within compound types (e.g.: SEQUENCES). For example:
-
-	 type MyStruct struct {
-		SomeField Choice
-		.. other fields ..
-	 }
-
-We can create an instance of Choice as simply as:
-
-	fieldTagInteger := 2
-	myChoice := Choice{Value:<any>, Tag:&fieldTagInteger}
-
-... or, alternatively ...
-
-	myChoice := Choice{Value:<any>}
-	myChoice.SetTag(2)
-
-Finally, we place our Choice within the compound instance in question
-prior to encoding via the [Marshal] function.
-
-	 mine := myStruct{
-		SomeField: myChoice,
-	 }
-
-Here, we used an instance of Choice to specify the "chosen" value
-and (if needed) the pointer to an integer (e.g.: for a field tag
-such as [2]). Use of a tag is only necessary if the list of available
-[Choices] contains more than one instance of a single type, which
-would otherwise lead to an ambiguous Choice state.  For an example
-of this in the real world, see the [EmbeddedPDV] ASN.1 schema definition.
+Choice implements an interface for the ASN.1 CHOICE type. Instances
+of this type can be crafted using the [NewChoice] function.
 */
-type Choice struct {
-	Value    any
-	Tag      *int // for field tagging
-	Explicit bool
+type Choice interface {
+	// Value returns the underlying value residing
+	// within the receiver instance of Choice.
+	Value() any
+
+	isChoice()
+	choiceTag() int
 }
 
+type wrappedChoice struct {
+	inner any
+	tag   int // −1 means “use registry”
+}
+
+type invalidChoice struct{}
+
+func (_ invalidChoice) isChoice()      {}
+func (_ invalidChoice) choiceTag() int { return -1 }
+func (_ invalidChoice) Value() any     { return errorNilReceiver }
+
+func (r wrappedChoice) isChoice()      {}
+func (r wrappedChoice) choiceTag() int { return r.tag }
+func (r wrappedChoice) Value() any     { return r.inner }
+
 /*
-SetTag assigns the integer tag to the receiver instance. This
-is merely a convenient alternative to manually setting the
-struct field with an integer pointer instance.
+NewChoice returns a new instance of [Choice], which wraps the input
+value v.
+
+The variadic int input argument allows for the occasional inclusion
+of a context tag (e.g.: 3 for [3]).
+
+Use of a context tag is required in cases where more than one instance
+of a single type (e.g.: [ObjectIdentifier] resides within a registered
+instance of [Choices] from which a selection is to be made.
 */
-func (r *Choice) SetTag(tag int) {
-	if r != nil {
-		r.Tag = new(int)
-		(*r.Tag) = tag
+func NewChoice(v any, tag ...int) Choice {
+	// NewChoice(v)        -> registry lookup (tag = −1)
+	// NewChoice(v, t)     -> explicit override (tag = t)
+
+	t := -1
+	if len(tag) > 0 {
+		t = tag[0]
+	}
+	return wrappedChoice{inner: v, tag: t}
+}
+
+var (
+	choicesRegistry map[string]Choices
+	chMu            sync.RWMutex
+)
+
+/*
+RegisterChoices associates the input string name and [Choices]
+instances within the central registry of [Choices]. Note that
+case folding is not significant in the registration process,
+however the input [Choices] instance MUST have a length greater
+than zero (0)
+*/
+func RegisterChoices(name string, choices Choices) {
+	if choices.Len() > 0 {
+		chMu.Lock()
+		defer chMu.Unlock()
+		choicesRegistry[lc(name)] = choices
 	}
 }
 
 /*
-IsZero returns a Boolean value indicative of a nil value state.
+UnregisterChoices removes the [Choices] value bearing the input
+string name from the central [Choices] registry. Note that case
+folding is not significant in the matching process.
 */
-func (r *Choice) IsZero() bool {
-	var is bool = true
-	if r != nil {
-		is = r.Value == nil
-	}
-
-	return is
-}
-
-type choiceAlternative struct {
-	Type reflect.Type  // the Go type of the alternative
-	Opts choiceOptions // options which help match the correct choice
+func UnregisterChoices(name string) {
+	chMu.Lock()
+	defer chMu.Unlock()
+	delete(choicesRegistry, lc(name))
 }
 
 /*
-Choices implements a [Choice] registry. See [Choices.Register] for a means of
-declaring alternatives from which a [Choice] may be made. See [Choices.Choose]
-for a means of verifying the chosen [Choice].
+GetChoices scans the central [Choices] registry for an instance
+of [Choices] associated with the input string name.  Note that
+case folding is not significant in the matching process.
+*/
+func GetChoices(name string) (Choices, bool) {
+	choices, found := choicesRegistry[lc(name)]
+	return choices, found
+}
+
+/*
+Choices implements a collection of ASN.1 CHOICE alternatives
+for a particular definition. Instances of this type are created
+using the [NewChoices] constructor.
+
+It is not necessary to preserve an instance of [Choices] beyond
+its registration in the central [Choices] registry.
 */
 type Choices struct {
-	cfg   Options
-	alts  []choiceAlternative
-	tagIx map[int]int
+	auto bool
+	reg  map[reflect.Type]*choiceDescriptor
 }
 
 /*
-NewChoices allocates and returns an instance of [Choices]. See [Choices.Register]
-and [Choices.Choose] for a means of interacting with the return instance.
-
-The input options instance can be used to deliver an instance of [Options] which
-contains an "Automatic" Boolean value of true.
+choiceDescriptor encapsulates tag, class, explicit and reflect.Type
+for use in a single CHOICE selectable.
 */
-func NewChoices(opts ...Options) (c Choices) {
-	if len(opts) > 0 {
-		c.cfg = opts[0]
+type choiceDescriptor struct {
+	tagToType map[int]reflect.Type
+	typeToTag map[reflect.Type]int
+	explicit  map[int]bool
+	class     map[int]int // tag->class
+}
+
+/*
+NewChoices returns an instance of [Choices] which is immediately
+ready for new registrations via the [Choices.Register] method.
+
+The variadic auto input value can be used to configure the return
+[Choices] instance for automatic tagging.
+
+Once all registrations have been made, the return instance should
+be registered within the global [RegisterChoices] function so that
+it can be used by any subsequent [Marshal] or [Unmarshal] calls.
+It is not necessary to preserve an instance of [Choices] beyond
+its registration in the central [Choices] registry.
+*/
+func NewChoices(auto ...bool) Choices {
+	var autoTag bool
+	if len(auto) > 0 {
+		autoTag = auto[0]
 	}
-	c.alts = make([]choiceAlternative, 0)
-	c.tagIx = make(map[int]int)
+	return Choices{
+		autoTag,
+		make(map[reflect.Type]*choiceDescriptor),
+	}
+}
+
+/*
+Len returns the integer length of the receiver instance.
+*/
+func (r Choices) Len() int { return len(r.reg) }
+
+/*
+Register creates a registration within the receiver instance, which
+associates ifacePtr, alt, class, tag and explicit for later use in
+an ASN.1 CHOICE selection.
+*/
+func (r Choices) Register(
+	ifacePtr any,
+	concrete any,
+	opts ...*Options,
+) (err error) {
+
+	class := ClassContextSpecific
+	tag := -1
+	explicit := false
+
+	if len(opts) > 0 && opts[0] != nil {
+		if opts[0].Class() != ClassUniversal {
+			class = opts[0].Class()
+		}
+		if opts[0].HasTag() {
+			tag = opts[0].Tag()
+		}
+		explicit = opts[0].Explicit
+	}
+
+	debugEnter(
+		newLItem(ifacePtr, "interface pointer"),
+		newLItem(concrete, "concrete instance"),
+		newLItem(class, "choice class"),
+		newLItem(tag, "choice tag"),
+		newLItem(explicit, "choice explicit"))
+
+	defer func() {
+		debugExit(newLItem(err))
+	}()
+
+	// always group alternatives under the Choice
+	// interface if none was specified
+	//key := refTypeOf(concrete)
+	//if ifacePtr != nil {
+	//    key = refTypeOf(ifacePtr).Elem()
+	//}
+	var key reflect.Type
+	if ifacePtr != nil {
+		key = refTypeOf(ifacePtr).Elem()
+	} else if r.auto {
+		key = reflect.TypeOf((*Choice)(nil)).Elem()
+	} else {
+		key = derefTypePtr(refTypeOf(concrete))
+	}
+
+	cd, ok := r.reg[key]
+	if !ok {
+		cd = &choiceDescriptor{
+			tagToType: make(map[int]reflect.Type),
+			typeToTag: make(map[reflect.Type]int),
+			explicit:  make(map[int]bool),
+			class:     make(map[int]int), // tag->class
+		}
+		r.reg[key] = cd
+	}
+
+	// Automatic tagging logic: if r.auto==true and no user‐tag supplied
+	if r.auto && tag < 0 {
+		maxTag := -1
+		for existingTag := range cd.tagToType {
+			if existingTag > maxTag {
+				maxTag = existingTag
+			}
+		}
+		tag = maxTag + 1
+		explicit = true
+	}
+
+	// Prevent duplicate tag
+	if _, dup := cd.tagToType[tag]; dup {
+		err = mkerrf("duplicate CHOICE tag during registration ", itoa(tag))
+		return
+	}
+
+	// Record the alternative
+	altType := derefTypePtr(refTypeOf(concrete))
+	cd.tagToType[tag] = altType
+	cd.typeToTag[altType] = tag
+	cd.class[tag] = class
+	cd.explicit[tag] = explicit
+
 	return
 }
 
 /*
-Register returns an error following an attempt to register an instance of [Choice],
-associated with the tag options provided, to the receiver instance.
+Choose returns a Boolean value indicative of a positive match between the
+input value and an ASN.1 CHOICE alternative residing within the receiver
+instance.
 
-Tag options can be used to declare the configuration used to choose a particular
-choice, e.g.:
-
-  - "choice:schemaFieldName"
-  - "choice:schemaFieldName,tag:2"
+If ambiguity is encountered -- for instance two of the same type within
+the receiver instance -- and no tag was specified, a value of false will
+be returned implicitly.
 */
-func (r *Choices) Register(instance any, opts ...string) error {
-	if instance == nil {
-		return mkerr("cannot register nil instance; hint: for ASN.1 NULL, use Null type")
+func (r Choices) Choose(value any, tag ...int) bool {
+	var ok bool
+	if value == nil {
+		return ok
 	}
 
-	var options choiceOptions = choiceOptions{Tag: -1, UTag: -1}
-	if len(opts) > 0 {
-		options = r.tokenizeChoiceOptions(opts[0])
-	}
+	valType := derefTypePtr(reflect.TypeOf(value))
 
-	if r.cfg.Automatic {
-		r.cfg.Explicit = true
-		var tag int = len(r.alts)
-		// If automatic, grab the last choiceAlternative
-		// tag number and increment by one.
-		if options.Tag == -1 {
-			options.Tag = tag // OVERRIDE
+	switch len(tag) {
+	case 1:
+		// tag‐driven lookup
+		t := tag[0]
+		var cd *choiceDescriptor
+		if _, cd, ok = r.lookupDescriptorByTag(t); ok {
+			expected, exists := cd.tagToType[t]
+			ok = exists && expected == valType
+		}
+
+	case 0:
+		// try concrete‐type lookup (more likely to be used)
+		if _, _, ok = r.lookupDescriptorByConcrete(valType); !ok {
+			// try interface‐implementation lookup
+			for ifaceType := range r.reg {
+				if ok = valType.Implements(ifaceType); ok {
+					break
+				}
+			}
 		}
 	}
 
-	if _, dup := r.tagIx[options.Tag]; dup {
-		return mkerrf("duplicate CHOICE tag ", itoa(options.Tag))
-	}
-	r.tagIx[options.Tag] = len(r.alts)
-	r.alts = append(r.alts, choiceAlternative{
-		Type: derefTypePtr(refTypeOf(instance)),
-		Opts: options,
-	})
+	return ok
+}
 
+func (r Choices) lookupDescriptorByTag(tag int) (
+	ifaceType reflect.Type,
+	desc *choiceDescriptor,
+	ok bool,
+) {
+	for iface, cd := range r.reg {
+		if _, exists := cd.tagToType[tag]; exists {
+			ifaceType = iface
+			desc = cd
+			ok = true
+			break
+		}
+	}
+	return
+}
+
+func (r *Choices) lookupDescriptorByConcrete(concrete reflect.Type) (iface reflect.Type, desc *choiceDescriptor, ok bool) {
+	for ifaceType, d := range r.reg {
+		if _, exists := d.typeToTag[concrete]; exists {
+			iface = ifaceType
+			desc = d
+			ok = true
+			break
+		}
+	}
+	return
+}
+
+func (r Choices) lookupDescriptorByInterface(iface reflect.Type) (desc *choiceDescriptor, ok bool) {
+	desc, ok = r.reg[iface]
+	return
+}
+
+func marshalChoiceWrapper(
+	parent any,
+	pkt PDU,
+	opts *Options,
+	v reflect.Value, // holds a Choice instance
+) error {
+	cw := v.Interface().(Choice)
+	inner := cw.Value()
+
+	cho, found := GetChoices(opts.Choices)
+	if !found || cho.Len() == 0 {
+		return errorNoChoicesAvailable
+	}
+
+	// marshal the inner TLV (universal tag) into a temp PDU
+	tmp := pkt.Type().New()
+	innerOpts := clearChildOpts(opts)
+	innerOpts.Choices = ""
+	if err := marshalValue(refValueOf(inner), tmp, innerOpts); err != nil {
+		return err
+	}
+	innerBytes := tmp.Data()
+
+	// decide which tag, class, explicit to emit
+	tag := cw.choiceTag()         // user override or -1
+	class := ClassContextSpecific // default
+	explicit := true              // always explicit for choice
+
+	if tag < 0 {
+		// no override → look up registry by concrete type
+		t := derefTypePtr(reflect.TypeOf(inner))
+		_, desc, ok := cho.lookupDescriptorByConcrete(t)
+		if !ok {
+			return mkerrf(
+				"marshalChoiceWrapper: no CHOICE alt for ", t.String())
+		}
+		tag = desc.typeToTag[t]
+		class = desc.class[tag]
+		explicit = desc.explicit[tag]
+	}
+
+	// emit the [class|tag] EXPLICIT mask header
+	// (0x20 bit == “constructed, explicit”)
+	idByte := byte(class<<6) | byte(tag)
+	if explicit {
+		idByte |= 0x20
+	}
+	pkt.Append(idByte)
+
+	// length of the inner TLV blob
+	buf := getBuf()
+	encodeLengthInto(pkt.Type(), buf, len(innerBytes))
+	pkt.Append(*buf...)
+	putBuf(buf)
+
+	// append the whole inner TLV
+	pkt.Append(innerBytes...)
 	return nil
 }
 
-/*
-Len returns the integer number of registered [Choice] instances present within
-the receiver instance.
-*/
-func (r Choices) Len() int { return len(r.alts) }
-
-func (r Choices) byTag(t any) (calt choiceAlternative, ok bool) {
-	var tag int = -1
-	switch tv := t.(type) {
-	case int:
-		tag = tv
-	case *int:
-		if tv != nil {
-			tag = *tv
-		}
+func isChoice(v reflect.Value, opts *Options) bool {
+	// 1) Quick bail-outs
+	if opts == nil || opts.Choices == "" {
+		return false
+	}
+	if !v.IsValid() {
+		return false
 	}
 
-	if tag > -1 {
-		var i int
-		if i, ok = r.tagIx[tag]; ok {
-			calt = r.alts[i]
+	// 2) If it’s an interface, peel it one level
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return false
 		}
+		v = v.Elem()
 	}
 
-	return
+	// 3) Only the exact Choice‐alias type is a CHOICE
+	choiceType := reflect.TypeOf(Choice(nil))
+	var ok bool
+	if v.Type() == choiceType {
+		_, ok = v.Interface().(Choice)
+	}
+
+	return ok
 }
 
-/*
-Choose returns the input instance of [Choice] alongside an error following an attempt
-to match the specific [Choice] and optional identifier (id) with a registered [Choice]
-residing within the receiver instance.
+var (
+	// the Choice interface alias itself
+	choiceIfaceType = reflect.TypeOf(Choice(nil))
+	// the anonymous struct returned by TaggedChoice
+	taggedChoiceType = refTypeOf(NewChoice(nil, 0))
+)
 
-Choose checks whether the given user-supplied instance (along with its ASN.1 tag)
-matches one of the registered alternatives. It does so by comparing both the tag
-and the Go type (using reflection).
-
-The registered alternative is returned if exactly one match is found. If no alternatives
-match or if more than one candidate is found (which may happen if multiple entries use the
-same type and tag) an error is returned.
-*/
-func (r Choices) Choose(instance any, opts ...string) (c Choice, err error) {
-	var (
-		mID bool
-		o   choiceOptions
-	)
-
-	if len(opts) > 0 {
-		o = r.tokenizeChoiceOptions(opts[0])
-		mID = true
-	}
-
-	matchID := func(alt choiceAlternative) bool {
-		return alt.Opts.Tag == o.Tag
-	}
-
-	if instance == nil {
-		err = errorNilInput
-		return
-	}
-
-	inputType := derefTypePtr(refTypeOf(instance))
-	var matches []choiceAlternative
-
-	for _, alt := range r.alts {
-		if inputType == alt.Type {
-			if mID {
-				if matchID(alt) {
-					matches = append(matches, alt)
-				}
-			} else {
-				matches = append(matches, alt)
-			}
-		}
-	}
-
-	switch len(matches) {
-	case 0:
-		err = errorNoChoiceMatched(inputType.String())
-	case 1:
-		c = Choice{Value: instance, Tag: &matches[0].Opts.Tag, Explicit: matches[0].Opts.Explicit || o.Explicit}
-	default:
-		err = errorAmbiguousChoice
-	}
-
-	return
-}
-
-/*
-getChoiceMethod returns an instance of func() Choices. This is used to extract
-an instance of Choices containing any number of choiceAlternative instances.
-Any struct which contains a field of type Choice, i.e.:
-
-	type MyStruct struct {
-	       FieldName Choice `... any asn1 tags ...`
-	}
-
-... MUST create a method extended by this type and bearing the name:
-
-	<FieldName>Choices
-
-... where <FieldName> is the actual case-accurate struct field string name,
-and is prepended to the "Choices" literal string.
-
-The method is niladic and returns only one (1) value: an instance of Choices.
-
-Thus, MyStruct would extend:
-
-	FieldNameChoices() Choices
-
-Naturally the return Choices instance should contain one or more empty pointer
-values, each of a valid alternative type (e.g.: OctetString). For instance:
-
-	        // note: this is an abstract example
-		Choice := {
-		      new(TypeName),
-		      new(OtherType),
-		      &ThisWorksTooForSomeTypes{},
-		      ....
-		}
-
-The return type is tailored for the field it is meant to facilitate. This
-method naming requirement exists because it is possible for a single struct
-to contain multiple fields that are all of the choiceAlternative type, thus
-there needed to be a way to differentiate them.
-*/
-func getChoicesMethod(field string, x any) (funk func() Choices, ok bool) {
-	v := refValueOf(x)
-	if v.IsValid() && field != "" {
-		method := v.MethodByName(field + "Choices")
-		if method.IsValid() {
-			mType := method.Type()
-			if mType.NumIn() == 0 || mType.NumOut() == 1 {
-				choicesType := refTypeOf((*Choices)(nil)).Elem()
-				if mType.Out(0).AssignableTo(choicesType) {
-					funk = func() Choices {
-						results := method.Call(nil)
-						return results[0].Interface().(Choices)
-					}
-					ok = true
-				}
-			}
-		}
-	}
-
-	return
-}
-
-func selectFieldChoice(n string, constructed any, pkt PDU, opts *Options) (alt Choice, err error) {
-	var choices Choices
-	meth, found := getChoicesMethod(n, constructed)
-	if found {
-		choices = meth()
-	} else {
-		if opts.ChoicesMap != nil && len(opts.ChoicesMap) > 0 {
-			choices, _ = opts.ChoicesMap[opts.Choices]
-		}
-	}
-
-	if choices.Len() == 0 {
-		err = errorNoChoicesAvailable
-		return
-	}
-
-	var candidate any
-	var structTag string
-	switch pkt.Type() {
-	case BER, CER, DER:
-		var tlv TLV
-		tlv, err = pkt.TLV()
-		if err == nil {
-			extractedTag := opts.Tag()
-			if !(tlv.Class == ClassUniversal && opts.HasTag()) {
-				extractedTag = tlv.Tag
-			}
-			opts.choiceTag = &extractedTag
-			structTag = "choice:tag:" + itoa(*opts.choiceTag)
-			candidate, err = bcdChooseChoiceCandidate(pkt, tlv, choices, opts)
-			if err == nil {
-				pkt.SetOffset(pkt.Offset() + tlv.Length)
-			}
-		}
-
-	default:
-		err = errorRuleNotImplemented
-	}
-
-	if err == nil {
-		alt, err = choices.Choose(candidate, structTag)
-	}
-
-	return
-}
-
-func bcdChooseChoiceCandidate(pkt PDU, tlv TLV, choices Choices, opts *Options) (candidate any, err error) {
-	// First try choicesTag, if defined
-	alt, ok := choices.byTag(opts.choiceTag)
-	if !ok {
-		// FALLBACK: Lookup the candidate alternative using opts.Tag
-		if alt, ok = choices.byTag(opts.Tag()); !ok {
-			return nil, mkerrf("unknown choice tag: ", itoa(opts.Tag()))
-		}
-	}
-
-	// Allocate a new instance of the candidate type.
-	candidateInst := reflect.New(alt.Type).Interface()
-
-	if isPrimitive(candidateInst) {
-		candidateContent := tlv.Value
-		ptag := alt.Opts.Tag
-
-		sub := pkt.Type().New(byte(ptag))
-		sub.Append(pkt.Data()[1:]...)
-		sub.SetOffset(pkt.Offset())
-		if !opts.HasTag() {
-			opts.SetTag(ptag)
-		}
-
-		tag, class := effectiveTag(ptag, 0, opts)
-		if alt.Opts.Explicit {
-			class |= 0x20
-		}
-		subTLV := pkt.Type().newTLV(class, tag, tlv.Length, tlv.Compound, candidateContent...)
-		if c, ok := candidateInst.(codecRW); ok {
-			err = c.read(sub, subTLV, opts)
-		} else if bx, ok := createCodecForPrimitive(candidateInst); ok {
-			if err = bx.read(sub, subTLV, opts); err == nil {
-				refValueOf(candidateInst).Elem().
-					Set(refValueOf(bx.getVal()))
-			}
-
-		} else {
-			err = mkerr("Primitive has no codec")
-		}
-	} else {
-		payload := tlv.Value
-		sub := pkt.Type().New(payload...)
-		sub.SetOffset(0)
-		childOpts := clearChildOpts(opts)
-		err = unmarshalValue(sub, refValueOf(candidateInst), childOpts)
-	}
-
-	if err == nil {
-		// Dereference the candidate instance (allocated as a pointer) and return it.
-		candidate = refValueOf(candidateInst).Elem().Interface()
-	}
-
-	return
-}
-
-type choiceOptions struct {
-	Name     string // name of choice per ASN.1 schema
-	Explicit bool   // whether the alternative is EXPLICIT
-	Tag,     // ASN.1 context tag
-	UTag int // ASN.1 tag number
-}
-
-func (r Choices) tokenizeChoiceOptions(opts string) (options choiceOptions) {
-	options.Tag, options.UTag = -1, -1
-	if opts = lc(opts); hasPfx(opts, "choice:") {
-		sp := split(trimPfx(opts, "choice:"), `,`)
-		for _, slice := range sp {
-			switch {
-			case hasPfx(slice, "tag:"):
-				if t, err := atoi(trimPfx(slice, "tag:")); err == nil && options.Tag == -1 {
-					options.Tag = t
-				}
-			case slice == "explicit":
-				if !r.cfg.Automatic {
-					options.Explicit = true
-				}
-			case hasPfx(slice, "universal-tag:"):
-				if t, err := atoi(trimPfx(slice, "universal-tag:")); err == nil && options.UTag == -1 {
-					options.UTag = t
-				}
-			default:
-				if options.Name == "" {
-					options.Name = slice
-				}
-			}
-		}
-	}
-
-	return
+func init() {
+	choicesRegistry = make(map[string]Choices)
 }

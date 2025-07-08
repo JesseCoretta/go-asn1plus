@@ -9,7 +9,7 @@ This type is implemented within this package for historical/legacy purposes
 and should not be used in modern systems. Use [EmbeddedPDV] instead.
 */
 type External struct {
-	Identification      Choice
+	Identification      Choice           `asn1:"choices:identification"`
 	DataValueDescriptor ObjectDescriptor `asn1:"optional"`
 	DataValue           OctetString
 }

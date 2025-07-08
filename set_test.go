@@ -124,6 +124,8 @@ func TestSet_encodingRules(t *testing.T) {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
 
+		t.Logf("%s encoding: %s\n", rule, pkt.Hex())
+
 		var decoded mySET
 		if err = Unmarshal(pkt, &decoded); err != nil {
 			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
@@ -137,7 +139,7 @@ func TestSet_encodingRules(t *testing.T) {
 		expected := []string{"3", "5", "7"}
 		if !equalSlices(got, expected, rule) {
 			t.Fatalf("%s failed [%s SET cmp.]:\n\twant: %v\n\tgot  %v",
-				t.Name(), rule, got, expected)
+				t.Name(), rule, expected, got)
 		}
 	}
 }

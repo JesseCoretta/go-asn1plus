@@ -1,13 +1,6 @@
 package asn1plus
 
-import (
-	"fmt"
-	"reflect"
-	"sync"
-	"testing"
-)
-
-var testFilterChoices Choices
+import "testing"
 
 type testAttributeValueAssertion struct {
 	Desc  OctetString
@@ -18,55 +11,59 @@ type testFilterPresent struct {
 	Desc OctetString
 }
 
+func (r testFilterPresent) isFilter() {}
+
+type testFilterInterface interface {
+	isFilter()
+}
+
 type testEqualityMatch testAttributeValueAssertion
-type testFilter = Choice
+
+func (r testEqualityMatch) isFilter() {}
+
+type testFilterAnd []testFilterInterface
+
+func (r testFilterAnd) isFilter() {}
 
 func TestChoice_SetOfChoice(t *testing.T) {
+	testFilterChoices := NewChoices()
+	o := &Options{Explicit: true}
 
-	// Construct the inner filter elements:
-	// A testFilterPresent instance for (objectClass=*)
-	present := &Choice{
-		Value:    testFilterPresent{Desc: OctetString("objectClass")},
-		Explicit: true,
-	}
-	present.SetTag(7)
+	testFilterChoices.Register((*testFilterInterface)(nil), testFilterAnd{}, o.SetTag(0))
+	testFilterChoices.Register((*testFilterInterface)(nil), testEqualityMatch{}, o.SetTag(3))
+	testFilterChoices.Register((*testFilterInterface)(nil), testFilterPresent{}, o.SetTag(7))
+	RegisterChoices("filter", testFilterChoices)
 
-	// An testEqualityMatch instance for (cn=Bill Smith)
-	eqMatch := &Choice{
-		Value:    testEqualityMatch(testAttributeValueAssertion{Desc: OctetString("cn"), Value: OctetString("Bill Smith")}),
-		Explicit: true,
-	}
-	eqMatch.SetTag(3)
+	present := testFilterPresent{Desc: OctetString("objectClass")}
+	eqMatch := testEqualityMatch(testAttributeValueAssertion{Desc: OctetString("cn"), Value: OctetString("Bill Smith")})
+	and := testFilterAnd{present, eqMatch}
+	opts := Options{Choices: "filter"}
 
-	// The outer filter is an "and" (registered as a slice of *filter with tag 0)
-	// Since filter is an alias for Choice, the Value must be a slice of *filter.
-	// Note: We take the addresses of our inner elements.
-	var F testFilter = Choice{
-		Value:    []*testFilter{(*testFilter)(present), (*testFilter)(eqMatch)},
-		Explicit: true,
-	}
-	F.SetTag(0)
-
-	opts := Options{
-		Choices: "filter",
-		ChoicesMap: map[string]Choices{
-			"filter": testFilterChoices,
-		},
+	hexes := map[EncodingRule]string{
+		BER: "A0 27 3125A70F300D040B6F626A656374436C617373A31230100402636E040A42696C6C20536D697468",
+		CER: "A0 27 3125A31230100402636E040A42696C6C20536D697468A70F300D040B6F626A656374436C617373", // canonical ordering
+		DER: "A0 27 3125A31230100402636E040A42696C6C20536D697468A70F300D040B6F626A656374436C617373", // canonical ordering
 	}
 
-	pkt, err := Marshal(F, With(BER, opts))
-	if err != nil {
-		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(and, With(rule, opts))
+		if err != nil {
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
+		}
+
+		want := hexes[rule]
+		if got := pkt.Hex(); got != want {
+			t.Fatalf("%s failed [%s encoding mismatch]:\n\twant: '%s'\n\tgot:  '%s'",
+				t.Name(), rule, want, got)
+		}
+
+		var F2 testFilterInterface
+		if err = Unmarshal(pkt, &F2, With(opts)); err != nil {
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
+		}
 	}
 
-	//t.Logf("Encoding: %s\n", pkt.Hex())
-
-	var F2 testFilter
-	if err = Unmarshal(pkt, &F2, With(opts)); err != nil {
-		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
-	}
-
-	//t.Logf("%#v\n", F2)
+	UnregisterChoices("filter")
 }
 
 func TestChoice_SequenceOfChoice(t *testing.T) {
@@ -76,149 +73,72 @@ func TestChoice_SequenceOfChoice(t *testing.T) {
 		Final   OctetString   `asn1:"tag:2"`     // occurs at most once
 	}
 
-	makeChoice := func(t int, val any) Choice {
-		tag := t
-		return Choice{
-			Value:    val,
-			Tag:      &tag,
-			Explicit: true,
-		}
+	// helper to build a tagged, explicit Choice
+	makeChoice := func(tag int, val OctetString) Choice {
+		return NewChoice(val, tag)
+	}
+
+	// build the input
+	sa := substringAssertion{
+		Initial: OctetString("thi"),
+		Any:     []OctetString{OctetString("is"), OctetString("a"), OctetString("subs")},
+		Final:   OctetString("ring"),
 	}
 
 	var seq []Choice
-	var sa substringAssertion = substringAssertion{
-		Initial: OctetString("thi"),
-		Any: []OctetString{
-			OctetString("is"),
-			OctetString("a"),
-			OctetString("subs"),
-		},
-		Final: OctetString("ring"),
-	}
-
-	// [0] initial, if provided (non-zero length)
-	if len(sa.Initial) != 0 {
+	if len(sa.Initial) > 0 {
 		seq = append(seq, makeChoice(0, sa.Initial))
 	}
-
-	// [1] any — one Choice per element of the slice
 	for _, part := range sa.Any {
 		seq = append(seq, makeChoice(1, part))
 	}
-
-	// [2] final, if provided (non-zero length)
-	if len(sa.Final) != 0 {
+	if len(sa.Final) > 0 {
 		seq = append(seq, makeChoice(2, sa.Final))
 	}
 
-	// enforce SIZE(1..MAX)
-	if len(seq) == 0 {
-		t.Fatalf("substring must contain at least one of Initial, Any or Final")
-	}
-
-	pkt, err := Marshal(seq, With(BER))
-	if err != nil {
-		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
-	}
-
+	// register the CHOICE alternatives under a named registry
 	choices := NewChoices()
-	choices.Register(OctetString{}, "choice:tag:0")
-	choices.Register([]OctetString{}, "choice:tag:1")
-	choices.Register(OctetString{}, "choice:tag:2")
+	chopts := &Options{Explicit: true}
+	choices.Register(nil, OctetString(""), chopts.SetTag(0))
+	choices.Register(nil, OctetString(""), chopts.SetTag(1))
+	choices.Register(nil, OctetString(""), chopts.SetTag(2))
+	RegisterChoices("substring", choices)
 
-	opts := &Options{
-		Choices: "substring",
-		ChoicesMap: map[string]Choices{
-			"substring": choices,
-		},
-	}
+	opts := &Options{Choices: "substring"}
 
-	var seq2 []Choice
-	if err = Unmarshal(pkt, &seq2, With(opts)); err != nil {
-		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
-	}
-}
-
-func TestChoice_ContextTagging(t *testing.T) {
-	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
-	tagVal := "choice:tag:3"
-
-	ambiguousByTag := NewChoices()
-	ambiguousByTag.Register(new(ObjectIdentifier), "choice:tag:0")
-	ambiguousByTag.Register(new(ObjectIdentifier), "choice:tag:1")
-	ambiguousByTag.Register(new(ObjectIdentifier), "choice:tag:2")
-	ambiguousByTag.Register(new(ObjectIdentifier), "choice:tag:3")
-	ambiguousByTag.Register(new(ObjectIdentifier), "choice:tag:4")
-
-	choice, err := ambiguousByTag.Choose(oid, tagVal)
+	// BER‐encode our sequence of Choice
+	pkt, err := Marshal(seq, With(opts))
 	if err != nil {
-		t.Fatalf("%s failed [tag selection error]: %v", t.Name(), err)
-	} else if choice.Value.(ObjectIdentifier).String() != `1.3.6.1.4.1.56521` {
-		t.Fatalf("Could not choose AUTOMATIC tag OID by tag")
-	}
-}
-
-func ExampleChoice_encodeBareChoice() {
-	var choice Choice = Choice{Value: Null{}}
-	pkt, err := Marshal(choice)
-	if err != nil {
-		fmt.Println(err)
-		return
+		t.Fatalf("BER encoding failed: %v", err)
 	}
 
-	fmt.Printf("CHOICE hex: %s\n", pkt.Hex())
-	// Output: CHOICE hex: 05 00
-}
+	// UNmarshal directly into []OctetString
+	var decoded []OctetString
+	if err := Unmarshal(pkt, &decoded, With(opts)); err != nil {
+		t.Fatalf("BER decoding failed: %v", err)
+	}
 
-func TestChoice_codecov(_ *testing.T) {
-	var choices Choices = NewChoices()
-	choices.cfg = Options{Automatic: false}
-	choices.Len()
-	choices.Register(nil)
-	choices.Choose(nil)
-
-	tag := 0
-	choices.byTag(nil)
-	choices.byTag(tag)
-	choices.byTag(&tag)
-	var tag2 *int
-	choices.byTag(tag2)
-
-	choices.tokenizeChoiceOptions(`choice:explicit`)
-	bcdChooseChoiceCandidate(&BERPacket{}, TLV{}, Choices{}, &Options{tag: &tag})
-	selectFieldChoice("", struct{}{}, &BERPacket{}, &Options{})
-
-	choices.Register(ObjectIdentifier{}, `choice:tag:0,explicit`)
-	choices.Register(ObjectIdentifier{}, `choice:tag:3,explicit`)
-	choices.Choose(ObjectIdentifier{})
-	choicesMap := map[string]Choices{"test": choices}
-	selectFieldChoice("", struct{}{}, &testPacket{}, &Options{Choices: "test", ChoicesMap: choicesMap})
-	bcdChooseChoiceCandidate(&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}}, TLV{}, choices, &Options{tag: &tag})
-	choices.Register(new(relOIDCodec[ObjectIdentifier]), `choice:tag:4`)
-	tag = 4
-	bcdChooseChoiceCandidate(
-		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
-		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
-		choices, &Options{choiceTag: &tag, tag: &tag},
-	)
-	choices.Register(OctetString(``), `choice:tag:5`)
-	tag = 5
-	bcdChooseChoiceCandidate(
-		&BERPacket{data: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
-		TLV{Value: []byte{0x6, 0x7, 0x51, 0x2, 0x1, 0x2, 0x1, 0x2, 0x1}},
-		choices, &Options{choiceTag: &tag, tag: &tag},
-	)
+	// expected values, with proper conversions
+	want := []OctetString{
+		OctetString("thi"),
+		OctetString("is"),
+		OctetString("a"),
+		OctetString("subs"),
+		OctetString("ring"),
+	}
+	if !deepEq(decoded, want) {
+		t.Fatalf("decoded = %v; want %v", decoded, want)
+	}
 }
 
 func TestSequence_choiceAutomaticTagging(t *testing.T) {
-	choices := NewChoices(Options{Automatic: true})
-	choices.Register(new(ObjectIdentifier))
-	choices.Register(&Integer{}, "choice:tag:7")
-	choices.Register(&EmbeddedPDV{})
+	choices := NewChoices(true) // engage auto tagging
+	o := &Options{Explicit: true}
 
-	opts := Options{ChoicesMap: map[string]Choices{
-		`myChoices`: choices,
-	}}
+	choices.Register(nil, ObjectIdentifier{})
+	choices.Register(nil, Integer{}, o.SetTag(7))
+	choices.Register(nil, EmbeddedPDV{})
+	RegisterChoices("myChoices", choices)
 
 	type MySequence struct {
 		Field0 PrintableString
@@ -228,8 +148,7 @@ func TestSequence_choiceAutomaticTagging(t *testing.T) {
 	}
 
 	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521)
-	choice := Choice{Value: oid}
-	choice.SetTag(0)
+	choice := NewChoice(oid) // no tag needed :)
 
 	nint, _ := NewInteger(3)
 
@@ -243,16 +162,18 @@ func TestSequence_choiceAutomaticTagging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
-	t.Logf("Encoded packet: %s\n", pkt.Hex())
+	//t.Logf("Encoded packet: %s\n", pkt.Hex())
 
 	var mine2 MySequence
-	if err = Unmarshal(pkt, &mine2, With(opts)); err != nil {
+	if err = Unmarshal(pkt, &mine2); err != nil {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
-	//t.Logf("%s\n", mine2.Field2.Value.(ObjectIdentifier))
+
+	//t.Logf("%#v\n", mine2)
+	UnregisterChoices("myChoices")
 
 	// coverage
-	marshalSequenceChoiceField(&Options{}, Choice{Value: OctetString("hi"), Explicit: true}, pkt)
+	//marshalSequenceChoiceField(&Options{}, Choice{Value: OctetString("hi"), Explicit: true}, pkt)
 }
 
 func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
@@ -260,11 +181,8 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 	transfer, _ := NewObjectIdentifier(2, 0, 2, 0, 2, 0, 2, 0)
 	syntaxes := Syntaxes{abstract, transfer}
 
-	tag := 0
-	choice := Choice{Value: &syntaxes, Tag: &tag}
-
 	pdv := EmbeddedPDV{
-		Identification:      choice,
+		Identification:      NewChoice(syntaxes, 0),
 		DataValueDescriptor: ObjectDescriptor("test"),
 		DataValue:           OctetString("blarg"),
 	}
@@ -292,11 +210,11 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 			t.Fatalf("%s failed [%s decode]: %v", t.Name(), rule, err)
 		}
 
-		if newPDV.Identification.IsZero() {
+		if newPDV.Identification.Value() == nil {
 			t.Fatalf("Missing identification choice after decoding")
 		}
 
-		switch id := newPDV.Identification.Value.(type) {
+		switch id := newPDV.Identification.Value().(type) {
 		case Syntaxes:
 			if id.Abstract.String() != `2.1.2.1.2.1.2.1` ||
 				id.Transfer.String() != `2.0.2.0.2.0.2.0` {
@@ -318,11 +236,8 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 	oid, _ := NewObjectIdentifier(2, 1, 2, 1, 2, 1, 2, 1)
 
-	choice := Choice{Value: &oid}
-	choice.SetTag(4) // choice [4]
-
 	pdv := EmbeddedPDV{
-		Identification:      choice,
+		Identification:      NewChoice(oid, 4),
 		DataValueDescriptor: ObjectDescriptor("test"),
 		DataValue:           OctetString("blarg"),
 	}
@@ -333,7 +248,7 @@ func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
 		}
 
-		t.Logf("%s PKT Hex: %s\n", rule, pkt.Hex())
+		//t.Logf("%s PKT Hex: %s\n", rule, pkt.Hex())
 
 		var newPDV EmbeddedPDV
 		if err = Unmarshal(pkt, &newPDV); err != nil {
@@ -341,12 +256,12 @@ func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 		}
 
 		// Now "unpack" the decoded identification field.
-		if newPDV.Identification.IsZero() {
+		if newPDV.Identification.Value() == nil {
 			t.Fatalf("%s failed [%s field check]: Missing identification choice after decoding",
 				t.Name(), rule)
 		}
 
-		switch id := newPDV.Identification.Value.(type) {
+		switch id := newPDV.Identification.Value().(type) {
 		case ObjectIdentifier:
 			// Compare the decoded OID with our original.
 			if !id.Eq(oid) {
@@ -370,167 +285,323 @@ func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 
 func TestChoice_AutomaticTagsUniqueAndExplicit(t *testing.T) {
 	// Automatic tags must be unique and EXPLICIT
-	auto := NewChoices(Options{Automatic: true})
-	auto.Register(new(Integer))          // -> [0] EXPLICIT
-	auto.Register(new(ObjectIdentifier)) // -> [1] EXPLICIT
+	choices := NewChoices(true)
+	o := &Options{Explicit: true}
+
+	choices.Register(nil, Integer{}, o)          // -> [0] EXPLICIT
+	choices.Register(nil, ObjectIdentifier{}, o) // -> [1] EXPLICIT
+	RegisterChoices("blarg", choices)
 
 	// Sanity-check the tags that were minted.
-	integer, _ := NewInteger(42)
-	if alt, err := auto.Choose(integer, "choice:tag:0"); err != nil || *alt.Tag != 0 {
+	if !choices.Choose(Integer{}, 0) {
 		t.Fatalf("first alternative did not get automatic tag 0")
 	}
-	if alt, err := auto.Choose(ObjectIdentifier{}, "choice:tag:1"); err != nil || *alt.Tag != 1 {
+	if !choices.Choose(ObjectIdentifier{}, 1) {
 		t.Fatalf("second alternative did not get automatic tag 1")
 	}
 
 	// Now encode the OID and ensure the outer
 	// tag is *explicit*.
 	oid, _ := NewObjectIdentifier(1, 3, 6)
-	ch, _ := auto.Choose(oid, "choice:tag:1")
-	ch.Explicit = true
-	pkt, err := Marshal(ch, With(BER)) // marshal the CHOICE itself
+	ch := NewChoice(oid, 1)
+	pkt, err := Marshal(ch, With(BER, &Options{Choices: "blarg"})) // marshal the CHOICE itself
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
+
 	// 0xA1 == [1] constructed (EXPLICIT)
 	if pkt.Data()[0] != 0xA1 {
 		t.Fatalf("automatic tag should be EXPLICIT (A1), got 0x%02X", pkt.Data()[0])
 	}
+	UnregisterChoices("blarg")
 }
 
-func TestChoice_DuplicateTagCollision(t *testing.T) {
-	// Duplicate tag registration should be rejected / ambiguous
-	dup := NewChoices()
-	_ = dup.Register(new(Integer), "choice:tag:0")
-	_ = dup.Register(new(Boolean), "choice:tag:0")
-
-	if err := dup.Register(new(Boolean), "choice:tag:0"); err == nil {
-		t.Fatalf("expected duplicate-tag error, got nil")
+func TestChoice_SequenceUniversal(t *testing.T) {
+	// 1) Build a Choices registry with two SEQUENCE‐typed alternatives:
+	//    Alt1 == SEQUENCE {A INTEGER}, Alt2 == SEQUENCE {A INTEGER; B INTEGER}
+	seqChoices := NewChoices()     // no auto‐tag, UNIVERSAL tags
+	o := &Options{Explicit: false} // explicit=false → alternatives encoded as bare SEQUENCE
+	type Alt1 struct{ A Integer }
+	type Alt2 struct {
+		A Integer
+		B Integer
 	}
-}
+	seqChoices.Register(nil, Alt1{}, o.SetTag(0))
+	seqChoices.Register(nil, Alt2{}, o.SetTag(1))
+	RegisterChoices("sequniv", seqChoices)
+	defer UnregisterChoices("sequniv")
 
-func TestChoice_NegativeTagLeak(t *testing.T) {
-	choices := NewChoices()
-	_ = choices.Register(new(ObjectIdentifier), "choice:tag:0")
-
-	oid, _ := NewObjectIdentifier(1, 2, 3)
-	ch := Choice{Value: oid}
-
-	pkt, err := Marshal(ch, With(BER))
-	if err != nil {
-		t.Fatalf("marshal failed unexpectedly: %v", err)
-	}
-	if pkt.Data()[0] != 0x06 {
-		t.Fatalf("expected bare OBJECT IDENTIFIER (0x06), got 0x%02X",
-			pkt.Data()[0])
-	}
-}
-
-func TestChoice_ConcurrentUseDataRace(t *testing.T) {
-	// Registry used concurrently must be race-safe
-	// Run with: go test -race -run TestChoice_ConcurrentUseDataRace
-	reg := NewChoices()
-	_ = reg.Register(new(Integer), "choice:tag:0")
-
-	wg := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
-		integer, _ := NewInteger(i)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, _ = reg.Choose(integer, "choice:tag:0")
-		}()
-	}
-	wg.Wait()
-	// With current mutable slice, the -race tool reports:
-	// "WARNING: DATA RACE" (append while readers iterate).
-}
-
-func Test_pickChoiceAlternative_NoUnwrap(t *testing.T) {
-	// build a registry that knows “tag 2 ⇒ int”
-	c := NewChoices()
-	c.Register((*int)(nil), "choice:tag:2")
-
-	// Options must point at that same map
-	opts := &Options{Choices: "choiceDemo"}
-	opts.ChoicesMap = map[string]Choices{
-		"choiceDemo": c,
+	// 2) Create a wrapper that holds a CHOICE untagged:
+	type Wrapper struct {
+		C Choice `asn1:"choices:sequniv"`
 	}
 
-	// payload = bare INTEGER 42
-	raw := []byte{0x02, 0x01, 0x2A}
-	pkt := BER.New(raw...)
-	pkt.SetOffset(0)
+	three, _ := NewInteger(3)
+	seven, _ := NewInteger(7)
 
-	def, tag, payload, payloadPK, outOpts, err := setPickChoiceAlternative(pkt, opts)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// pick variant #2 for the test:
+	w := Wrapper{
+		C: NewChoice(Alt2{A: three, B: seven}, 1),
 	}
-	if tag != 2 {
-		t.Errorf("tag = %d; want 2", tag)
+
+	opts := Options{Choices: "sequniv"}
+
+	// 3) Round‐trip each encoding rule, comparing hex and then unmarshalling
+	hexes := map[EncodingRule]string{
+		BER: "30 0A A1083006020103020107",
+		CER: "30 0A A1083006020103020107",
+		DER: "30 0A A1083006020103020107",
 	}
-	if def.Type.Kind() != reflect.Int {
-		t.Errorf("def.Type = %v; want Int", def.Type)
-	}
-	if len(payload) != 1 || payload[0] != 0x2A {
-		t.Errorf("payload = %v; want [0x2A]", payload)
-	}
-	b := payloadPK.Data()
-	if len(b) != 1 || b[0] != 0x2A {
-		t.Errorf("payloadPK.Data() = %v; want [0x2A]", b)
-	}
-	if outOpts.ChoicesMap == nil {
-		t.Errorf("lost registry")
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(w, With(rule, opts))
+		if err != nil {
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
+		}
+		got := pkt.Hex()
+		want := hexes[rule]
+		if got != want {
+			t.Fatalf("%s failed [%s encoding]: want %q, got %q", t.Name(), rule, want, got)
+		}
+
+		// now decode
+		var w2 Wrapper
+		if err := Unmarshal(pkt, &w2, With(rule, opts)); err != nil {
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
+		}
+
+		// assert we got Alt2 back
+		alt2, ok := w2.C.Value().(Alt2)
+		if !ok {
+			t.Fatalf("%s: decoded C is %T, want Alt2", t.Name(), w2.C.Value)
+		}
+		if alt2.A.Big().Cmp(three.Big()) != 0 || alt2.B.Big().Cmp(seven.Big()) != 0 {
+			t.Errorf("%s: wrong Alt2 fields: %+v", t.Name(), alt2)
+		}
 	}
 }
 
-func Test_pickChoiceAlternative_MustUnwrap(t *testing.T) {
-	c := NewChoices()
-	c.Register((*int)(nil), "choice:tag:2")
+func TestChoice_DefaultInterfaceDecode(t *testing.T) {
+	def := NewChoices(false)       // no auto‐tag, bare UNIVERSAL tags
+	o := &Options{Explicit: false} // alternatives will be unwrapped
+	def.Register(nil, ObjectIdentifier{}, o.SetTag(0))
+	def.Register(nil, OctetString(""), o.SetTag(1))
+	RegisterChoices("defintf", def)
+	defer UnregisterChoices("defintf")
 
-	opts := &Options{Choices: "choiceDemo"}
-	opts.ChoicesMap = map[string]Choices{
-		"choiceDemo": c,
+	type Wrapper struct {
+		C Choice `asn1:"choices:defintf"`
+	}
+	wantVal := OctetString("hello")
+	w := Wrapper{C: NewChoice(wantVal, 1)}
+	opts := Options{Choices: "defintf"}
+
+	hexes := map[EncodingRule]string{
+		BER: "30 09 A107040568656C6C6F",
+		CER: "30 09 A107040568656C6C6F",
+		DER: "30 09 A107040568656C6C6F",
 	}
 
-	// context-specific constructed tag 2 (0xA2), length=3, inner=0x02 0x01 0x05
-	raw := []byte{0xA2, 0x03, 0x02, 0x01, 0x05}
-	pkt := BER.New(raw...)
-	pkt.SetOffset(0)
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(w, With(rule, opts))
+		if err != nil {
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
+		}
+		got := pkt.Hex()
+		want := hexes[rule]
+		if got != want {
+			t.Fatalf("%s failed [%s encoding mismatch]:\n\twant: %q\n\tgot:  %q",
+				t.Name(), rule, want, got)
+		}
 
-	def, tag, payload, _, _, err := setPickChoiceAlternative(pkt, opts)
-	if err != nil {
-		t.Fatalf("unwrap error: %v", err)
-	}
-	if tag != 2 {
-		t.Errorf("unwrap tag = %d; want 2", tag)
-	}
-	if def.Type.Kind() != reflect.Int {
-		t.Errorf("unwrap def.Type = %v; want Int", def.Type)
-	}
-	if len(payload) != 3 || payload[2] != 0x05 {
-		t.Errorf("unwrap payload = %v; want [0x05]", payload)
+		var w2 Wrapper
+		if err := Unmarshal(pkt, &w2, With(rule, opts)); err != nil {
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
+		}
+		str, ok := w2.C.Value().(OctetString)
+		if !ok || string(str) != string(wantVal) {
+			t.Fatalf("%s: decoded = %#v (type %T), want OctetString(%q)",
+				t.Name(), w2.C.Value(), w2.C.Value(), wantVal)
+		}
 	}
 }
 
-func Test_handleChoiceSlice_NotSlice(t *testing.T) {
-	payload := []byte{0x04, 0x01, 'x'}
-	pkt := BER.New(payload...)
+func TestChoice_BareSetChoiceUniversal(t *testing.T) {
+	setuniv := NewChoices(false)   // no auto‐tag
+	o := &Options{Explicit: false} // bare UNIVERSAL SET OF
+	type Alt1 struct{ A Integer }
+	type Alt2 struct {
+		A Integer
+		B Integer
+	}
+	setuniv.Register(nil, Alt1{}, o.SetTag(0))
+	setuniv.Register(nil, Alt2{}, o.SetTag(1))
+	RegisterChoices("setuniv", setuniv)
+	defer UnregisterChoices("setuniv")
 
-	def := choiceAlternative{
-		Type: reflect.TypeOf(int(0)),
-		Opts: choiceOptions{},
+	type Wrapper struct {
+		C Choice `asn1:"set,choices:setuniv"`
 	}
-	tmp := reflect.New(reflect.TypeOf(Choice{})).Elem()
-	if _, handled, err := handleChoiceSlice(tmp, def, payload, pkt, &Options{}); err != nil || handled {
-		t.Fatalf("got (handled=%v, err=%v), want handled=false, no error", handled, err)
+
+	five, _ := NewInteger(5)
+	nine, _ := NewInteger(9)
+
+	wantAlt := Alt2{A: five, B: nine}
+	w := Wrapper{C: NewChoice(wantAlt, 1)}
+	opts := Options{Choices: "setuniv"}
+
+	hexes := map[EncodingRule]string{
+		BER: "30 0A A1083006020105020109",
+		CER: "30 0A A1083006020105020109",
+		DER: "30 0A A1083006020105020109",
 	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(w, With(rule, opts))
+		if err != nil {
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
+		}
+		got := pkt.Hex()
+		want := hexes[rule]
+		if got != want {
+			t.Fatalf("%s failed [%s encoding mismatch]:\n\twant: %q\n\tgot:  %q",
+				t.Name(), rule, want, got)
+		}
+
+		var w2 Wrapper
+		if err := Unmarshal(pkt, &w2, With(rule, opts)); err != nil {
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
+		}
+		alt2, ok := w2.C.Value().(Alt2)
+		if !ok {
+			t.Fatalf("%s: got %T, want Alt2", t.Name(), w2.C.Value)
+		}
+		if alt2.A.Big().Cmp(five.Big()) != 0 || alt2.B.Big().Cmp(nine.Big()) != 0 {
+			t.Errorf("%s: wrong fields %+v", t.Name(), alt2)
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
+// 1) bare UNIVERSAL SEQUENCE  → decodeSeqChoice
+func TestChoice_SeqChoice_Direct(t *testing.T) {
+	// build a Choices registry with two SEQUENCE‐typed alts
+	seqCh := NewChoices(false)     // no auto‐tag
+	o := &Options{Explicit: false} // bare UNIVERSAL encoding
+	type Alt1 struct{ A Integer }
+	type Alt2 struct {
+		A Integer
+		B Integer
+	}
+	seqCh.Register(nil, Alt1{}, o.SetTag(0))
+	seqCh.Register(nil, Alt2{}, o.SetTag(1))
+	RegisterChoices("seqdir", seqCh)
+	defer UnregisterChoices("seqdir")
+
+	// pick the second alternative
+	one, _ := NewInteger(1)
+	two, _ := NewInteger(2)
+	in := Alt2{A: one, B: two}
+	ch := NewChoice(in, 1)
+
+	opts := Options{Choices: "seqdir"}
+
+	hexes := map[EncodingRule]string{
+		BER: "A1 08 3006020101020102",
+		CER: "A1 08 3006020101020102",
+		DER: "A1 08 3006020101020102",
+	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(ch, With(rule, opts))
+		if err != nil {
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
+		}
+		got := pkt.Hex()
+		want := hexes[rule]
+		if got != want {
+			t.Fatalf("%s failed [%s encoding mismatch]:\n\twant: %q\n\tgot:  %q",
+				t.Name(), rule, want, got)
+		}
+
+		var out Choice
+		if err := Unmarshal(pkt, &out, With(rule, opts)); err != nil {
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
+		}
+		alt2, ok := out.Value().(Alt2)
+		if !ok {
+			t.Fatalf("%s: decoded type %T, want Alt2", t.Name(), out.Value())
+		}
+		if alt2.A.Big().Cmp(one.Big()) != 0 || alt2.B.Big().Cmp(two.Big()) != 0 {
+			t.Fatalf("%s: wrong fields %+v", t.Name(), alt2)
+		}
+	}
+}
+
+func TestChoice_DefaultInterfaceDecode_Primitive(t *testing.T) {
+	def := NewChoices(false)
+	o := &Options{Explicit: false}
+	def.Register(nil, PrintableString(""), o.SetTag(0))
+	def.Register(nil, Integer{}, o.SetTag(1))
+	RegisterChoices("primdir", def)
+	defer UnregisterChoices("primdir")
+
+	// choose the PrintableString branch (tag=0)
+	wantPS := PrintableString("foobar")
+	ch := NewChoice(wantPS, 0)
+
+	opts := Options{Choices: "primdir"}
+
+	hexes := map[EncodingRule]string{
+		BER: "A0 08 1306666F6F626172",
+		CER: "A0 08 1306666F6F626172",
+		DER: "A0 08 1306666F6F626172",
+	}
+
+	for _, rule := range encodingRules {
+		pkt, err := Marshal(ch, With(rule, opts))
+		if err != nil {
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
+		}
+		got := pkt.Hex()
+		want := hexes[rule]
+		if got != want {
+			t.Fatalf("%s failed [%s encoding mismatch]:\n\twant: %q\n\tgot:  %q",
+				t.Name(), rule, want, got)
+		}
+
+		var out Choice
+		if err := Unmarshal(pkt, &out, With(rule, opts)); err != nil {
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
+		}
+		ps, ok := out.Value().(PrintableString)
+		if !ok || ps != wantPS {
+			t.Fatalf("%s: decoded = %#v (type %T), want PrintableString(%q)",
+				t.Name(), out.Value(), out.Value(), wantPS)
+		}
+	}
+}
+
+func TestChoice_codecov(_ *testing.T) {
+	var ch invalidChoice
+	ch.choiceTag()
+	ch.Value()
+	ch.isChoice()
+
+	var wr wrappedChoice
+	wr.isChoice()
+
+	var cho Choices = NewChoices()
+	cho.lookupDescriptorByInterface(refTypeOf(struct{}{}))
+	cho.Choose(struct{}{})
 }
 
 func init() {
-	testFilterChoices = NewChoices()
-	testFilterChoices.Register([]*testFilter(nil), `choice:tag:0`) // and
-	testFilterChoices.Register([]*testFilter(nil), `choice:tag:1`) // or
-	testFilterChoices.Register(&testEqualityMatch{}, `choice:tag:3`)
-	testFilterChoices.Register(&testFilterPresent{}, `choice:tag:7`)
+	testFilterChoices := NewChoices()
+	o := &Options{Explicit: true}
+
+	testFilterChoices.Register((*testFilterInterface)(nil), testFilterAnd{}, o.SetTag(0))
+	testFilterChoices.Register((*testFilterInterface)(nil), testEqualityMatch{}, o.SetTag(3))
+	testFilterChoices.Register((*testFilterInterface)(nil), testFilterPresent{}, o.SetTag(7))
+	RegisterChoices("filter", testFilterChoices)
 }
