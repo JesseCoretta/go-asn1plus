@@ -71,6 +71,19 @@ func (r EncodingRule) allowsIndefinite() (ok bool) {
 }
 
 /*
+canonicalOrdering requires a Boolean value indicative of whether the
+receiver instance implements (and mandates) canonical ordering.
+*/
+func (r EncodingRule) canonicalOrdering() (ord bool) {
+	switch r {
+	case CER, DER:
+		ord = true
+	}
+
+	return
+}
+
+/*
 In returns a Boolean instance indicative of r being present within e.
 */
 func (r EncodingRule) In(e ...EncodingRule) (is bool) {
