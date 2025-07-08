@@ -22,46 +22,48 @@ import (
 official import aliases.
 */
 var (
-	itoa       func(int) string                         = strconv.Itoa
-	atoi       func(string) (int, error)                = strconv.Atoi
-	fmtUint    func(uint64, int) string                 = strconv.FormatUint
-	fmtInt     func(int64, int) string                  = strconv.FormatInt
-	fmtFloat   func(float64, byte, int, int) string     = strconv.FormatFloat
-	puint      func(string, int, int) (uint64, error)   = strconv.ParseUint
-	pbool      func(string) (bool, error)               = strconv.ParseBool
-	pfloat     func(string, int) (float64, error)       = strconv.ParseFloat
-	appInt     func([]byte, int64, int) []byte          = strconv.AppendInt
-	appUint    func([]byte, uint64, int) []byte         = strconv.AppendUint
-	lc         func(string) string                      = strings.ToLower
-	uc         func(string) string                      = strings.ToUpper
-	split      func(string, string) []string            = strings.Split
-	join       func([]string, string) string            = strings.Join
-	idxr       func(string, rune) int                   = strings.IndexRune
-	lidx       func(string, string) int                 = strings.LastIndex
-	stridxb    func(string, byte) int                   = strings.IndexByte
-	replace    func(string, string, string, int) string = strings.Replace
-	replaceAll func(string, string, string) string      = strings.ReplaceAll
-	hasPfx     func(string, string) bool                = strings.HasPrefix
-	hasSfx     func(string, string) bool                = strings.HasSuffix
-	trimPfx    func(string, string) string              = strings.TrimPrefix
-	trimL      func(string, string) string              = strings.TrimLeft
-	trimS      func(string) string                      = strings.TrimSpace
-	trim       func(string, string) string              = strings.Trim
-	cntns      func(string, string) bool                = strings.Contains
-	countstr   func(string, string) int                 = strings.Count
-	streq      func(string, string) bool                = strings.EqualFold
-	streqf     func(string, string) bool                = strings.EqualFold
-	strrpt     func(string, int) string                 = strings.Repeat
-	mkerr      func(string) error                       = errors.New
-	isCtrl     func(rune) bool                          = unicode.IsControl
-	isPrint    func(rune) bool                          = unicode.IsPrint
-	utf16Enc   func([]rune) []uint16                    = utf16.Encode
-	utf8OK     func(string) bool                        = utf8.ValidString
-	hexstr     func([]byte) string                      = hex.EncodeToString
-	newBigInt  func(int64) *big.Int                     = big.NewInt
-	refTypeOf  func(any) reflect.Type                   = reflect.TypeOf
-	refValueOf func(any) reflect.Value                  = reflect.ValueOf
-	deepEq     func(any, any) bool                      = reflect.DeepEqual
+	itoa       func(int) string                           = strconv.Itoa
+	atoi       func(string) (int, error)                  = strconv.Atoi
+	fmtUint    func(uint64, int) string                   = strconv.FormatUint
+	fmtInt     func(int64, int) string                    = strconv.FormatInt
+	fmtFloat   func(float64, byte, int, int) string       = strconv.FormatFloat
+	puint      func(string, int, int) (uint64, error)     = strconv.ParseUint
+	pbool      func(string) (bool, error)                 = strconv.ParseBool
+	pfloat     func(string, int) (float64, error)         = strconv.ParseFloat
+	appInt     func([]byte, int64, int) []byte            = strconv.AppendInt
+	appUint    func([]byte, uint64, int) []byte           = strconv.AppendUint
+	lc         func(string) string                        = strings.ToLower
+	uc         func(string) string                        = strings.ToUpper
+	split      func(string, string) []string              = strings.Split
+	join       func([]string, string) string              = strings.Join
+	idxr       func(string, rune) int                     = strings.IndexRune
+	lidx       func(string, string) int                   = strings.LastIndex
+	stridxb    func(string, byte) int                     = strings.IndexByte
+	replace    func(string, string, string, int) string   = strings.Replace
+	replaceAll func(string, string, string) string        = strings.ReplaceAll
+	hasPfx     func(string, string) bool                  = strings.HasPrefix
+	hasSfx     func(string, string) bool                  = strings.HasSuffix
+	trimPfx    func(string, string) string                = strings.TrimPrefix
+	trimL      func(string, string) string                = strings.TrimLeft
+	trimS      func(string) string                        = strings.TrimSpace
+	trim       func(string, string) string                = strings.Trim
+	cntns      func(string, string) bool                  = strings.Contains
+	countstr   func(string, string) int                   = strings.Count
+	streq      func(string, string) bool                  = strings.EqualFold
+	streqf     func(string, string) bool                  = strings.EqualFold
+	strrpt     func(string, int) string                   = strings.Repeat
+	mkerr      func(string) error                         = errors.New
+	isCtrl     func(rune) bool                            = unicode.IsControl
+	isPrint    func(rune) bool                            = unicode.IsPrint
+	utf16Enc   func([]rune) []uint16                      = utf16.Encode
+	utf8OK     func(string) bool                          = utf8.ValidString
+	hexstr     func([]byte) string                        = hex.EncodeToString
+	newBigInt  func(int64) *big.Int                       = big.NewInt
+	refTypeOf  func(any) reflect.Type                     = reflect.TypeOf
+	refValueOf func(any) reflect.Value                    = reflect.ValueOf
+	refNew     func(reflect.Type) reflect.Value           = reflect.New
+	refMkSl    func(reflect.Type, int, int) reflect.Value = reflect.MakeSlice
+	deepEq     func(any, any) bool                        = reflect.DeepEqual
 )
 
 /*
@@ -77,6 +79,8 @@ func sizeOfInt(i int) int {
 
 	return (bn(i) + 7) / 8
 }
+
+func ptrInt(x int) *int { return &x }
 
 func newStrBuilder() strings.Builder { return strings.Builder{} }
 
@@ -172,7 +176,7 @@ func toPtr(rv reflect.Value) (ptr reflect.Value) {
 		ptr = rv.Addr()
 	} else {
 		// Not addressable: allocate a new instance and set its value.
-		ptr = reflect.New(rv.Type())
+		ptr = refNew(rv.Type())
 		ptr.Elem().Set(rv)
 	}
 	return
