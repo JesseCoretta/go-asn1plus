@@ -11,90 +11,76 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.CLONE_STATS_TOKEN }}
-      GIST_ID:  fc9283f4379c4b0b6211de82d01e2cec
-      BADGE_FILE:       "asn1plus_clones.json"
-      METADATA_FILE:    "asn1plus_clones_meta.json"
+      GIST_ID: fc9283f4379c4b0b6211de82d01e2cec
+      BADGE_FILE: asn1plus_clones.json
+      METADATA_FILE: asn1plus_clones_meta.json
 
     steps:
+
       - name: Fetch 14-day clone stats
         id: fetch
         run: |
           echo "🔍 Fetching 14-day clone stats…"
           resp=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/traffic/clones?per=day")
-          windowTotal=$(echo "$resp" | jq '.count // 0')
-          latest=$(echo "$resp" | jq -r '.clones | sort_by(.timestamp) | last')
-          latestTs=$(echo "$latest" | jq -r .timestamp)
-          latestCount=$(echo "$latest" | jq -r .count)
+          window_total=$(echo "$resp" | jq '.count // 0')
+          echo "WINDOW_TOTAL=$window_total" >> $GITHUB_ENV
 
-          echo "windowTotal=$windowTotal"   >> $GITHUB_OUTPUT
-          echo "latestTs=$latestTs"         >> $GITHUB_OUTPUT
-          echo "latestCount=$latestCount"   >> $GITHUB_OUTPUT
-
-      - name: Read & safely update Gist badge + metadata
+      - name: Read & update Gist badge + metadata
         run: |
           set -e
 
-          # Load Gist metadata
-          gist_json=$(curl -s -H "Authorization: token $GH_TOKEN" \
+          # Load existing Gist
+          gist=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/gists/$GIST_ID")
-          badge_url=$(echo "$gist_json" | jq -r ".files[\"$BADGE_FILE\"].raw_url // empty")
-          meta_url=$(echo "$gist_json"  | jq -r ".files[\"$METADATA_FILE\"].raw_url // empty")
+          badge_url=$(echo "$gist" | jq -r ".files[\"$BADGE_FILE\"].raw_url")
+          meta_url=$(echo "$gist" | jq -r ".files[\"$METADATA_FILE\"].raw_url")
 
-          if [ -z "$meta_url" ]; then
-            echo "❌ Metadata file '$METADATA_FILE' not found. Aborting to avoid reset."
+          if [[ -z "$meta_url" ]]; then
+            echo "❌ Metadata file '$METADATA_FILE' not found."
             exit 1
           fi
 
-          # Fetch existing files
-          old_badge=$(curl -s "$badge_url")
+          # Parse old metadata
           old_meta=$(curl -s "$meta_url")
-          echo "$old_meta" > metadata.bak.json
+          prev_total=$(echo "$old_meta" | jq -r '.lastWindowTotal // 0')
+          lifetime=$(echo "$old_meta" | jq -r '.lifetime // 0')
 
-          # Parse existing metadata
-          oldLife=$(echo "$old_meta" | jq -r '.lifetime // "0"')
-          prevTs=$(echo "$old_meta" | jq -r '.lastTimestamp // ""')
-
-          # Compute diff: only add when timestamp changes
-          if [ "$prevTs" = "${{ steps.fetch.outputs.latestTs }}" ]; then
-            diff=0
-          else
-            diff=${{ steps.fetch.outputs.latestCount }}
+          # Compute new clones since last run
+          diff=$(( WINDOW_TOTAL - prev_total ))
+          if [ "$diff" -le 0 ]; then
+            echo "No new clones since last run (diff=$diff)."
+            exit 0
           fi
-          newLife=$(( oldLife + diff ))
 
-          # Build new badge JSON (valid keys only)
-          new_badge=$(jq -n \
-            --arg m "$newLife" \
-            '{ schemaVersion: 1, label: "clones", message: $m, color: "blue" }')
+          new_lifetime=$(( lifetime + diff ))
 
-          # Build new metadata JSON
+          # Build updated badge JSON
+          badge=$(jq -n \
+            --arg m "$new_lifetime" \
+            '{schemaVersion:1,label:"clones",message:$m,color:"blue"}')
+
+          # Build updated metadata JSON
           new_meta=$(jq -n \
-            --arg l "$newLife" \
-            --arg t "${{ steps.fetch.outputs.latestTs }}" \
-            '{ lifetime: $l, lastTimestamp: $t }')
+            --arg l "$new_lifetime" \
+            --arg w "$WINDOW_TOTAL" \
+            '{lifetime:($l|tonumber),lastWindowTotal:($w|tonumber)}')
 
-          # Prepare patch payload
-          filename_badge="$BADGE_FILE"
-          filename_meta="$METADATA_FILE"
+          # Create patch payload
           payload=$(jq -n \
-            --arg fb "$filename_badge" --arg bb "$new_badge" \
-            --arg fm "$filename_meta" --arg mm "$new_meta" \
-            '{
-              files: {
-                ($fb): { content: $bb },
-                ($fm): { content: $mm }
-              }
-            }')
+            --arg fb "$BADGE_FILE" --argjson bb "$badge" \
+            --arg fm "$METADATA_FILE" --argjson mm "$new_meta" \
+            '{files:{($fb):{content:$bb|tostring},($fm):{content:$mm|tostring}}}')
 
-          # Patch the Gist
+          # Update Gist
           curl -s -X PATCH \
             -H "Authorization: token $GH_TOKEN" \
             -d "$payload" \
-            "https://api.github.com/gists/$GIST_ID" \
-            >/dev/null
-          echo "✅ Gist updated: badge + metadata (backup in metadata.bak.json)"
+            "https://api.github.com/gists/$GIST_ID"
+
+          echo "✅ Updated badge: +$diff clones (new lifetime: $new_lifetime)."
 
       - name: Reveal Shields.io badge snippet
         run: |
-          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${{ github.actor }}/${{ env.GIST_ID }}/raw/asn1plus_clones.json&query=%24.message&label=clones&color=blue)"
+          echo "![Clones](https://img.shields.io/badge/dynamic/json?url=https://gist.githubusercontent.com/${{ github.actor }}/${{ env.GIST_ID }}/raw/${{ env.BADGE_FILE }}&query=%24.message&label=clones&color=blue)"
+
