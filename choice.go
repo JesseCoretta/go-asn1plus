@@ -187,10 +187,6 @@ func (r Choices) Register(
 
 	// always group alternatives under the Choice
 	// interface if none was specified
-	//key := refTypeOf(concrete)
-	//if ifacePtr != nil {
-	//    key = refTypeOf(ifacePtr).Elem()
-	//}
 	var key reflect.Type
 	if ifacePtr != nil {
 		key = refTypeOf(ifacePtr).Elem()

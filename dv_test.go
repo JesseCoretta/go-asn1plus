@@ -26,14 +26,14 @@ func TestDefaultValue_Primitive(t *testing.T) {
 		t.Fatalf("%s failed [[1] BER encoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("[1] BER encoding: %s\n", pkt.Hex())
+	//t.Logf("[1] BER encoding: %s\n", pkt.Hex())
 
 	var dest MySequence
 	if err = Unmarshal(pkt, &dest); err != nil {
 		t.Fatalf("%s failed [[1] BER decoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("[1] Unmarshaled: %#v\n", dest)
+	//t.Logf("[1] Unmarshaled: %#v\n", dest)
 
 	// Try it a second time, this time set a non-default ps val
 	my.Field2 = PrintableString("not a default")
@@ -42,7 +42,7 @@ func TestDefaultValue_Primitive(t *testing.T) {
 		t.Fatalf("%s failed [[2] BER encoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("[2] BER encoding: %s\n", pkt.Hex())
+	//t.Logf("[2] BER encoding: %s\n", pkt.Hex())
 
 	var dest2 MySequence
 	if err = Unmarshal(pkt, &dest2); err != nil {
@@ -50,7 +50,7 @@ func TestDefaultValue_Primitive(t *testing.T) {
 	}
 	UnregisterDefaultValue("myPS")
 
-	t.Logf("[2] Unmarshaled: %#v\n", dest2)
+	//t.Logf("[2] Unmarshaled: %#v\n", dest2)
 }
 
 func TestDefaultValue_Sequence(t *testing.T) {
@@ -74,14 +74,14 @@ func TestDefaultValue_Sequence(t *testing.T) {
 		t.Fatalf("%s failed [[1] BER encoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("[1] BER encoding: %s\n", pkt.Hex())
+	//t.Logf("[1] BER encoding: %s\n", pkt.Hex())
 
 	var dest MySequence
 	if err = Unmarshal(pkt, &dest); err != nil {
 		t.Fatalf("%s failed [[1] BER decoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("[1] Unmarshaled: %#v\n", dest)
+	//t.Logf("[1] Unmarshaled: %#v\n", dest)
 
 	// Try it a second time, this time set a non-default ps val
 	my.Field2 = MyOtherSequence{OctetString("super unique value")}
@@ -90,7 +90,7 @@ func TestDefaultValue_Sequence(t *testing.T) {
 		t.Fatalf("%s failed [[2] BER encoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("[2] BER encoding: %s\n", pkt.Hex())
+	//t.Logf("[2] BER encoding: %s\n", pkt.Hex())
 
 	var dest2 MySequence
 	if err = Unmarshal(pkt, &dest2); err != nil {
@@ -98,5 +98,5 @@ func TestDefaultValue_Sequence(t *testing.T) {
 	}
 	UnregisterDefaultValue("myOth")
 
-	t.Logf("[2] Unmarshaled: %#v\n", dest2)
+	//t.Logf("[2] Unmarshaled: %#v\n", dest2)
 }

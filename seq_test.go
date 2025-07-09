@@ -44,16 +44,12 @@ func TestSequenceOf_roundTrip(t *testing.T) {
 		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
-	//strb := newStrBuilder()
-	//pkt.Dump(&strb)
-	//t.Logf("BER encoding: %s\n", strb.String())
-
 	var mrc2 []modifyRequestChange
 	if err = Unmarshal(pkt, &mrc2, With(opts)); err != nil {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 
-	t.Logf("%#v\n", mrc2)
+	//t.Logf("%#v\n", mrc2)
 }
 
 func TestMarshal_SequenceEncodingRulesWith(t *testing.T) {

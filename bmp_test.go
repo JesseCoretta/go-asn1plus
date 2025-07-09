@@ -142,10 +142,10 @@ func TestBMPString_codecov(t *testing.T) {
 		if bmp, err := NewBMPString(valid.value); err != nil {
 			t.Fatalf("%s[%d]: NewBMPString(%v) returned error: %v", t.Name(), idx, valid.value, err)
 		} else {
-			if idx == 3 {
-				t.Logf("actual: %#v\n", bmp)
-				t.Logf("expect: %#v\n", valid.expect)
-			}
+			//if idx == 3 {
+			//	t.Logf("actual: %#v\n", bmp)
+			//	t.Logf("expect: %#v\n", valid.expect)
+			//}
 			if !equalBMPString(bmp, valid.expect) {
 				t.Fatalf("%s[%d]: NewBMPString(%v) = len(%d); want len(%d)", t.Name(), idx, valid.value, bmp.Len(), valid.expect.Len())
 			}

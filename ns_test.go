@@ -137,7 +137,7 @@ func TestNumericString_encodingRules(t *testing.T) {
 			if pkt, err = Marshal(od, With(rule)); err != nil {
 				t.Fatalf("%s[%d] failed [%s encoding]: %v", t.Name(), idx, rule, err)
 			}
-			t.Logf("%T.%s hex::%s\n", od, rule, pkt.Hex())
+			//t.Logf("%T.%s hex::%s\n", od, rule, pkt.Hex())
 
 			// Decode our PDU into a new NumericString instance
 			var other NumericString

@@ -124,7 +124,7 @@ func TestSet_encodingRules(t *testing.T) {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
 
-		t.Logf("%s encoding: %s\n", rule, pkt.Hex())
+		//t.Logf("%s encoding: %s\n", rule, pkt.Hex())
 
 		var decoded mySET
 		if err = Unmarshal(pkt, &decoded); err != nil {

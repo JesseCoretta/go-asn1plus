@@ -79,7 +79,7 @@ func TestObjectDescriptor_encodingRules(t *testing.T) {
 				t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 			}
 
-			t.Logf("%T.%s :: %s\n", od, rule, pkt.Hex())
+			//t.Logf("%T.%s :: %s\n", od, rule, pkt.Hex())
 
 			// Decode our PDU into a new ObjectDescriptor instance
 			var other ObjectDescriptor
