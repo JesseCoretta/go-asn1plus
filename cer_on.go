@@ -269,7 +269,8 @@ func cerSegmentedBitStringRead[T any](
 		}
 
 		if err == nil {
-			if err = c.cg.Constrain(out); err == nil {
+                        cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+			if err = cc(out); err == nil {
 				c.val = out
 			}
 		}
@@ -285,45 +286,48 @@ func cerSegmentedBitStringWrite[T any](
 ) (n int, err error) {
 	const maxSegData = 1000
 
-	bs := toBitString(c.val)
-	data := bs.Bytes
-	total := len(data)
-	remBits := bs.BitLength % 8
-	overallUnused := 0
-	if remBits != 0 {
-		overallUnused = 8 - remBits
-	}
-
-	hdr := []byte{byte(TagBitString) | 0x20, 0x80}
-	pkt.Append(hdr...)
-	n += len(hdr)
-
-	for off := 0; off < total; off += maxSegData {
-		end := off + maxSegData
-		if end > total {
-			end = total
+        cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+        if err = cc(c.val); err == nil {
+		bs := toBitString(c.val)
+		data := bs.Bytes
+		total := len(data)
+		remBits := bs.BitLength % 8
+		overallUnused := 0
+		if remBits != 0 {
+			overallUnused = 8 - remBits
 		}
-		segUnused := 0
-		if end == total {
-			segUnused = overallUnused
+	
+		hdr := []byte{byte(TagBitString) | 0x20, 0x80}
+		pkt.Append(hdr...)
+		n += len(hdr)
+	
+		for off := 0; off < total; off += maxSegData {
+			end := off + maxSegData
+			if end > total {
+				end = total
+			}
+			segUnused := 0
+			if end == total {
+				segUnused = overallUnused
+			}
+	
+			val := make([]byte, 1+(end-off))
+			val[0] = byte(segUnused)
+			copy(val[1:], data[off:end])
+	
+			prim := pkt.Type().newTLV(
+				ClassUniversal, TagBitString,
+				len(val), false,
+				val...,
+			)
+			enc := encodeTLV(prim, nil)
+			pkt.Append(enc...)
+			n += len(enc)
 		}
-
-		val := make([]byte, 1+(end-off))
-		val[0] = byte(segUnused)
-		copy(val[1:], data[off:end])
-
-		prim := pkt.Type().newTLV(
-			ClassUniversal, TagBitString,
-			len(val), false,
-			val...,
-		)
-		enc := encodeTLV(prim, nil)
-		pkt.Append(enc...)
-		n += len(enc)
+	
+		pkt.Append(0x00, 0x00)
+		n += 2
 	}
-
-	pkt.Append(0x00, 0x00)
-	n += 2
 
 	return n, nil
 }
@@ -335,42 +339,44 @@ func cerSegmentedOctetStringWrite[T TextLike](
 ) (written int, err error) {
 	const maxSegSize = 1000
 
-	// get raw bytes
-	var wire []byte
-	if c.encodeHook != nil {
-		wire, err = c.encodeHook(c.val)
-	} else {
-		wire = []byte(c.val)
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	// outer header: OCTET STRING|constructed, indefinite
-	hdr := []byte{byte(TagOctetString) | 0x20, 0x80}
-	pkt.Append(hdr...)
-	written += len(hdr)
-
-	// break into 1000‐byte primitive‐OCTET‐STRING TLVs
-	for off := 0; off < len(wire); off += maxSegSize {
-		end := off + maxSegSize
-		if end > len(wire) {
-			end = len(wire)
+        cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+        if err = cc(c.val); err == nil {
+		var wire []byte
+		if c.encodeHook != nil {
+			wire, err = c.encodeHook(c.val)
+		} else {
+			wire = []byte(c.val)
 		}
-		prim := pkt.Type().newTLV(
-			ClassUniversal,
-			TagOctetString,
-			end-off, false,
-			wire[off:end]...,
-		)
-		enc := encodeTLV(prim, nil)
-		pkt.Append(enc...)
-		written += len(enc)
+		if err != nil {
+			return 0, err
+		}
+	
+		// outer header: OCTET STRING|constructed, indefinite
+		hdr := []byte{byte(TagOctetString) | 0x20, 0x80}
+		pkt.Append(hdr...)
+		written += len(hdr)
+	
+		// break into 1000‐byte primitive‐OCTET‐STRING TLVs
+		for off := 0; off < len(wire); off += maxSegSize {
+			end := off + maxSegSize
+			if end > len(wire) {
+				end = len(wire)
+			}
+			prim := pkt.Type().newTLV(
+				ClassUniversal,
+				TagOctetString,
+				end-off, false,
+				wire[off:end]...,
+			)
+			enc := encodeTLV(prim, nil)
+			pkt.Append(enc...)
+			written += len(enc)
+		}
+	
+		// EOC
+		pkt.Append(0x00, 0x00)
+		written += 2
 	}
-
-	// EOC
-	pkt.Append(0x00, 0x00)
-	written += 2
 
 	return written, nil
 }
@@ -427,7 +433,8 @@ func cerSegmentedOctetStringRead[T TextLike](
 				val = T(append([]byte(nil), full...))
 			}
 			if err == nil {
-				if err = c.cg.Constrain(val); err == nil {
+                                cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(val); err == nil {
 					c.val = val
 				}
 			}
