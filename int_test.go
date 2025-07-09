@@ -310,6 +310,7 @@ func TestCustomInteger_withControls(t *testing.T) {
 	var cust customInteger = customInteger(orig) // cheat
 
 	RegisterIntegerAlias[customInteger](TagInteger,
+		IntegerConstraintPhase,
 		func([]byte) error {
 			return nil
 		},

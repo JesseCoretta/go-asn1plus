@@ -19,6 +19,14 @@ or [UTF8String].
 type T61String string
 
 /*
+T61StringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var T61StringConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagT61String].
 */
 func (r T61String) Tag() int { return TagT61String }
@@ -95,7 +103,8 @@ var T61Spec Constraint[T61String]
 var t61Bitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[T61String](TagT61String, nil, nil, nil, T61Spec)
+	RegisterTextAlias[T61String](TagT61String,
+		T61StringConstraintPhase, nil, nil, nil, T61Spec)
 	T61Spec = func(o T61String) (err error) {
 		if len(o) == 0 {
 			err = mkerr("ASN.1 T.61 STRING is zero length")

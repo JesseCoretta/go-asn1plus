@@ -9,7 +9,9 @@ import (
 
 func TestObjectIdentifier_customType(t *testing.T) {
 	type CustomOID ObjectIdentifier
-	RegisterOIDAlias[CustomOID](TagOID, nil, nil, nil, nil)
+	RegisterOIDAlias[CustomOID](TagOID,
+		ObjectIdentifierConstraintPhase,
+		nil, nil, nil, nil)
 
 	// We cheat here rather than writing a separate
 	// constructor merely for testing.
@@ -38,7 +40,9 @@ func TestObjectIdentifier_customType(t *testing.T) {
 
 func TestRelativeOID_customType(t *testing.T) {
 	type CustomRelOID RelativeOID
-	RegisterOIDAlias[CustomRelOID](TagOID, nil, nil, nil, nil)
+	RegisterOIDAlias[CustomRelOID](TagOID,
+		ObjectIdentifierConstraintPhase,
+		nil, nil, nil, nil)
 
 	// We cheat here rather than writing a separate
 	// constructor merely for testing.
@@ -235,6 +239,7 @@ func TestCustomOID_withControls(t *testing.T) {
 	cust = customOID(orig)
 
 	RegisterOIDAlias[customOID](TagOID,
+		ObjectIdentifierConstraintPhase,
 		func(b []byte) (err error) { return nil },
 		func(b customOID) ([]byte, error) {
 			return []byte{0x6, 0x7, 0x2, 0x1, 0x2}, nil
@@ -447,6 +452,7 @@ func TestCustomRelativeOID_withControls(t *testing.T) {
 	cust = relOID(orig)
 
 	RegisterRelativeOIDAlias[relOID](TagRelativeOID,
+		RelativeOIDConstraintPhase,
 		func(b []byte) (err error) { return nil },
 		func(b relOID) ([]byte, error) {
 			return []byte{0x6, 0x7, 0x2, 0x1, 0x2}, nil

@@ -359,6 +359,7 @@ func (_ customBitString) IsPrimitive() bool { return true }
 
 func TestCustomBitString_withControls(t *testing.T) {
 	RegisterBitStringAlias[customBitString](TagBitString,
+		BitStringConstraintPhase,
 		func([]byte) error {
 			return nil
 		},

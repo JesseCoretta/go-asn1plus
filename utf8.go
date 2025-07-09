@@ -14,6 +14,14 @@ type per [ITU-T Rec. X.680].
 type UTF8String string
 
 /*
+UTF8StringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var UTF8StringConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagUTF8String].
 */
 func (r UTF8String) Tag() int { return TagUTF8String }
@@ -97,7 +105,10 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 func (r UTF8String) IsZero() bool { return len(r) == 0 }
 
 func init() {
-	RegisterTextAlias[UTF8String](TagUTF8String, nil, nil, nil, UTF8Spec)
+	RegisterTextAlias[UTF8String](TagUTF8String,
+		UTF8StringConstraintPhase,
+		nil, nil, nil, UTF8Spec)
+
 	UTF8Spec = func(o UTF8String) (err error) {
 		if !utf8OK(o.String()) {
 			err = mkerr("invalid UTF8 character(s) in ASN.1 UTF8 STRING")

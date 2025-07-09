@@ -19,6 +19,14 @@ type BitString struct {
 }
 
 /*
+BitStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var BitStringConstraintPhase = CodecConstraintDecoding
+
+/*
 NewBitString returns an instance of [BitString] alongside an error
 following an attempt to parse x.
 */
@@ -436,9 +444,10 @@ func verifyBitStringDigitSet(base int, digits []byte) (err error) {
 }
 
 type bitStringCodec[T any] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[T]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[T]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -474,7 +483,8 @@ func (c *bitStringCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 func bcdBitStringWrite[T any](c *bitStringCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
-	if err = c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(c.val); err == nil {
 		bsVal := toBitString(c.val)
 		remainder := bsVal.BitLength % 8
 		unused := 0
@@ -568,7 +578,8 @@ func bcdBitStringRead[T any](c *bitStringCodec[T], pkt PDU, tlv TLV, o *Options)
 			}
 
 			if err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = out
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -592,6 +603,7 @@ func bitStringCheckDERPadding(rule EncodingRule, bits []byte, unused int) (err e
 
 func RegisterBitStringAlias[T any](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -607,14 +619,18 @@ func RegisterBitStringAlias[T any](
 
 	f := factories{
 		newEmpty: func() box {
-			return &bitStringCodec[T]{tag: tag, cg: all,
+			return &bitStringCodec[T]{
+				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
 		},
 		newWith: func(v any) box {
 			return &bitStringCodec[T]{
-				val: valueOf[T](v), tag: tag, cg: all,
+				val: valueOf[T](v),
+				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
@@ -627,5 +643,7 @@ func RegisterBitStringAlias[T any](
 }
 
 func init() {
-	RegisterBitStringAlias[BitString](TagBitString, nil, nil, nil, nil)
+	RegisterBitStringAlias[BitString](TagBitString,
+		BitStringConstraintPhase,
+		nil, nil, nil, nil)
 }

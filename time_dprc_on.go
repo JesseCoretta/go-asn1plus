@@ -14,6 +14,14 @@ and should not be used in modern systems.
 type UTCTime Time
 
 /*
+UTCTimeConstraintPhase declares the appropriate phase for
+the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var UTCTimeConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagUTCTime].
 */
 func (r UTCTime) Tag() int { return TagUTCTime }
@@ -311,5 +319,6 @@ func fillTemporalHooks[T Temporal](
 }
 
 func init() {
-	RegisterTemporalAlias[UTCTime](TagUTCTime, nil, nil, nil, nil)
+	RegisterTemporalAlias[UTCTime](TagUTCTime,
+		UTCTimeConstraintPhase, nil, nil, nil, nil)
 }

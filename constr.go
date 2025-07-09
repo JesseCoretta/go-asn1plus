@@ -61,6 +61,14 @@ func (r ConstraintGroup[T]) Constrain(x T) (err error) {
 	return
 }
 
+func (r ConstraintGroup[T]) phase(actual, expect int) (funk func(T) error) {
+	funk = func(_ T) error { return nil }
+	if actual == expect || actual == CodecConstraintBoth {
+		funk = r.Constrain
+	}
+	return
+}
+
 /*
 Deprecated: Validate returns an error following the execution of all [Constraint]
 instances against x which reside within the receiver instance.
@@ -73,9 +81,7 @@ func (r ConstraintGroup[T]) Validate(x T) error { return r.Constrain(x) }
 LiftConstraint adapts (or "converts") a [Constraint] for type U to type T.
 */
 func LiftConstraint[T any, U any](convert func(T) U, c Constraint[U]) Constraint[T] {
-	return func(x T) error {
-		return c(convert(x))
-	}
+	return func(x T) error { return c(convert(x)) }
 }
 
 /*
@@ -156,8 +162,8 @@ func putConstraint[T any](name string, fn Constraint[T]) {
 	}
 }
 
-func collectConstraint[T any](names []string) ([]Constraint[T], error) {
-	var out []Constraint[T]
+func collectConstraint[T any](names []string) (ConstraintGroup[T], error) {
+	var out ConstraintGroup[T]
 	want := refTypeOf((*T)(nil)).Elem()
 
 	debugEvent(EventEnter|EventConstraint,
@@ -181,4 +187,136 @@ func collectConstraint[T any](names []string) ([]Constraint[T], error) {
 		newLItem(len(out), "constraints found"))
 
 	return out, nil
+}
+
+func applyFieldConstraints(val interface{}, names []string, expect rune) error {
+	want := refTypeOf(val)
+
+	for _, nm := range names {
+		if nm = constrDoD(expect, lc(nm)); nm == "" {
+			// Do not run constraint now.
+			continue
+		}
+		ent, ok := constraintReg[nm]
+		if !ok {
+			return mkerrf("unknown constraint ", nm)
+		}
+		if ent.typ != want {
+			return mkerrf("constraint ", nm, " not for ", want.String())
+		}
+
+		// Pass nm into getCachedEntry so the key can be built
+		ce, err := getCachedFieldConstraint(ent, nm)
+		if err != nil {
+			return err
+		}
+
+		// Call either the raw func -OR- the .Constraint(...) method
+		arg := refValueOf(val)
+		var res reflect.Value
+		if ce.isFunc {
+			res = ce.fnVal.Call([]reflect.Value{arg})[0]
+		} else {
+			res = ce.methodVal.Call([]reflect.Value{arg})[0]
+		}
+
+		if err, _ := res.Interface().(error); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+/*
+constrDoD (Do-Or-Die) determines whether a constraint should be run
+based on the presence (or lack) of certain instructions in the first
+byte of the token.
+
+	^ = encoding constraint only
+	$ = decoding constraint only
+	<neither> = both
+*/
+func constrDoD(expect rune, token string) (c string) {
+	if token != "" {
+		switch char := rune(token[0]); char {
+		case '^', '$':
+			if char == expect {
+				c = token[1:]
+			}
+		default:
+			c = token
+		}
+	}
+	return
+}
+
+/*
+cachedFieldConstraint holds the prepped reflection
+values for one constraint + type to avoid repeated
+(and unnecessary) reflection ops.
+*/
+type cachedFieldConstraint struct {
+	fnVal     reflect.Value // always refValueOf(ent.fn)
+	isFunc    bool          // true if fnVal.Kind() == Func
+	methodVal reflect.Value // !isFunc == fnVal.MethodByName("Constraint")
+}
+
+/*
+cachedFieldConstraints maps "type#constraintName" to its
+cachedFieldConstraint, and is used in any sequence field
+bearing a "constraint:name" struct tag.
+*/
+var cachedFieldConstraints = make(map[string]*cachedFieldConstraint)
+
+// getCachedFieldConstraint returns or builds the cachedFieldConstraint for one constraint.
+func getCachedFieldConstraint(ent constraintEntry, name string) (*cachedFieldConstraint, error) {
+	keyFor := func(t reflect.Type, n string) string {
+		return t.String() + "#" + lc(n)
+	}
+
+	key := keyFor(ent.typ, name)
+	if ce, ok := cachedFieldConstraints[key]; ok {
+		return ce, nil
+	}
+
+	fnVal := refValueOf(ent.fn)
+	ce := &cachedFieldConstraint{fnVal: fnVal, isFunc: fnVal.Kind() == reflect.Func}
+
+	if !ce.isFunc {
+		if ce.methodVal = fnVal.MethodByName("Constraint"); !ce.methodVal.IsValid() {
+			return nil, mkerrf("no Constraint method on ", refTypeOf(ent.fn).String())
+		}
+	}
+
+	cachedFieldConstraints[key] = ce
+	return ce, nil
+}
+
+const (
+	// CodecConstraintEncoding indicates that codec
+	// operations should only execute constraints
+	// during the encoding (write) phase.
+	CodecConstraintEncoding = iota + 1
+
+	// CodecConstraintDecoding indicates that codec
+	// operations should only execute constraints
+	// during the decoding (read) phase.
+	CodecConstraintDecoding
+
+	// CodecConstraintBoth indicates that codec
+	// operations should execute constraints in
+	// both the encoding (write) and decoding
+	// (read) phases.
+	CodecConstraintBoth
+)
+
+/*
+func expectCPhase(actual, expect int) bool {
+	return actual == expect || actual == CodecConstraintBoth
+}
+*/
+
+func init() {
+	cachedFieldConstraints = make(map[string]*cachedFieldConstraint)
 }

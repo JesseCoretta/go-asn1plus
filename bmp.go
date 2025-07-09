@@ -27,6 +27,14 @@ octets.
 type BMPString []byte
 
 /*
+BMPStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var BMPStringConstraintPhase = CodecConstraintDecoding
+
+/*
 NewBMPString returns an instance of [BMPString] alongside an error following
 an attempt to marshal x.
 */
@@ -148,7 +156,8 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 func (r BMPString) IsZero() bool { return r == nil }
 
 func init() {
-	RegisterTextAlias[BMPString](TagBMPString, nil, nil, nil, BMPSpec)
+	RegisterTextAlias[BMPString](TagBMPString,
+		BMPStringConstraintPhase, nil, nil, nil, BMPSpec)
 	BMPSpec = func(o BMPString) (err error) {
 		if len(o) == 0 {
 			return

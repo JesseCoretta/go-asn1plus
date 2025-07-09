@@ -25,6 +25,14 @@ and should not be used in modern systems.
 type VideotexString string
 
 /*
+VideotexStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var VideotexStringConstraintPhase = CodecConstraintDecoding
+
+/*
 NewVideotexString returns an instance of [VideotexString] alongside an
 error following an attempt to marshal x.
 */
@@ -122,7 +130,12 @@ func videotexDecoder(b []byte) (VideotexString, error) {
 var videotexBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[VideotexString](TagVideotexString, videotexDecoderVerify, videotexDecoder, nil, VideotexSpec)
+	RegisterTextAlias[VideotexString](TagVideotexString,
+		VideotexStringConstraintPhase,
+		videotexDecoderVerify,
+		videotexDecoder, nil,
+		VideotexSpec)
+
 	VideotexSpec = func(o VideotexString) (err error) {
 		for _, r := range []rune(o.String()) {
 			if !isVideotexRune(r) {

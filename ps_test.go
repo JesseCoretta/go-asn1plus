@@ -98,6 +98,7 @@ func (_ customPrintable) IsPrimitive() bool { return true }
 
 func TestCustomPrintableString_withControls(t *testing.T) {
 	RegisterTextAlias[customPrintable](TagPrintableString, // any <X>String tag would do (except BitString)
+		PrintableStringConstraintPhase,
 		// dummy decoding verifier -- nil is sufficient in most cases
 		func([]byte) error { return nil }, // verify decoder
 		// dummy decoder -- nil is sufficient in most cases

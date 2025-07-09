@@ -18,6 +18,14 @@ NumericString implements the ASN.1 NUMERICSTRING type per [ITU-T Rec. X.680]:
 type NumericString string
 
 /*
+NumericStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var NumericStringConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagNumericString].
 */
 func (r NumericString) Tag() int { return TagNumericString }
@@ -111,7 +119,8 @@ func convertToNumericString(x any) (str string, err error) {
 }
 
 func init() {
-	RegisterTextAlias[NumericString](TagNumericString, nil, nil, nil, NumericSpec)
+	RegisterTextAlias[NumericString](TagNumericString,
+		NumericStringConstraintPhase, nil, nil, nil, NumericSpec)
 
 	NumericSpec = func(o NumericString) (err error) {
 		for _, c := range []rune(o.String()) {

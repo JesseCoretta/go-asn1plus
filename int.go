@@ -23,6 +23,14 @@ type Integer struct {
 }
 
 /*
+IntegerConstraintPhase declares the appropriate phase for
+the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding]
+and [CodecConstraintBoth] constants for possible settings.
+*/
+var IntegerConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagInteger].
 */
 func (r Integer) Tag() int { return TagInteger }
@@ -79,7 +87,11 @@ func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err 
 			i = Integer{native: int64(value)}
 		}
 	case *big.Int:
-		i = Integer{big: true, bigInt: value}
+		if value.IsInt64() {
+			i = Integer{native: value.Int64()}
+		} else {
+			i = Integer{big: true, bigInt: value}
+		}
 	case string:
 		// Attempt to parse the string in base 10.
 		if _i, ok := newBigInt(0).SetString(value, 10); !ok {
@@ -277,9 +289,10 @@ func decodeNativeInt(data []byte) (int, error) {
 }
 
 type integerCodec[T any] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[Integer]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[Integer]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -310,7 +323,9 @@ func bcdIntegerWrite[T any](c *integerCodec[T], pkt PDU, o *Options) (off int, e
 	o = deferImplicit(o)
 
 	intVal := toInt(c.val)
-	if err = c.cg.Constrain(intVal); err == nil {
+
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(intVal); err == nil {
 		var wire []byte
 		if c.encodeHook != nil {
 			wire, err = c.encodeHook(c.val)
@@ -379,7 +394,8 @@ func bcdIntegerRead[T any](c *integerCodec[T], pkt PDU, tlv TLV, o *Options) err
 			}
 
 			if err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = fromInt[T](out)
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -392,6 +408,7 @@ func bcdIntegerRead[T any](c *integerCodec[T], pkt PDU, tlv TLV, o *Options) err
 
 func RegisterIntegerAlias[T any](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -409,6 +426,7 @@ func RegisterIntegerAlias[T any](
 		newEmpty: func() box {
 			return &integerCodec[T]{
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				encodeHook:   encoder,
 				decodeHook:   decoder}
@@ -416,6 +434,7 @@ func RegisterIntegerAlias[T any](
 		newWith: func(v any) box {
 			return &integerCodec[T]{val: valueOf[T](v),
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				encodeHook:   encoder,
 				decodeHook:   decoder}
@@ -428,5 +447,7 @@ func RegisterIntegerAlias[T any](
 }
 
 func init() {
-	RegisterIntegerAlias[Integer](TagInteger, nil, nil, nil, nil)
+	RegisterIntegerAlias[Integer](TagInteger,
+		IntegerConstraintPhase,
+		nil, nil, nil, nil)
 }

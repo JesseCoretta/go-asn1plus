@@ -16,6 +16,14 @@ UniversalString implements the UCS-4 ASN.1 UNIVERSAL STRING (tag 28).
 type UniversalString string
 
 /*
+UniversalStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var UniversalStringConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagUniversalString].
 */
 func (r UniversalString) Tag() int { return TagUniversalString }
@@ -170,7 +178,13 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 func (r UniversalString) IsZero() bool { return len(r) == 0 }
 
 func init() {
-	RegisterTextAlias[UniversalString](TagUniversalString, universalStringDecoderVerify, decodeUniversalString, encodeUniversalString, UniversalSpec)
+	RegisterTextAlias[UniversalString](TagUniversalString,
+		UniversalStringConstraintPhase,
+		universalStringDecoderVerify,
+		decodeUniversalString,
+		encodeUniversalString,
+		UniversalSpec)
+
 	UniversalSpec = func(us UniversalString) (err error) {
 		// Reject byte sequences that are not valid UTF-8.
 		if !utf8OK(string(us)) {

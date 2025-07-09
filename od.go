@@ -15,6 +15,14 @@ It operates under the same principals and constraints as the ASN.1
 type ObjectDescriptor string
 
 /*
+ObjectDescriptorConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var ObjectDescriptorConstraintPhase = CodecConstraintDecoding
+
+/*
 NewObjectDescriptor returns an instance of [ObjectDescriptor] alongside
 an error following an attempt to marshal x.
 */
@@ -97,7 +105,8 @@ func graphicStringDecoderVerify(b []byte) (err error) {
 }
 
 func init() {
-	RegisterTextAlias[ObjectDescriptor](TagObjectDescriptor, nil, nil, nil, ObjectDescriptorSpec)
+	RegisterTextAlias[ObjectDescriptor](TagObjectDescriptor,
+		ObjectDescriptorConstraintPhase, nil, nil, nil, ObjectDescriptorSpec)
 	ObjectDescriptorSpec = func(o ObjectDescriptor) error {
 		// ObjectDescriptor supports GRAPHIC STRING characters
 		return graphicStringDecoderVerify([]byte(o))

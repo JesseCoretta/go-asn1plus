@@ -14,6 +14,14 @@ is not a standard type and is implemented merely for convenience.
 type Enumeration map[Enumerated]string
 
 /*
+EnumeratedConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var EnumeratedConstraintPhase = CodecConstraintDecoding
+
+/*
 Name scans the receiver instance to determine the string name for the
 input [Enumerated] value.
 */
@@ -99,6 +107,7 @@ func (c *enumeratedCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
 
 func RegisterEnumeratedAlias[T ~int](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -144,6 +153,7 @@ func RegisterEnumeratedAlias[T ~int](
 
 	base := &integerCodec[Integer]{
 		tag:          tag,
+		cphase:       cphase,
 		cg:           allCS,
 		decodeVerify: verList,
 		encodeHook:   eHook,
@@ -163,5 +173,7 @@ func RegisterEnumeratedAlias[T ~int](
 }
 
 func init() {
-	RegisterEnumeratedAlias[Enumerated](TagEnum, nil, nil, nil, nil)
+	RegisterEnumeratedAlias[Enumerated](TagEnum,
+		EnumeratedConstraintPhase,
+		nil, nil, nil, nil)
 }

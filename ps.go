@@ -29,6 +29,14 @@ PrintableString implements [§ 41.4 of ITU-T Rec. X.680] (tag 19):
 type PrintableString string
 
 /*
+PrintableStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var PrintableStringConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagPrintableString].
 */
 func (r PrintableString) Tag() int { return TagPrintableString }
@@ -102,7 +110,8 @@ var PrintableSpec Constraint[PrintableString]
 var printableStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[PrintableString](TagPrintableString, nil, nil, nil, PrintableSpec)
+	RegisterTextAlias[PrintableString](TagPrintableString,
+		PrintableStringConstraintPhase, nil, nil, nil, PrintableSpec)
 
 	PrintableSpec = func(o PrintableString) (err error) {
 		for _, r := range []rune(o.String()) {

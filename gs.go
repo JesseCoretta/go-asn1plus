@@ -16,6 +16,14 @@ and should not be used in modern systems.
 type GraphicString string
 
 /*
+GraphicStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var GraphicStringConstraintPhase = CodecConstraintDecoding
+
+/*
 NewGraphicString returns an instance of [GraphicString] alongside an error
 following attempt to marshal x.
 */
@@ -82,7 +90,10 @@ known ASN.1 primitive.
 func (r GraphicString) IsPrimitive() bool { return true }
 
 func init() {
-	RegisterTextAlias[GraphicString](TagGraphicString, graphicStringDecoderVerify, nil, nil, GraphicSpec)
+	RegisterTextAlias[GraphicString](TagGraphicString,
+		GraphicStringConstraintPhase,
+		graphicStringDecoderVerify,
+		nil, nil, GraphicSpec)
 	GraphicSpec = func(o GraphicString) error {
 		return graphicStringDecoderVerify([]byte(o))
 	}

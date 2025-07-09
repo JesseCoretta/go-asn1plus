@@ -16,6 +16,14 @@ the following character range from the International Alphabet No. 5:
 type IA5String string
 
 /*
+IA5StringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var IA5StringConstraintPhase = CodecConstraintDecoding
+
+/*
 Len returns the integer length of the receiver instance.
 */
 func (r IA5String) Len() int { return len(r) }
@@ -82,7 +90,8 @@ need not be specified manually as a [Constraint] by the end user.
 var IA5Spec Constraint[IA5String]
 
 func init() {
-	RegisterTextAlias[IA5String](TagIA5String, nil, nil, nil, IA5Spec)
+	RegisterTextAlias[IA5String](TagIA5String,
+		IA5StringConstraintPhase, nil, nil, nil, IA5Spec)
 	IA5Spec = func(o IA5String) (err error) {
 		if len(o) == 0 {
 			err = mkerr("Invalid IA5 String (zero)")

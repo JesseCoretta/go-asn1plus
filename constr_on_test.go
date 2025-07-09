@@ -658,8 +658,11 @@ func TestConstraint_codecov(t *testing.T) {
 		}
 	}()
 
-	RegisterTaggedConstraintGroup("duplicateConstraints", ConstraintGroup[OctetString]{})
-	RegisterTaggedConstraintGroup("duplicateConstraints", ConstraintGroup[OctetString]{})
+	cgrp := ConstraintGroup[OctetString]{}
+	cgrp.Validate(nil)
+
+	RegisterTaggedConstraintGroup("duplicateConstraints", cgrp)
+	RegisterTaggedConstraintGroup("duplicateConstraints", cgrp)
 }
 
 func ExampleDuration_secondsMustBe30() {
@@ -757,4 +760,86 @@ func TestNewDuration_constraintViolation(t *testing.T) {
 	if _, err := NewDuration(tooBig, DurationRangeConstraint(Duration{}, Duration{Years: 9})); err == nil {
 		t.Fatalf("expected range-constraint error for %q, got nil", tooBig)
 	}
+}
+
+func ExampleOctetString_sequenceFieldConstraintViolation() {
+	uCOnly := LiftConstraint(func(o OctetString) OctetString { return o },
+		// Prohibit any lower-case ASCII letters
+		func(o OctetString) (err error) {
+			for i := 0; i < len(o); i++ {
+				if !('A' <= rune(o[i]) && rune(o[i]) <= 'Z') {
+					err = fmt.Errorf("Constraint violation: policy requires [A..Z] ASCII only")
+					break
+				}
+			}
+			return
+		})
+
+	RegisterTaggedConstraint("ucOnly", uCOnly)
+
+	type MySequence struct {
+		Name  PrintableString
+		Badge OctetString `asn1:"constraint:ucOnly"`
+	}
+
+	my := MySequence{
+		PrintableString("Print me"),
+		OctetString(`e45aXY`),
+	}
+
+	if _, err := Marshal(my); err != nil {
+		fmt.Println(err)
+	}
+	// Output: Constraint violation: policy requires [A..Z] ASCII only
+}
+
+func ExampleOctetString_sequenceFieldConstraintGroupViolation() {
+	oddDigitConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
+		// Prohibit use of any odd digit characters
+		func(o OctetString) (err error) {
+			for i := 0; i < len(o); i++ {
+				if '0' <= rune(o[i]) && rune(o[i]) <= '9' && rune(o[i])%2 != 0 {
+					err = fmt.Errorf("Constraint violation: policy prohibits odd digits")
+					break
+				}
+			}
+			return
+		})
+
+	caseConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
+		// Prohibit any lower-case ASCII letters
+		func(o OctetString) (err error) {
+			for i := 0; i < len(o); i++ {
+				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+					break
+				}
+			}
+			return
+		})
+
+	RegisterTaggedConstraintGroup("groupedConstraint", ConstraintGroup[OctetString]{
+		oddDigitConstraint,
+		caseConstraint,
+	})
+
+	type MySequence struct {
+		Name PrintableString
+
+		// Constraint Name Syntax
+		// ^ means only run during ENCODING (at field read)
+		// $ means only run during DECODING (at field write)
+		// <neither> means run during both (inefficient)
+		Badge OctetString `asn1:"constraint:^groupedConstraint"`
+	}
+
+	my := MySequence{
+		PrintableString("Print me"),
+		OctetString(`e45aXY`),
+	}
+
+	if _, err := Marshal(my); err != nil {
+		fmt.Println(err)
+	}
+	// Output: Constraint violation: policy prohibits odd digits
 }

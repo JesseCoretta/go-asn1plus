@@ -12,6 +12,7 @@ func TestCustomEnumerated_withControls(t *testing.T) {
 	var cust enum = enum(orig) // cheat
 
 	RegisterEnumeratedAlias[enum](TagEnum,
+		EnumeratedConstraintPhase,
 		func([]byte) error {
 			return nil
 		},
@@ -67,6 +68,7 @@ func (_ enum) IsPrimitive() bool { return true }
 func TestEnumerated_codecov(t *testing.T) {
 
 	RegisterEnumeratedAlias[enum](TagEnum,
+		EnumeratedConstraintPhase,
 		func(b []byte) error { return nil },
 		func(b enum) ([]byte, error) {
 			return []byte{0x00}, nil

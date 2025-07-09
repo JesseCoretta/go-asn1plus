@@ -60,6 +60,14 @@ types, such as [DateTime] or [TimeOfDay].
 type Time time.Time
 
 /*
+TimeConstraintPhase declares the appropriate phase for the
+constraining of values during codec operations. See the
+[CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var TimeConstraintPhase = CodecConstraintDecoding
+
+/*
 NewTime returns an instance of [Time] alongside an error following an
 attempt to marshal x.
 */
@@ -255,6 +263,14 @@ Date implements the ASN.1 DATE type (tag 31), which extends from [Time].
 type Date Time
 
 /*
+DateConstraintPhase declares the appropriate phase for the
+constraining of values during codec operations. See the
+[CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var DateConstraintPhase = CodecConstraintDecoding
+
+/*
 NewDate returns an instance of [Date] alongside an error following an attempt
 to marshal x.
 */
@@ -433,6 +449,14 @@ DateTime implements the ASN.1 DATE-TIME type (tag 33), which extends from [Time]
 type DateTime Time
 
 /*
+DateTimeConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var DateTimeConstraintPhase = CodecConstraintDecoding
+
+/*
 NewDateTime returns an instance of [DateTime] alongside an error following an
 attempt to marshal x.
 */
@@ -598,6 +622,14 @@ func (r DateTime) Ge(t Temporal) bool { return r.Gt(t) || r.Eq(t) }
 TimeOfDay implements the ASN.1 TIME-OF-DAY type (tag 32), which extends from [Time].
 */
 type TimeOfDay Time
+
+/*
+TimeOfDayConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var TimeOfDayConstraintPhase = CodecConstraintDecoding
 
 /*
 NewDateTime returns an instance of [TimeOfDay] alongside an error following an
@@ -773,6 +805,14 @@ type Duration struct {
 	Minutes int
 	Seconds float64
 }
+
+/*
+DurationConstraintPhase declares the appropriate phase for
+the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var DurationConstraintPhase = CodecConstraintDecoding
 
 /*
 NewDuration returns an instance of [Duration] alongside an error
@@ -1206,6 +1246,14 @@ TIME (tag 24).
 type GeneralizedTime Time
 
 /*
+GeneralizedTimeConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var GeneralizedTimeConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagGeneralizedTime].
 */
 func (r GeneralizedTime) Tag() int { return TagGeneralizedTime }
@@ -1524,9 +1572,10 @@ func chopZulu(raw string) string {
 }
 
 type temporalCodec[T Temporal] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[Temporal]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[Temporal]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -1546,7 +1595,8 @@ func (c *temporalCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 func bcdTemporalWrite[T Temporal](c *temporalCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
-	if err = c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(c.val); err == nil {
 		var wire []byte
 		if wire, err = c.encodeHook(c.val); err == nil {
 			tag, cls := effectiveTag(c.tag, 0, o)
@@ -1587,7 +1637,8 @@ func bcdTemporalRead[T Temporal](c *temporalCodec[T], pkt PDU, tlv TLV, o *Optio
 		if err = decodeVerify(); err == nil {
 			var out T
 			if out, err = c.decodeHook(wire); err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = out
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -1635,6 +1686,7 @@ type for use in codec operations.
 */
 func RegisterTemporalAlias[T Temporal](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -1655,6 +1707,7 @@ func RegisterTemporalAlias[T Temporal](
 			return &temporalCodec[T]{
 				tag:          tag,
 				cg:           all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder,
@@ -1665,6 +1718,7 @@ func RegisterTemporalAlias[T Temporal](
 				val:          valueOf[T](v),
 				tag:          tag,
 				cg:           all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder,
@@ -1713,9 +1767,10 @@ func attachDefaults[Canon any, T Temporal](
 }
 
 type durationCodec[T any] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[T]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[T]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -1744,7 +1799,8 @@ func (c *durationCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 func bcdDurationWrite[T any](c *durationCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
-	if err = c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(c.val); err == nil {
 		var wire []byte
 		if c.encodeHook != nil {
 			wire, err = c.encodeHook(c.val)
@@ -1809,7 +1865,8 @@ func bcdDurationRead[T any](c *durationCodec[T], pkt PDU, tlv TLV, o *Options) e
 			}
 
 			if err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = out
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -1850,6 +1907,7 @@ RegisterDurationAlias registers a custom alias of [Duration] for use in codec op
 */
 func RegisterDurationAlias[T any](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -1868,6 +1926,7 @@ func RegisterDurationAlias[T any](
 			return &durationCodec[T]{
 				tag:          tag,
 				cg:           all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder,
@@ -1878,6 +1937,7 @@ func RegisterDurationAlias[T any](
 				val:          valueOf[T](v),
 				tag:          tag,
 				cg:           all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder,
@@ -1891,10 +1951,22 @@ func RegisterDurationAlias[T any](
 }
 
 func init() {
-	RegisterTemporalAlias[Date](TagDate, nil, nil, nil, nil)
-	RegisterTemporalAlias[DateTime](TagDateTime, nil, nil, nil, nil)
-	RegisterTemporalAlias[TimeOfDay](TagTimeOfDay, nil, nil, nil, nil)
-	RegisterTemporalAlias[GeneralizedTime](TagGeneralizedTime, nil, nil, nil, nil)
-	RegisterTemporalAlias[Time](TagTime, nil, nil, nil, nil)
-	RegisterDurationAlias[Duration](TagDuration, nil, nil, nil, nil)
+	RegisterTemporalAlias[Date](TagDate,
+		DateConstraintPhase,
+		nil, nil, nil, nil)
+	RegisterTemporalAlias[DateTime](TagDateTime,
+		DateTimeConstraintPhase,
+		nil, nil, nil, nil)
+	RegisterTemporalAlias[TimeOfDay](TagTimeOfDay,
+		TimeOfDayConstraintPhase,
+		nil, nil, nil, nil)
+	RegisterTemporalAlias[GeneralizedTime](TagGeneralizedTime,
+		GeneralizedTimeConstraintPhase,
+		nil, nil, nil, nil)
+	RegisterTemporalAlias[Time](TagTime,
+		TimeConstraintPhase,
+		nil, nil, nil, nil)
+	RegisterDurationAlias[Duration](TagDuration,
+		DurationConstraintPhase,
+		nil, nil, nil, nil)
 }

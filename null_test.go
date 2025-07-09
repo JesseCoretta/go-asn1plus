@@ -62,6 +62,7 @@ func TestNull_codecov(t *testing.T) {
 func TestNull_customType(t *testing.T) {
 	type customNull Null
 	RegisterNullAlias[customNull](TagNull,
+		NullConstraintPhase,
 		func([]byte) error { return nil },
 		func(customNull) ([]byte, error) { return nil, nil },
 		func([]byte) (customNull, error) { return customNull{}, nil },

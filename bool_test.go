@@ -90,6 +90,7 @@ func (_ customBoolean) IsPrimitive() bool { return true }
 
 func TestCustomBoolean_withControls(t *testing.T) {
 	RegisterBooleanAlias[customBoolean](TagBoolean,
+		BooleanConstraintPhase,
 		func([]byte) error {
 			return nil
 		},

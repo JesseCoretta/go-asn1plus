@@ -15,6 +15,14 @@ There is no constructor for instances of this type.
 type Null struct{}
 
 /*
+NullConstraintPhase declares the appropriate phase for the
+constraining of values during codec operations. See the
+[CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var NullConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagNull].
 */
 func (_ Null) Tag() int { return TagNull }
@@ -38,9 +46,10 @@ qualified instances from other interfaces of a similar design.
 func (_ Null) IsPrimitive() bool { return true }
 
 type nullCodec[T any] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[T]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[T]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -60,7 +69,8 @@ func (c *nullCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 func bcdNullWrite[T any](c *nullCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
-	if err = c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(c.val); err == nil {
 		var wire []byte
 		if c.encodeHook != nil {
 			wire, err = c.encodeHook(c.val)
@@ -111,7 +121,8 @@ func bcdNullRead[T any](c *nullCodec[T], pkt PDU, tlv TLV, o *Options) error {
 			}
 
 			if err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = out
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -130,6 +141,7 @@ func (c *nullCodec[T]) setVal(v any)      { c.val = valueOf[T](v) }
 
 func RegisterNullAlias[T any](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -147,6 +159,7 @@ func RegisterNullAlias[T any](
 		newEmpty: func() box {
 			return &nullCodec[T]{
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				encodeHook:   encoder,
 				decodeHook:   decoder}
@@ -154,6 +167,7 @@ func RegisterNullAlias[T any](
 		newWith: func(v any) box {
 			return &nullCodec[T]{val: valueOf[T](v),
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				encodeHook:   encoder,
 				decodeHook:   decoder}
@@ -166,5 +180,7 @@ func RegisterNullAlias[T any](
 }
 
 func init() {
-	RegisterNullAlias[Null](TagNull, nil, nil, nil, nil)
+	RegisterNullAlias[Null](TagNull,
+		NullConstraintPhase,
+		nil, nil, nil, nil)
 }

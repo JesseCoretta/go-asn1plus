@@ -16,6 +16,14 @@ and should not be used in modern systems.
 type GeneralString string
 
 /*
+GeneralStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var GeneralStringConstraintPhase = CodecConstraintDecoding
+
+/*
 NewGeneralString returns an instance of [GeneralString] alongside an error
 following attempt to marshal x.
 */
@@ -84,7 +92,8 @@ func (r GeneralString) IsPrimitive() bool { return true }
 var generalStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[GeneralString](TagGeneralString, nil, nil, nil, GeneralSpec)
+	RegisterTextAlias[GeneralString](TagGeneralString,
+		GeneralStringConstraintPhase, nil, nil, nil, GeneralSpec)
 	GeneralSpec = func(o GeneralString) (err error) {
 		runes := []rune(o.String())
 		for i := 0; i < len(runes) && err == nil; i++ {

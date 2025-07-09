@@ -672,6 +672,7 @@ func (_ customGT) Lt(_ Temporal) bool { return false }
 
 func TestCustomTemporal_withControls(t *testing.T) {
 	RegisterTemporalAlias[customGT](TagGeneralizedTime,
+		GeneralizedTimeConstraintPhase,
 		func([]byte) error {
 			return nil
 		},
@@ -705,6 +706,7 @@ func (_ customD) IsPrimitive() bool { return true }
 
 func TestCustomDuration_withControls(t *testing.T) {
 	RegisterDurationAlias[customD](TagDuration,
+		DurationConstraintPhase,
 		func([]byte) error {
 			return nil
 		},

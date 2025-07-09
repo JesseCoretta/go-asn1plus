@@ -13,6 +13,14 @@ not control characters.
 type VisibleString string
 
 /*
+VisibleStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var VisibleStringConstraintPhase = CodecConstraintDecoding
+
+/*
 NewVisibleString returns an instance of [VisibleString] alongside
 an error following an attempt to marshal x.
 */
@@ -84,7 +92,10 @@ ASN.1 primitive.
 func (r VisibleString) IsPrimitive() bool { return true }
 
 func init() {
-	RegisterTextAlias[VisibleString](TagVisibleString, nil, nil, nil, VisibleSpec)
+	RegisterTextAlias[VisibleString](TagVisibleString,
+		VisibleStringConstraintPhase,
+		nil, nil, nil, VisibleSpec)
+
 	VisibleSpec = func(o VisibleString) (err error) {
 		for _, r := range []rune(o.String()) {
 			if r < 128 {

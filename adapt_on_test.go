@@ -10,7 +10,9 @@ import (
 
 func TestDuration_customType(t *testing.T) {
 	type CustomDur Duration
-	RegisterDurationAlias[CustomDur](TagDuration, nil, nil, nil, nil)
+	RegisterDurationAlias[CustomDur](TagDuration,
+		DurationConstraintPhase,
+		nil, nil, nil, nil)
 
 	// We cheat here rather than writing a separate
 	// constructor merely for testing.
@@ -39,7 +41,9 @@ func TestDuration_customType(t *testing.T) {
 
 func TestBitString_customType(t *testing.T) {
 	type CustomBits BitString
-	RegisterBitStringAlias[CustomBits](TagBitString, nil, nil, nil, nil)
+	RegisterBitStringAlias[CustomBits](TagBitString,
+		BitStringConstraintPhase,
+		nil, nil, nil, nil)
 
 	// We cheat here rather than writing a separate
 	// constructor merely for testing.

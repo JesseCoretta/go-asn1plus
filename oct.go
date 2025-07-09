@@ -52,6 +52,14 @@ OctetString implements the ASN.1 OCTET STRING type (tag 4).
 type OctetString []byte
 
 /*
+OctetStringConstraintPhase declares the appropriate phase
+for the constraining of values during codec operations. See
+the [CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var OctetStringConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant [TagOctetString].
 */
 func (r OctetString) Tag() int { return TagOctetString }
@@ -84,7 +92,9 @@ func (r OctetString) Len() int {
 }
 
 func init() {
-	RegisterTextAlias[OctetString](TagOctetString, nil, nil, nil, OctetSpec)
+	RegisterTextAlias[OctetString](TagOctetString,
+		OctetStringConstraintPhase, nil, nil, nil, OctetSpec)
+
 	OctetSpec = func(o OctetString) (err error) {
 		for _, r := range []rune(o.String()) {
 			if r > 0x00FF {

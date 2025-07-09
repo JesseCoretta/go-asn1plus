@@ -16,6 +16,14 @@ Boolean implements the ASN.1 BOOLEAN type.
 type Boolean bool
 
 /*
+BooleanConstraintPhase declares the appropriate phase for
+the constraining of values during codec operations. See the
+[CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var BooleanConstraintPhase = CodecConstraintDecoding
+
+/*
 Tag returns the integer constant one (1) for [TagBoolean].
 */
 func (r Boolean) Tag() int { return TagBoolean }
@@ -87,9 +95,10 @@ func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error
 }
 
 type booleanCodec[T any] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[T]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[T]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -119,7 +128,8 @@ func (c *booleanCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 func bcdBooleanWrite[T any](c *booleanCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
-	if err = c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(c.val); err == nil {
 		var wire []byte = []byte{0x00} // assume FALSE
 		var err error
 		if c.encodeHook != nil {
@@ -181,7 +191,8 @@ func bcdBooleanRead[T any](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) err
 			}
 
 			if err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = out
 					pkt.SetOffset(pkt.Offset() + 1)
 				}
@@ -194,6 +205,7 @@ func bcdBooleanRead[T any](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) err
 
 func RegisterBooleanAlias[T any](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -211,6 +223,7 @@ func RegisterBooleanAlias[T any](
 		newEmpty: func() box {
 			return &booleanCodec[T]{
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				encodeHook:   encoder,
 				decodeHook:   decoder}
@@ -218,6 +231,7 @@ func RegisterBooleanAlias[T any](
 		newWith: func(v any) box {
 			return &booleanCodec[T]{val: valueOf[T](v),
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				encodeHook:   encoder,
 				decodeHook:   decoder}
@@ -230,5 +244,7 @@ func RegisterBooleanAlias[T any](
 }
 
 func init() {
-	RegisterBooleanAlias[Boolean](TagBoolean, nil, nil, nil, nil)
+	RegisterBooleanAlias[Boolean](TagBoolean,
+		BooleanConstraintPhase,
+		nil, nil, nil, nil)
 }

@@ -53,6 +53,14 @@ type Real struct {
 }
 
 /*
+RealConstraintPhase declares the appropriate phase for the
+constraining of values during codec operations. See the
+[CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants for possible settings.
+*/
+var RealConstraintPhase = CodecConstraintDecoding
+
+/*
 NewRealPlusInfinity returns an instance of [Real] which represents positive infinity (∞).
 */
 func NewRealPlusInfinity() Real {
@@ -409,9 +417,10 @@ func toReal[T any](v T) Real   { return *(*Real)(unsafe.Pointer(&v)) }
 func fromReal[T any](r Real) T { return *(*T)(unsafe.Pointer(&r)) }
 
 type realCodec[T any] struct {
-	val T
-	tag int
-	cg  ConstraintGroup[T]
+	val    T
+	tag    int
+	cphase int
+	cg     ConstraintGroup[T]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -437,7 +446,8 @@ func (c *realCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 func bcdRealWrite[T any](c *realCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
-	if err := c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err := cc(c.val); err == nil {
 		r := toReal(c.val)
 		var wire []byte
 		if c.encodeHook != nil {
@@ -545,7 +555,8 @@ func bcdRealRead[T any](c *realCodec[T], pkt PDU, tlv TLV, o *Options) (err erro
 			}
 
 			if err == nil {
-				if err = c.cg.Constrain(out); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(out); err == nil {
 					c.val = out
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -614,6 +625,7 @@ func realBaseToHeader(base int) (header byte) {
 
 func RegisterRealAlias[T any](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
@@ -629,14 +641,18 @@ func RegisterRealAlias[T any](
 
 	f := factories{
 		newEmpty: func() box {
-			return &realCodec[T]{tag: tag, cg: all,
+			return &realCodec[T]{
+				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
 		},
 		newWith: func(v any) box {
 			return &realCodec[T]{
-				val: valueOf[T](v), tag: tag, cg: all,
+				val: valueOf[T](v),
+				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
@@ -649,5 +665,7 @@ func RegisterRealAlias[T any](
 }
 
 func init() {
-	RegisterRealAlias[Real](TagReal, nil, nil, nil, nil)
+	RegisterRealAlias[Real](TagReal,
+		RealConstraintPhase,
+		nil, nil, nil, nil)
 }

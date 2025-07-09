@@ -18,15 +18,7 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 		return
 	}
 
-	seqTag := TagSequence // 16
-	if globalOpts != nil {
-		switch {
-		case globalOpts.HasTag(): // caller supplied a tag
-			seqTag = globalOpts.Tag()
-		case globalOpts.Class() != ClassUniversal: // class changed ⇒ default tag 0
-			seqTag = 0
-		}
-	}
+	seqTag := getSequenceTag(globalOpts)
 
 	// Whether automatic tagging is enabled.
 	auto := globalOpts != nil && globalOpts.Automatic
@@ -55,14 +47,16 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 			}
 
 			if err = checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional); err == nil {
-				if isChoice(fv, fieldOpts) {
-					err = marshalChoiceWrapper(fv, sub, fieldOpts, fv)
-					// CHOICE field: do our explicit CHOICE handling.
-					//err = marshalSequenceChoiceField(fieldOpts, ch, sub)
-				} else {
-					// For all non-CHOICE fields, recurse marshalSequence
-					fieldOpts.incDepth()
-					err = marshalValue(fv, sub, fieldOpts)
+				err = applyFieldConstraints(fv.Interface(), fieldOpts.Constraints, '^')
+				if err == nil {
+					if isChoice(fv, fieldOpts) {
+						// CHOICE field: do our explicit CHOICE handling.
+						err = marshalChoiceWrapper(fv, sub, fieldOpts, fv)
+					} else {
+						// For all non-CHOICE fields, recurse marshalSequence
+						fieldOpts.incDepth()
+						err = marshalValue(fv, sub, fieldOpts)
+					}
 				}
 			}
 		}
@@ -73,6 +67,19 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 		err = marshalSequenceWrap(sub, pkt, globalOpts, seqTag)
 	}
 
+	return
+}
+
+func getSequenceTag(o *Options) (seqTag int) {
+	seqTag = TagSequence // 16
+	if o != nil {
+		switch {
+		case o.HasTag(): // caller supplied a tag
+			seqTag = o.Tag()
+		case o.Class() != ClassUniversal: // class changed ⇒ default tag 0
+			seqTag = 0
+		}
+	}
 	return
 }
 
@@ -166,24 +173,27 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 			continue
 		}
 
-		opts := implicitOptions()
+		fieldOpts := implicitOptions()
 		if field.Tag != "" {
-			opts, err = extractOptions(field, i, auto)
+			fieldOpts, err = extractOptions(field, i, auto)
 		}
 
 		if err == nil {
 			fv := v.Field(i)
-			if err = unmarshalValue(sub, fv, opts); err != nil {
-				if opts.Default != nil && opts.defaultKeyword != "" {
-					fv.Set(refValueOf(opts.Default))
+			if err = unmarshalValue(sub, fv, fieldOpts); err != nil {
+				if fieldOpts.Default != nil && fieldOpts.defaultKeyword != "" {
+					fv.Set(refValueOf(fieldOpts.Default))
 					err = nil
 				} else {
 					// TODO: I still don't like this.
 					err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
-					if berr := checkSequenceFieldCriticality(field.Name, fv, opts.Optional); berr == nil {
+					berr := checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional)
+					if berr == nil {
 						err = berr
 					}
 				}
+			} else {
+				err = applyFieldConstraints(fv.Interface(), fieldOpts.Constraints, '$')
 			}
 		}
 	}

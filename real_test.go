@@ -290,6 +290,7 @@ func TestCustomReal_withControls(t *testing.T) {
 	var cust customReal = customReal(orig) // cheat
 
 	RegisterRealAlias[customReal](TagReal,
+		RealConstraintPhase,
 		func([]byte) error {
 			return nil
 		},

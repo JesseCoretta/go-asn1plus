@@ -20,6 +20,7 @@ type TextLike interface{ ~string | ~[]byte }
 type textCodec[T TextLike] struct {
 	val          T
 	tag          int
+	cphase       int
 	cg           ConstraintGroup[T]
 	decodeVerify []DecodeVerifier
 	decodeHook   DecodeOverride[T]
@@ -61,7 +62,8 @@ func bcdTextWrite[T TextLike](c *textCodec[T], pkt PDU, o *Options) (off int, er
 	}()
 	o = deferImplicit(o)
 
-	if err = c.cg.Constrain(c.val); err == nil {
+	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
+	if err = cc(c.val); err == nil {
 
 		var wire []byte
 		if c.encodeHook != nil {
@@ -137,7 +139,8 @@ func bcdTextRead[T TextLike](c *textCodec[T], pkt PDU, tlv TLV, o *Options) (err
 			debugEvent(mask, newLItem(val, "decoded"))
 
 			if err == nil {
-				if err = c.cg.Constrain(val); err == nil {
+				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
+				if err = cc(val); err == nil {
 					c.val = val
 					pkt.SetOffset(pkt.Offset() + tlv.Length)
 				}
@@ -184,9 +187,15 @@ as [PrintableString], [BMPString], [UTF8String], et al.
 
 Note this does NOT include [BitString], which has its own dedicated
 constructor [RegisterBitStringAlias].
+
+The cphase input argument allows one to decide when constraints should
+be applied during the encoding or decoding phases. For details, see the
+[CodecConstraintEncoding], [CodecConstraintDecoding] and
+[CodecConstraintBoth] constants.
 */
 func RegisterTextAlias[T TextLike](
 	tag int,
+	cphase int,
 	verify DecodeVerifier,
 	decoder DecodeOverride[T],
 	encoder EncodeOverride[T],
@@ -204,6 +213,7 @@ func RegisterTextAlias[T TextLike](
 		newEmpty: func() box {
 			return &textCodec[T]{
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
@@ -212,6 +222,7 @@ func RegisterTextAlias[T TextLike](
 			return &textCodec[T]{
 				val: valueOf[T](v),
 				tag: tag, cg: all,
+				cphase:       cphase,
 				decodeVerify: verList,
 				decodeHook:   decoder,
 				encodeHook:   encoder}
