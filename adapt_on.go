@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// wrapTemporalStringCtor adapts a temporal constructor that wants
+// wrapTemporalStringCtor adapts a temporal constructor that wants 
 // (time.Time, ...Constraint[Temporal]) so it can be fed with a string.
 func wrapTemporalStringCtor[T any](
 	raw func(any, ...Constraint[Temporal]) (T, error),
