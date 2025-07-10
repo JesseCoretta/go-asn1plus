@@ -229,7 +229,7 @@ func registerNumericalAdapters() {
 			}
 			return int(p.native)
 		},
-		"int", "integer",
+		"", "int", "integer",
 	)
 
 	RegisterAdapter[Integer, *big.Int](
