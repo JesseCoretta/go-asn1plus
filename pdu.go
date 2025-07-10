@@ -78,11 +78,6 @@ type PDU interface {
 	// within the underlying buffer.
 	Offset() int
 
-	// Packet returns an instance of Packet alongside an error
-	// following an attempt to extract a "sub packet" beginning
-	// at the input integer position.
-	Packet(int) (PDU, error)
-
 	// HasMoreData returns a Boolean value indicative of content
 	// existing past the point of the current offset position.
 	HasMoreData() bool
@@ -126,7 +121,6 @@ func (_ invalidPacket) FullBytes() ([]byte, error)       { return nil, errorInva
 func (_ invalidPacket) HasMoreData() bool                { return false }
 func (_ invalidPacket) Compound() (bool, error)          { return false, errorInvalidPacket }
 func (_ invalidPacket) Offset() int                      { return 0 }
-func (_ invalidPacket) Packet(_ int) (PDU, error)        { return invalidPacket{}, errorInvalidPacket }
 func (_ invalidPacket) SetOffset(_ ...int)               {}
 func (_ invalidPacket) Free()                            {}
 func (_ invalidPacket) ID() string                       { return `` }
@@ -137,21 +131,6 @@ func (_ invalidPacket) Append(_ ...byte)                 {}
 func (_ invalidPacket) PeekTLV() (TLV, error)            { return TLV{}, errorInvalidPacket }
 func (_ invalidPacket) WriteTLV(_ TLV) error             { return errorInvalidPacket }
 func (_ invalidPacket) TLV() (TLV, error)                { return TLV{}, errorInvalidPacket }
-
-func extractPacket(pkt PDU, L int) (sub PDU, err error) {
-	sub = invalidPacket{}
-
-	if pkt.Offset()+L > pkt.Len() {
-		err = errorASN1Expect(L, pkt.Len()-pkt.Offset(), "Length")
-	} else {
-		off := pkt.Offset()
-		innerData := pkt.Data()[off : off+L]
-		pkt.SetOffset(off + L)
-		sub = pkt.Type().New(innerData...)
-	}
-
-	return sub, err
-}
 
 func setPacketOffset(pkt PDU, offset ...int) (off int) {
 	if len(offset) > 0 {

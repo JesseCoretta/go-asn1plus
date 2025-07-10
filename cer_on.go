@@ -145,18 +145,6 @@ header to the receiver buffer.
 */
 func (r *CERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }
 
-/*
-Deprecated: Packet returns an instance of [PDU] alongside an error following an attempt
-to read the next L (length) bytes from the receiver instance into the return [PDU].
-
-This method is used in cases where a constructed type, i.e.: a SEQUENCE (struct), resides
-within another constructed type via nesting.
-
-Note that successful use of this method shall advance the offset to the end of the extracted
-[PDU] (position offset+length). The receiver offset is not modified.
-*/
-func (r *CERPacket) Packet(L int) (PDU, error) { return extractPacket(r, L) }
-
 func decodeCERLength(data []byte, offset int) (length int, bytesRead int, err error) {
 	debugEnter(data, newLItem(offset, "off"))
 	defer func() {

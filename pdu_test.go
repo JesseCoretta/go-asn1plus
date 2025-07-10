@@ -32,7 +32,6 @@ func (r *testPacket) HasMoreData() bool                    { return r.offset < l
 func (r *testPacket) TLV() (TLV, error)                    { return getTLV(r, nil) }
 func (r *testPacket) ID() string                           { return `` }
 func (r *testPacket) WriteTLV(tlv TLV) error               { return writeTLV(r, tlv, nil) }
-func (r *testPacket) Packet(L int) (PDU, error)            { return extractPacket(r, L) }
 func (r *testPacket) allowsIndefinite() bool               { return r.indef }
 
 func (r *testPacket) Bytes() ([]byte, error) {
@@ -289,7 +288,6 @@ func TestPDU_invalidPacket(_ *testing.T) {
 	invp.Type()
 	invp.Data()
 	invp.Offset()
-	invp.Packet(0)
 	invp.SetOffset(1)
 	invp.Free()
 	invp.Bytes()
@@ -319,33 +317,6 @@ func TestPDU_PeekTLV(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		} else if _, err = pkt.PeekTLV(); err != nil {
-			t.Fatalf("%s failed [%s PeekTLV]: %v", t.Name(), rule, err)
-		}
-	}
-}
-
-// retire
-func TestPDU_Packet(t *testing.T) {
-	type MySequence struct {
-		Field1 OctetString
-		Field2 PrintableString
-	}
-
-	mine := MySequence{OctetString(`Hello`), PrintableString(`World`)}
-
-	for _, rule := range encodingRules {
-		pkt, err := Marshal(mine, With(rule))
-		if err != nil {
-			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
-		}
-
-		var next TLV
-		if next, err = pkt.TLV(); err != nil {
-			t.Fatalf("%s failed [%s TLV]: %v", t.Name(), rule, err)
-		}
-
-		//var sub PDU
-		if _, err = pkt.Packet(next.Length); err != nil {
 			t.Fatalf("%s failed [%s PeekTLV]: %v", t.Name(), rule, err)
 		}
 	}
@@ -560,21 +531,6 @@ func errorsEqual(a, b error) bool {
 		return false
 	default:
 		return a.Error() == b.Error() // sentinel errors are singletons
-	}
-}
-
-func TestExtractPDUTooShort(t *testing.T) {
-	mp := &BERPacket{
-		data:   []byte{0x02, 0x01, 0x00}, // INTEGER 0
-		offset: 2,                        // already 2 bytes in ⇒ only 1 left
-	}
-	sub, err := extractPacket(mp, 5) // ask for 5 bytes – impossible
-
-	if sub.Type() != invalidEncodingRule {
-		t.Errorf("expected nil sub-packet, got %#v", sub)
-	}
-	if err == nil || err.Error() != errorASN1Expect(5, 1, "Length").Error() {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

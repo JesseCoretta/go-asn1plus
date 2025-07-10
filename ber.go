@@ -247,41 +247,6 @@ func newBERPacket(src ...byte) (pkt PDU) {
 	return
 }
 
-/*
-Deprecated: Packet returns an instance of [PDU] alongside an error following an
-attempt to read the next L (length) bytes from the receiver instance into the
-return [PDU].
-
-This method is used in cases where a constructed type, i.e.: a SEQUENCE (struct),
-resides within another constructed type via nesting.
-
-Note that successful use of this method shall advance the offset to the end of the
-extracted [PDU] (position offset+length). The receiver offset is not modified.
-*/
-func (r *BERPacket) Packet(L int) (PDU, error) { return extractPacket(r, L) }
-
-/*
-// TODO: reinvestigate this
-//
-func readIndefiniteContents(r PDU, d []byte) ([]byte, int, error) {
-	off := r.Offset()
-	var val []byte
-	var err error
-	for err == nil {
-		if off+2 <= len(d) && d[off] == 0x00 && d[off+1] == 0x00 {
-			off += 2
-			break
-		}
-		var t TLV
-		if t, err = getTLV(r, nil); err == nil {
-			val = append(val, t.Value...)
-			off = r.Offset()
-		}
-	}
-	return val, off, err
-}
-*/
-
 func encodeBERLengthInto(dst *[]byte, n int) {
 	if n == -1 { // indefinite
 		*dst = append(*dst, 0x80)
