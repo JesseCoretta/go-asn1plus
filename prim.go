@@ -10,8 +10,9 @@ import "reflect"
 /*
 Primitive encompasses all ASN.1 primitive types:
 
-  - [BMPString]
   - [BitString]
+  - [BMPString]
+  - [Boolean]
   - [Date]
   - [DateTime]
   - [Duration]
