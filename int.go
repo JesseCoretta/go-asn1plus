@@ -31,38 +31,6 @@ and [CodecConstraintBoth] constants for possible settings.
 var IntegerConstraintPhase = CodecConstraintDecoding
 
 /*
-Tag returns the integer constant [TagInteger].
-*/
-func (r Integer) Tag() int { return TagInteger }
-
-/*
-IsPrimitive returns true, indicating the receiver is a known
-ASN.1 primitive.
-*/
-func (r Integer) IsPrimitive() bool { return true }
-
-/*
-IsZero returns a Boolean value indicative of a nil receiver state.
-*/
-func (r Integer) IsZero() bool {
-	return &r == nil
-}
-
-/*
-String returns the string representation of the receiver instance.
-*/
-func (r Integer) String() string {
-	var s string
-	if r.big {
-		s = r.bigInt.String()
-	} else {
-		s = fmtInt(r.native, 10)
-	}
-
-	return s
-}
-
-/*
 NewInteger returns an instance of [Integer] supporting any signed
 magnitude.
 
@@ -116,7 +84,53 @@ func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err 
 }
 
 /*
-Big returns the *[big.Int] form of the receiver instance.
+Tag returns the integer constant [TagInteger].
+*/
+func (r Integer) Tag() int { return TagInteger }
+
+/*
+IsPrimitive returns true, indicating the receiver is a known
+ASN.1 primitive.
+*/
+func (r Integer) IsPrimitive() bool { return true }
+
+/*
+IsZero returns a Boolean value indicative of a nil receiver state.
+*/
+func (r Integer) IsZero() bool { return &r == nil }
+
+/*
+String returns the string representation of the receiver instance.
+*/
+func (r Integer) String() string {
+	var s string
+	if r.big {
+		s = r.bigInt.String()
+	} else {
+		s = fmtInt(r.native, 10)
+	}
+
+	return s
+}
+
+/*
+IsBig returns a Boolean value indicative of the underlying value
+overflowing int64.
+*/
+func (r Integer) IsBig() bool { return r.big }
+
+/*
+Native returns the underlying int64 value found within the receiver
+instance. Note that this method should not be used unless a call of
+[Integer.IsBig] beforehand returns false.
+*/
+func (r Integer) Native() int64 { return r.native }
+
+/*
+Big returns the *[big.Int] form of the receiver instance. Note that
+use of this method constructs an entirely new instance of *[big.Int]
+if the underlying value is only an int64. Thus, this method should
+only usually be needed if a call to [Integer.IsBig] returns true.
 */
 func (r Integer) Big() (i *big.Int) {
 	if r.big {
@@ -132,44 +146,100 @@ func (r Integer) Big() (i *big.Int) {
 Eq returns a bool indicative of an equality match between the
 receiver instance and x.
 */
-func (r Integer) Eq(x Integer) bool {
-	return r.Big().Cmp(x.Big()) == 0
-}
+func (r Integer) Eq(x any) bool { return r.cmpAny(x) == 0 }
 
 /*
-Eq returns a bool indicative of a negative equality match between
+Ne returns a bool indicative of a negative equality match between
 the receiver instance and x.
 */
-func (r Integer) Ne(x Integer) bool {
-	return r.Big().Cmp(x.Big()) != 0
-}
+func (r Integer) Ne(x any) bool { return r.cmpAny(x) != 0 }
 
 /*
 Gt returns a bool indicative of r being greater than x.
 */
-func (r Integer) Gt(x Integer) bool {
-	return r.Big().Cmp(x.Big()) > 0
-}
+func (r Integer) Gt(x any) bool { return r.cmpAny(x) > 0 }
 
 /*
 Ge returns a bool indicative of r being greater than or equal to x.
 */
-func (r Integer) Ge(x Integer) bool {
-	return r.Big().Cmp(x.Big()) >= 0
-}
+func (r Integer) Ge(x any) bool { return r.cmpAny(x) >= 0 }
 
 /*
 Lt returns a bool indicative of r being less than x.
 */
-func (r Integer) Lt(x Integer) bool {
-	return r.Big().Cmp(x.Big()) < 0
-}
+func (r Integer) Lt(x any) bool { return r.cmpAny(x) < 0 }
 
 /*
 Le returns a bool indicative of r being less than or equal to x.
 */
-func (r Integer) Le(x Integer) bool {
-	return r.Big().Cmp(x.Big()) <= 0
+func (r Integer) Le(x any) bool { return r.cmpAny(x) <= 0 }
+
+func (r Integer) cmpAny(x any) int {
+	switch t := x.(type) {
+	case Integer:
+		return cmpInteger(r, t)
+
+	case int:
+		return r.cmpInt64(int64(t))
+
+	case int32:
+		return r.cmpInt64(int64(t))
+
+	case int64:
+		return r.cmpInt64(t)
+
+	case uint64:
+		return r.cmpUint64(t)
+
+	case *big.Int:
+		return r.cmpBig(t)
+
+	default:
+		panic(mkerrf("Integer.cmpAny: unsupported type ", refTypeOf(x).String()))
+	}
+}
+
+func cmpInteger(a, b Integer) int {
+	if !a.big && !b.big {
+		switch {
+		case a.native < b.native:
+			return -1
+		case a.native > b.native:
+			return +1
+		default:
+			return 0
+		}
+	}
+	return a.Big().Cmp(b.Big())
+}
+
+func (r Integer) cmpInt64(v int64) int {
+	if !r.big {
+		switch {
+		case r.native < v:
+			return -1
+		case r.native > v:
+			return +1
+		default:
+			return 0
+		}
+	}
+	return r.Big().Cmp(big.NewInt(v))
+}
+
+func (r Integer) cmpUint64(u uint64) int {
+	if !r.big && u <= math.MaxInt64 {
+		return r.cmpInt64(int64(u))
+	}
+	b := new(big.Int).SetUint64(u)
+	return r.Big().Cmp(b)
+}
+
+func (r Integer) cmpBig(b *big.Int) int {
+	if !r.big {
+		return big.NewInt(r.native).Cmp(b)
+	}
+	return r.bigInt.Cmp(b)
 }
 
 func decodeIntegerContent(encoded []byte) (val *big.Int) {
