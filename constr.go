@@ -163,33 +163,42 @@ func putConstraint[T any](name string, fn Constraint[T]) {
 }
 
 func collectConstraint[T any](names []string) (ConstraintGroup[T], error) {
-	var out ConstraintGroup[T]
-	want := refTypeOf((*T)(nil)).Elem()
+    var out ConstraintGroup[T]
+    want := refTypeOf((*T)(nil)).Elem()
 
-	debugEvent(EventEnter|EventConstraint,
-		newLItem(names, "get constraint(s)"))
-	defer func() {
-		debugEvent(EventExit | EventConstraint)
-	}()
+    for _, n := range names {
+        n = trimL(lc(n), `^$`) // not part of the actual name, so toss them.
+        entry, ok := constraintReg[n]
+        if !ok {
+            return nil, mkerrf("unknown constraint ", n)
+        }
 
-	for _, n := range names {
-		e, ok := constraintReg[lc(n)]
-		if !ok {
-			return nil, mkerrf("unknown constraint ", n)
-		}
-		if e.typ != want {
-			return nil, mkerrf("constraint ", n, " not applicable to ", want.String())
-		}
-		out = append(out, e.fn.(Constraint[T]))
-	}
+        if entry.typ != want && !want.ConvertibleTo(entry.typ) {
+            return nil, mkerrf("constraint ", n, " not applicable to ", want.String())
+        }
 
-	debugEvent(EventConstraint|EventTrace,
-		newLItem(len(out), "constraints found"))
+        fnVal := refValueOf(entry.fn)
 
-	return out, nil
+        wrapper := func(u T) error {
+            v := refValueOf(u)
+            if v.Type() != entry.typ {
+                v = v.Convert(entry.typ)
+            }
+
+            res := fnVal.Call([]reflect.Value{v})[0]
+            if err := res.Interface(); err != nil {
+                return err.(error)
+            }
+            return nil
+        }
+
+        out = append(out, wrapper)
+    }
+
+    return out, nil
 }
 
-func applyFieldConstraints(val interface{}, names []string, expect rune) error {
+func applyFieldConstraints(val any, names []string, expect rune) error {
 	want := refTypeOf(val)
 
 	for _, nm := range names {
