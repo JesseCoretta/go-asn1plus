@@ -129,7 +129,7 @@ func registerMiscAdapters() {
 	RegisterAdapter[ObjectIdentifier, string](
 		wrapOIDCtor(NewObjectIdentifier, func(s string) any { return s }),
 		func(p *ObjectIdentifier) string { return p.String() },
-		"", "oid", "objectidentifier", "object-identifier",
+		"oid", "objectidentifier", "object-identifier",
 	)
 
 	// ditto for RelativeOID
@@ -237,7 +237,7 @@ func registerNumericalAdapters() {
 			return NewInteger(bi, cs...)
 		},
 		func(p *Integer) *big.Int { return p.Big() },
-		"int", "integer",
+		"", "int", "integer",
 	)
 
 	RegisterAdapter[Enumerated, int](
@@ -287,7 +287,7 @@ func registerNumericalAdapters() {
 	RegisterAdapter[Real, *big.Float](
 		wrapRealCtor(10, bigFloatToRealParts),
 		func(p *Real) *big.Float { return p.Big() },
-		"real10",
+		"", "real10", "real",
 	)
 
 	RegisterAdapter[Real, *big.Float](
@@ -368,7 +368,7 @@ func registerStringAdapters() {
 			return NewOctetString(s, cs...)
 		},
 		func(p *OctetString) []byte { return []byte(*p) },
-		"octet", "octetstring",
+		"", "octet", "octetstring",
 	)
 
 	RegisterAdapter[BitString, []byte](
