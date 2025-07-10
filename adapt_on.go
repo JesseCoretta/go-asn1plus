@@ -9,7 +9,7 @@ import (
 
 // wrapTemporalStringCtor adapts a temporal constructor that wants
 // (time.Time, ...Constraint[Temporal]) so it can be fed with a string.
-func wrapTemporalStringCtor[T any](
+func wrapTemporalStringCtor[T Temporal](
 	raw func(any, ...Constraint[Temporal]) (T, error),
 	parse parseFn,
 ) func(string, ...Constraint[T]) (T, error) {
@@ -27,6 +27,21 @@ func wrapTemporalStringCtor[T any](
 		}
 		return
 	}
+}
+
+func wrapTruthyCtor[T Truthy](
+    raw func(any, ...Constraint[Truthy]) (T, error),
+) func(bool, ...Constraint[T]) (T, error) {
+    return func(b bool, cs ...Constraint[T]) (t T, err error) {
+        tc := make([]Constraint[Truthy], len(cs))
+        for i, c := range cs {
+            cc := c
+            tc[i] = func(x Truthy) error {
+                return cc(x.(T))
+            }
+        }
+        return raw(b, tc...)
+    }
 }
 
 func wrapRealCtor[GoT any](
@@ -148,10 +163,8 @@ func registerMiscAdapters() {
 	)
 
 	RegisterAdapter[Boolean, bool](
-		func(b bool, cs ...Constraint[Boolean]) (Boolean, error) {
-			return NewBoolean(b, cs...)
-		},
-		func(p *Boolean) bool { return bool(*p) },
+		wrapTruthyCtor[Boolean](NewBoolean),
+		func(b *Boolean) bool { return b.Bool() },
 		"", "boolean", "bool",
 	)
 }

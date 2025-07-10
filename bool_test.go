@@ -84,6 +84,7 @@ func TestBoolean_codecov(t *testing.T) {
 
 type customBoolean Boolean
 
+func (_ customBoolean) Bool() bool        { return false }
 func (_ customBoolean) Tag() int          { return TagBoolean }
 func (_ customBoolean) String() string    { return `` }
 func (_ customBoolean) IsPrimitive() bool { return true }
@@ -132,8 +133,8 @@ func ExampleNewBoolean() {
 }
 
 func ExampleBoolean_withConstraint() {
-	constraint := LiftConstraint(func(b Boolean) Boolean { return b },
-		func(b Boolean) (err error) {
+	constraint := LiftConstraint(func(b Truthy) Truthy { return b },
+		func(b Truthy) (err error) {
 			if !b.Bool() {
 				err = fmt.Errorf("Constraint violation: Boolean must be true")
 			}

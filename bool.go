@@ -11,6 +11,13 @@ import (
 )
 
 /*
+Truthy implements a Boolean interface for verisimilitude related types.
+*/
+type Truthy interface {
+	Bool() bool
+}
+
+/*
 Boolean implements the ASN.1 BOOLEAN type.
 */
 type Boolean bool
@@ -62,10 +69,10 @@ func (r Boolean) IsPrimitive() bool { return true }
 NewBoolean returns an instance of [Boolean] alongside an error following
 an attempt to marshal x.
 */
-func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error) {
+func NewBoolean(x any, constraints ...Constraint[Truthy]) (b Boolean, err error) {
 	switch tv := x.(type) {
-	case Boolean:
-		b = tv
+	case Truthy:
+		b = Boolean(tv.Bool())
 	case Primitive:
 		b, err = NewBoolean(tv.String())
 	case bool:
@@ -87,18 +94,18 @@ func NewBoolean(x any, constraints ...Constraint[Boolean]) (b Boolean, err error
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Boolean] = constraints
+		var group ConstraintGroup[Truthy] = constraints
 		err = group.Constrain(Boolean(b == true))
 	}
 
 	return b, err
 }
 
-type booleanCodec[T any] struct {
+type booleanCodec[T Truthy] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup[Truthy]
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -125,7 +132,7 @@ func (c *booleanCodec[T]) write(pkt PDU, o *Options) (n int, err error) {
 	return
 }
 
-func bcdBooleanWrite[T any](c *booleanCodec[T], pkt PDU, o *Options) (off int, err error) {
+func bcdBooleanWrite[T Truthy](c *booleanCodec[T], pkt PDU, o *Options) (off int, err error) {
 	o = deferImplicit(o)
 
 	cc := c.cg.phase(c.cphase, CodecConstraintEncoding)
@@ -165,7 +172,7 @@ func (c *booleanCodec[T]) read(pkt PDU, tlv TLV, o *Options) (err error) {
 	return
 }
 
-func bcdBooleanRead[T any](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) error {
+func bcdBooleanRead[T Truthy](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) error {
 	o = deferImplicit(o)
 
 	wire, err := primitiveCheckRead(c.Tag(), pkt, tlv, o)
@@ -203,16 +210,16 @@ func bcdBooleanRead[T any](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) err
 	return err
 }
 
-func RegisterBooleanAlias[T any](
+func RegisterBooleanAlias[T Truthy](
 	tag int,
 	cphase int,
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
+	spec Constraint[Truthy],
+	user ...Constraint[Truthy],
 ) {
-	all := append(ConstraintGroup[T]{}, user...)
+	all := append(ConstraintGroup[Truthy]{}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {
