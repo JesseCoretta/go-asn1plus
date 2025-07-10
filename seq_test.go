@@ -6,6 +6,31 @@ import (
 	"testing"
 )
 
+func TestSequence_IntFields(t *testing.T) {
+	type MySequence struct {
+		Field0 Integer
+		Field1 Integer
+		Field2 Integer
+		Field3 Integer
+	}
+	zero, _ := NewInteger(0)
+	one, _ := NewInteger(1)
+	two, _ := NewInteger(2)
+	three, _ := NewInteger(3)
+
+	my := MySequence{zero, one, two, three}
+
+	pkt, err := Marshal(my)
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var my2 MySequence
+	if err = Unmarshal(pkt, &my2); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+}
+
 func TestSequenceOf_roundTrip(t *testing.T) {
 	type partialAttribute struct {
 		Type OctetString
