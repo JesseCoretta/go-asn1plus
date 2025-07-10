@@ -30,18 +30,18 @@ func wrapTemporalStringCtor[T Temporal](
 }
 
 func wrapTruthyCtor[T Truthy](
-    raw func(any, ...Constraint[Truthy]) (T, error),
+	raw func(any, ...Constraint[Truthy]) (T, error),
 ) func(bool, ...Constraint[T]) (T, error) {
-    return func(b bool, cs ...Constraint[T]) (t T, err error) {
-        tc := make([]Constraint[Truthy], len(cs))
-        for i, c := range cs {
-            cc := c
-            tc[i] = func(x Truthy) error {
-                return cc(x.(T))
-            }
-        }
-        return raw(b, tc...)
-    }
+	return func(b bool, cs ...Constraint[T]) (t T, err error) {
+		tc := make([]Constraint[Truthy], len(cs))
+		for i, c := range cs {
+			cc := c
+			tc[i] = func(x Truthy) error {
+				return cc(x.(T))
+			}
+		}
+		return raw(b, tc...)
+	}
 }
 
 func wrapRealCtor[GoT any](
