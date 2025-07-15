@@ -28,29 +28,30 @@ func ExampleOptions_byAssembly() {
 }
 
 func TestOptions_codecov(_ *testing.T) {
-	opts, _ := NewOptions(`asn1:"utf8,printable,fargus,tag:3"`)
+	for _, raw := range []string{
+		`asn1:"utf8,printable,fargus,tag:3"`,
+		`asn1:"blarg,fargus,tag:3"`,
+		`asn1:"tag:3,optional,omitempty"`,
+		`asn1:"teletex,tag:-13"`,
+		`asn1:"private,tag:1"`,
+		`asn1:"private,tag:1,set"`,
+		`asn1:"application,tag:2,default:5"`,
+		`asn1:"application,tag:2,choices:myChoices"`,
+		`asn1:"application,tag:2,default:true"`,
+		`asn1:"application,tag:2,default:thanks"`,
+		`asn1:"application,constraint:fakeConstraint,tag:2,default:thanks"`,
+		`asn1:"application,tag:2,default:thanks"`,
+	} {
+		opts, _ := NewOptions(raw)
+		_ = opts.String()
+	}
+
+	RegisterDefaultValue("fakeDefault", 0)
+	opts, _ := NewOptions(`asn1:"application,tag:2,default::fakeDefault"`)
 	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"blarg,fargus,tag:3"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"tag:3,optional,omitempty"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"teletex,tag:-13"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"private,tag:1"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"private,tag:1,set"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"application,tag:2,default:5"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"application,tag:2,default:true"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"application,tag:2,default:thanks"`)
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"application,constraint:fakeConstraint,tag:2,default:thanks"`)
-	_ = opts.String()
+	UnregisterDefaultValue("fakeDefault")
+
 	opts.Default = struct{}{}
-	_ = opts.String()
-	opts, _ = NewOptions(`asn1:"application,tag:2,default:thanks"`)
 	_ = opts.String()
 	field := reflect.StructField{Tag: "blarg"}
 	_, _ = NewOptions("asn1:")
@@ -62,7 +63,6 @@ func TestOptions_codecov(_ *testing.T) {
 	opts.setBool("automatic")
 	opts.setBool("indefinite")
 	_ = opts.String()
-	opts.Default = struct{}{}
 	opts.parseOptionDefault("")
 	field = reflect.StructField{Name: "field", Tag: `asn1:"automatic,explicit"`}
 	extractOptions(field, 0, true)
