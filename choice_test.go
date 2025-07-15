@@ -584,7 +584,7 @@ func TestChoice_DefaultInterfaceDecode_Primitive(t *testing.T) {
 
 func TestChoice_codecov(_ *testing.T) {
 	var ch invalidChoice
-	ch.choiceTag()
+	ch.Tag()
 	ch.Value()
 	ch.isChoice()
 

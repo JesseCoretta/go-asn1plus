@@ -14,8 +14,11 @@ type Choice interface {
 	// within the receiver instance of Choice.
 	Value() any
 
+	// Tag returns the associated Choice tag.  If
+	// no tag was specified, -1 is returned.
+	Tag() int
+
 	isChoice()
-	choiceTag() int
 }
 
 type wrappedChoice struct {
@@ -25,13 +28,13 @@ type wrappedChoice struct {
 
 type invalidChoice struct{}
 
-func (_ invalidChoice) isChoice()      {}
-func (_ invalidChoice) choiceTag() int { return -1 }
-func (_ invalidChoice) Value() any     { return errorNilReceiver }
+func (_ invalidChoice) isChoice()  {}
+func (_ invalidChoice) Tag() int   { return -1 }
+func (_ invalidChoice) Value() any { return errorNilReceiver }
 
-func (r wrappedChoice) isChoice()      {}
-func (r wrappedChoice) choiceTag() int { return r.tag }
-func (r wrappedChoice) Value() any     { return r.inner }
+func (r wrappedChoice) isChoice()  {}
+func (r wrappedChoice) Tag() int   { return r.tag }
+func (r wrappedChoice) Value() any { return r.inner }
 
 /*
 NewChoice returns a new instance of [Choice], which wraps the input
@@ -334,7 +337,7 @@ func marshalChoiceWrapper(
 	innerBytes := tmp.Data()
 
 	// decide which tag, class, explicit to emit
-	tag := cw.choiceTag()         // user override or -1
+	tag := cw.Tag()               // user override or -1
 	class := ClassContextSpecific // default
 	explicit := true              // always explicit for choice
 
