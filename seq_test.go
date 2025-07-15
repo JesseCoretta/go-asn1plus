@@ -6,6 +6,51 @@ import (
 	"testing"
 )
 
+func TestSequence_ComponentsOf(t *testing.T) {
+	type ComponentSequence struct {
+		Name UTF8String `asn1:"tag:1"`
+		Min  Integer    `asn1:"tag:2"`
+		Max  Integer    `asn1:"tag:3"`
+	}
+
+	type MySequence struct {
+		Field1            PrintableString `asn1:"tag:0"`
+		ComponentSequence `asn1:"components-of"`
+		Field3            OctetString `asn1:"tag:4"`
+	}
+
+	ten, _ := NewInteger(10)
+	seventeen, _ := NewInteger(17)
+	j := UTF8String("Jesse")
+	oct := OctetString("octets")
+	ps := PrintableString("testing")
+
+	my := MySequence{
+		Field1: ps,
+		ComponentSequence: ComponentSequence{
+			Name: j,
+			Min:  ten,
+			Max:  seventeen,
+		},
+		Field3: oct,
+	}
+
+	pkt, err := Marshal(my)
+	if err != nil {
+		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
+	}
+
+	var my2 MySequence
+	if err = Unmarshal(pkt, &my2); err != nil {
+		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
+	}
+
+	nten := my2.ComponentSequence.Min
+	if nten.Ne(ten) {
+		t.Fatalf("%s failed [struct cmp.]:\n\twant: %s\n\tgot:  %s", t.Name(), ten, nten)
+	}
+}
+
 func TestSequence_IntFields(t *testing.T) {
 	type MySequence struct {
 		Field0 Integer

@@ -129,13 +129,14 @@ var (
 )
 
 var boolKeywords = map[string]struct{}{
-	"explicit":   {},
-	"optional":   {},
-	"automatic":  {},
-	"set":        {},
-	"sequence":   {},
-	"omitempty":  {},
-	"indefinite": {},
+	"explicit":      {},
+	"optional":      {},
+	"automatic":     {},
+	"set":           {},
+	"sequence":      {},
+	"omitempty":     {},
+	"indefinite":    {},
+	"components-of": {},
 }
 
 var classKeywords = map[string]struct{}{

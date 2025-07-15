@@ -20,17 +20,18 @@ of this type serve two purposes.
   - Simplify package internals by having a portable storage type for parsed struct field instructions which bear the "asn1:" tag prefix
 */
 type Options struct {
-	Explicit    bool     // If true, wrap the field in an explicit tag
-	Optional    bool     // If true, the field is optional
-	OmitEmpty   bool     // Whether to ignore empty slice values
-	Set         bool     // If true, encode as SET instead of SEQUENCE (for collections); mutex of Sequence
-	Sequence    bool     // If true, encode as SEQUENCE OF instead of SET OF; mutex of Set
-	Indefinite  bool     // whether a field is known to be of an indefinite length
-	Automatic   bool     // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
-	Choices     string   // Name of key for the associated Choices of a single SEQUENCE field or other context
-	Identifier  string   // "ia5", "numeric", "utf8" etc. (for string fields)
-	Constraints []string // References to registered Constraint/ConstraintGroup instances
-	Default     any      // Manual default value (not recommended, use RegisterDefaultValue)
+	Explicit     bool     // If true, wrap the field in an explicit tag
+	Optional     bool     // If true, the field is optional
+	OmitEmpty    bool     // Whether to ignore empty slice values
+	Set          bool     // If true, encode as SET instead of SEQUENCE (for collections); mutex of Sequence
+	Sequence     bool     // If true, encode as SEQUENCE OF instead of SET OF; mutex of Set
+	Indefinite   bool     // whether a field is known to be of an indefinite length
+	Automatic    bool     // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
+	ComponentsOf bool     // For sequence embedding
+	Choices      string   // Name of key for the associated Choices of a single SEQUENCE field or other context
+	Identifier   string   // "ia5", "numeric", "utf8" etc. (for string fields)
+	Constraints  []string // References to registered Constraint/ConstraintGroup instances
+	Default      any      // Manual default value (not recommended, use RegisterDefaultValue)
 
 	tag, // if non-nil, indicates an alternative tag number.
 	class, // represents the ASN.1 class: universal, application, context-specific, or private.
@@ -122,6 +123,8 @@ func (r Options) String() string {
 
 	strDef := stringifyDefault(r.Default)
 	addStringConfigValue(&parts, !regDef && strDef != "", "default:"+strDef)
+
+	addStringConfigValue(&parts, r.ComponentsOf, "components-of")
 
 	addStringConfigValue(&parts, r.Identifier != "", lc(r.Identifier))
 	addStringConfigValue(&parts, r.Choices != "", "choices:"+lc(r.Choices))
@@ -236,6 +239,8 @@ func (r *Options) setBool(name string) {
 		r.OmitEmpty = true
 	case name == "optional":
 		r.Optional = true
+	case name == "components-of":
+		r.ComponentsOf = true
 	case name == "set":
 		r.Set = true
 		r.Sequence = false

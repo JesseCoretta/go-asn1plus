@@ -40,6 +40,14 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 			fieldOpts.copyDepth(globalOpts)
 
 			fv := v.Field(i)
+			if fieldOpts.ComponentsOf {
+				if !field.Anonymous {
+					err = errorComponentsNotAnonymous
+				} else {
+					err = marshalSequenceComponentsOf(fv, sub, fieldOpts, globalOpts, auto)
+				}
+				continue
+			}
 
 			if fieldOpts.hasRegisteredDefault() && fieldOpts.defaultEquals(fv.Interface()) {
 				// omit this field from the sequence
@@ -65,6 +73,37 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 	if err == nil {
 		// wrap the entire sequence from the sub-packet.
 		err = marshalSequenceWrap(sub, pkt, globalOpts, seqTag)
+	}
+
+	return
+}
+
+func marshalSequenceComponentsOf(fv reflect.Value, sub PDU, fOpts, gOpts *Options, auto bool) (err error) {
+	et := fv.Type()
+	for j := 0; j < et.NumField() && err == nil; j++ {
+		sf := et.Field(j)
+		if sf.PkgPath != "" {
+			continue
+		}
+		var sfOpts *Options
+		if sfOpts, err = extractOptions(sf, j, auto); err == nil {
+			sfOpts.copyDepth(fOpts)
+			sfv := fv.Field(j)
+			if sfOpts.hasRegisteredDefault() && sfOpts.defaultEquals(sfv.Interface()) {
+				continue
+			}
+			if err = checkSequenceFieldCriticality(sf.Name, sfv, sfOpts.Optional); err == nil {
+				err = applyFieldConstraints(sfv.Interface(), sfOpts.Constraints, '^')
+				if err == nil {
+					if isChoice(sfv, sfOpts) {
+						err = marshalChoiceWrapper(sfv, sub, sfOpts, sfv)
+					} else {
+						sfOpts.incDepth()
+						err = marshalValue(sfv, sub, sfOpts)
+					}
+				}
+			}
+		}
 	}
 
 	return
@@ -178,8 +217,17 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 			fieldOpts, err = extractOptions(field, i, auto)
 		}
 
+		fv := v.Field(i)
+		if fieldOpts.ComponentsOf {
+			if !field.Anonymous {
+				err = errorComponentsNotAnonymous
+			} else {
+				err = unmarshalSequenceComponentsOf(fv, sub, fieldOpts, auto)
+			}
+			continue
+		}
+
 		if err == nil {
-			fv := v.Field(i)
 			if err = unmarshalValue(sub, fv, fieldOpts); err != nil {
 				if fieldOpts.Default != nil && fieldOpts.defaultKeyword != "" {
 					fv.Set(refValueOf(fieldOpts.Default))
@@ -195,6 +243,42 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 			} else {
 				err = applyFieldConstraints(fv.Interface(), fieldOpts.Constraints, '$')
 			}
+		}
+	}
+
+	return
+}
+
+func unmarshalSequenceComponentsOf(fv reflect.Value, sub PDU, fieldOpts *Options, auto bool) (err error) {
+	et := fv.Type()
+	for j := 0; j < et.NumField() && err == nil; j++ {
+		sf := et.Field(j)
+		if sf.PkgPath != "" {
+			continue
+		}
+		sfOpts := implicitOptions()
+		if sf.Tag != "" {
+			sfOpts, err = extractOptions(sf, j, auto)
+			if err != nil {
+				continue
+			}
+		}
+		sfOpts.copyDepth(fieldOpts)
+		sfv := fv.Field(j)
+		if err = unmarshalValue(sub, sfv, sfOpts); err != nil {
+			if sfOpts.Default != nil && sfOpts.defaultKeyword != "" {
+				sfv.Set(refValueOf(sfOpts.Default))
+				err = nil
+			} else {
+				berr := checkSequenceFieldCriticality(sf.Name, sfv, sfOpts.Optional)
+				if berr == nil {
+					err = mkerrf("unmarshalValue: failed for field ", sf.Name, ": ", err.Error())
+				} else {
+					err = berr
+				}
+			}
+		} else {
+			err = applyFieldConstraints(sfv.Interface(), sfOpts.Constraints, '$')
 		}
 	}
 
