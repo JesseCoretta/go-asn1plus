@@ -148,7 +148,7 @@ func bcdBooleanWrite[T Truthy](c *booleanCodec[T], pkt PDU, o *Options) (off int
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.Tag(), 0, o)
+			tag, cls := effectiveHeader(c.Tag(), 0, o)
 			start := pkt.Offset()
 
 			tlv := pkt.Type().newTLV(cls, tag, 1, false, wire[0])

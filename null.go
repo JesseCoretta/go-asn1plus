@@ -77,7 +77,7 @@ func bcdNullWrite[T any](c *nullCodec[T], pkt PDU, o *Options) (off int, err err
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			err = writeTLV(pkt, pkt.Type().newTLV(cls, tag, len(wire), false), o)
 			if err == nil {

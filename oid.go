@@ -530,7 +530,7 @@ func bcdOIDWrite[T any](c *oidCodec[T], pkt PDU, o *Options) (off int, err error
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
 			if err = writeTLV(pkt, tlv, o); err == nil {
@@ -877,7 +877,7 @@ func bcdRelOIDWrite[T any](c *relOIDCodec[T], pkt PDU, o *Options) (off int, err
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
 			if err = writeTLV(pkt, tlv, o); err == nil {

@@ -479,7 +479,7 @@ func bcdRealWrite[T any](c *realCodec[T], pkt PDU, o *Options) (off int, err err
 			}
 		}
 
-		tag, cls := effectiveTag(c.tag, 0, o)
+		tag, cls := effectiveHeader(c.tag, 0, o)
 		start := pkt.Offset()
 		if err == nil {
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)

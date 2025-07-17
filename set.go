@@ -58,8 +58,9 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	}
 
 	var elements [][]byte
+	var typ EncodingRule = pkt.Type()
 	for i := 0; i < v.Len() && err == nil; i++ {
-		tmp := pkt.Type().New()
+		tmp := typ.New()
 		subOpts := clearChildOpts(opts)
 
 		subOpts.incDepth()
@@ -73,7 +74,7 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		return
 	}
 
-	if pkt.Type().canonicalOrdering() {
+	if typ.canonicalOrdering() {
 		slices.SortFunc(elements, func(a, b []byte) int { return bcmp(a, b) })
 	}
 
@@ -83,7 +84,8 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		concatenated = append(concatenated, e...)
 	}
 
-	tlv := pkt.Type().newTLV(ClassUniversal, TagSet, len(concatenated), true, concatenated...)
+	tag, class := effectiveHeader(TagSet, ClassUniversal, opts)
+	tlv := typ.newTLV(class, tag, len(concatenated), true, concatenated...)
 	encoded := encodeTLV(tlv, nil)
 	putBuf(bufPtr)
 
@@ -231,30 +233,30 @@ func setPickChoiceAlternative(
 	childOpts *Options,
 	err error,
 ) {
-	// 1) If the next TLV is a universal SET, strip it and recurse
+	typ := pkt.Type()
+
+	// If the next TLV is a universal SET, strip it and recurse
 	if tlv, pe := pkt.PeekTLV(); pe == nil &&
 		tlv.Class == ClassUniversal && tlv.Tag == TagSet {
-		// consume the SET tag
 		if _, err = pkt.TLV(); err != nil {
 			return
 		}
-		// recurse into its contents
-		sub := pkt.Type().New(tlv.Value...)
+		sub := typ.New(tlv.Value...)
 		sub.SetOffset()
 		return setPickChoiceAlternative(sub, parentOpts)
 	}
 
-	// 2) Consume the context-specific wrapper TLV ([n] EXPLICIT)
+	// Consume the context-specific wrapper TLV ([n] EXPLICIT)
 	var outer TLV
 	if outer, err = pkt.TLV(); err == nil {
-		pkt.AddOffset(outer.Length) ///pkt.Offset() + len(outer.Value))
+		pkt.AddOffset(outer.Length)
 
 		childOpts = clearChildOpts(parentOpts)
 		childOpts.Choices = parentOpts.Choices
 
 		payload = outer.Value
 		tag = outer.Tag
-		payloadPK = pkt.Type().New(payload...)
+		payloadPK = typ.New(payload...)
 		payloadPK.SetOffset()
 	}
 

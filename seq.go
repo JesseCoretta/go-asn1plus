@@ -114,7 +114,8 @@ func getSequenceTag(o *Options) (seqTag int) {
 }
 
 func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
-	sub := pkt.Type().New()
+	typ := pkt.Type()
+	sub := typ.New()
 	for i := 0; i < v.Len() && err == nil; i++ {
 		err = marshalValue(v.Index(i), sub, implicitOptions())
 	}
@@ -126,7 +127,7 @@ func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
 		content := sub.Data()
 
 		bufPtr := getBuf()
-		encodeLengthInto(pkt.Type(), bufPtr, len(content))
+		encodeLengthInto(typ, bufPtr, len(content))
 		pkt.Append(*bufPtr...)
 		putBuf(bufPtr)
 

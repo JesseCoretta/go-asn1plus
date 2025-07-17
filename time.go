@@ -1585,7 +1585,7 @@ func bcdTemporalWrite[T Temporal](c *temporalCodec[T], pkt PDU, o *Options) (off
 	if err = cc(c.val); err == nil {
 		var wire []byte
 		if wire, err = c.encodeHook(c.val); err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
 			if err = writeTLV(pkt, tlv, o); err == nil {
@@ -1795,7 +1795,7 @@ func bcdDurationWrite[T any](c *durationCodec[T], pkt PDU, o *Options) (off int,
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
 			if err = writeTLV(pkt, tlv, o); err == nil {

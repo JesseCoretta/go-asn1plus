@@ -75,7 +75,7 @@ func ExampleOctetString_sequenceWithSet() {
 	}
 
 	// Output:
-	// BER encoding: 30 1A 800473756273310804017204036E6773820861726520636F6F6C
+	// BER encoding: 30 1A 800473756273A10804017204036E6773820861726520636F6F6C
 }
 
 func TestSet_encodingRules(t *testing.T) {

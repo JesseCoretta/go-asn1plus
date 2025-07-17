@@ -195,6 +195,7 @@ func marshalComposite(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
 	if opts != nil && opts.Choices != "" {
+		typ := pkt.Type()
 		reg, _ := GetChoices(opts.Choices)
 
 		concreteT := v.Type()
@@ -204,7 +205,7 @@ func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bo
 			cls := desc.class[tag]
 			exp := desc.explicit[tag]
 
-			tmp := pkt.Type().New()
+			tmp := typ.New()
 			tmp.SetOffset(0)
 
 			switch v.Kind() {
@@ -221,7 +222,7 @@ func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bo
 			}
 
 			if err == nil {
-				ntlv := pkt.Type().newTLV(cls, tag, tmp.Len(), exp, tmp.Data()...)
+				ntlv := typ.newTLV(cls, tag, tmp.Len(), exp, tmp.Data()...)
 				pkt.WriteTLV(ntlv)
 			}
 		}
@@ -301,7 +302,8 @@ func wrapMarshalExplicit(pkt PDU, prim codecRW, opts *Options) (err error) {
 		debugExit(newLItem(err))
 	}()
 
-	tmp := pkt.Type().New()
+	typ := pkt.Type()
+	tmp := typ.New()
 	innerOpts := *opts
 	innerOpts.Explicit = false
 	innerOpts.tag = nil
@@ -315,7 +317,7 @@ func wrapMarshalExplicit(pkt PDU, prim codecRW, opts *Options) (err error) {
 		pkt.Append(id)
 		bufPtr := getBuf()
 		lcont := len(content)
-		encodeLengthInto(pkt.Type(), bufPtr, lcont)
+		encodeLengthInto(typ, bufPtr, lcont)
 		pkt.Append(*bufPtr...)
 		putBuf(bufPtr)
 		pkt.Append(content...)
@@ -523,6 +525,8 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	debugEnter(v, opts, pkt)
 	defer func() { debugExit(newLItem(err)) }()
 
+	typ := pkt.Type()
+
 	// If this slice is actually SET OF CHOICE
 	if opts != nil && opts.Choices != "" {
 		reg, ok := GetChoices(opts.Choices)
@@ -532,7 +536,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		}
 
 		// look up the *choiceDescriptor* registered for OctetString
-		elemType := v.Type().Elem() // reflect.Type
+		elemType := v.Type().Elem()
 		cd, ok := reg.reg[elemType] // <- use the type as key
 		if !ok {
 			return mkerrf("unmarshalSetBranch: no descriptor for type ", elemType.String())
@@ -543,7 +547,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		if outer, err = pkt.TLV(); err != nil {
 			return
 		}
-		sub := pkt.Type().New(outer.Value...)
+		sub := typ.New(outer.Value...)
 		sub.SetOffset(0)
 
 		result := refMkSl(v.Type(), 0, 0)
@@ -582,7 +586,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		var outer TLV
 		if outer, err = pkt.TLV(); err == nil {
 			hdrEnd := pkt.Offset()
-			subPkt := pkt.Type().New(outer.Value...)
+			subPkt := typ.New(outer.Value...)
 			subPkt.SetOffset(0)
 			if err = unmarshalSet(v, subPkt, opts); err == nil {
 				pkt.SetOffset(hdrEnd + len(outer.Value))
@@ -591,6 +595,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	} else {
 		err = unmarshalSet(v, pkt, opts)
 	}
+
 	return
 }
 

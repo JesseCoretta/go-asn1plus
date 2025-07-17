@@ -410,7 +410,7 @@ func bcdIntegerWrite[T any](c *integerCodec[T], pkt PDU, o *Options) (off int, e
 		}
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)
 			err = writeTLV(pkt, tlv, o)

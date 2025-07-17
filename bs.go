@@ -501,7 +501,7 @@ func bcdBitStringWrite[T any](c *bitStringCodec[T], pkt PDU, o *Options) (off in
 			copy(wire[1:], bsVal.Bytes)
 		}
 
-		tag, cls := effectiveTag(c.tag, 0, o)
+		tag, cls := effectiveHeader(c.tag, 0, o)
 		start := pkt.Offset()
 		if err == nil {
 			tlv := pkt.Type().newTLV(cls, tag, len(wire), false, wire...)

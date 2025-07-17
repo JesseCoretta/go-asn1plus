@@ -216,18 +216,21 @@ func getTagMethod(x any) (func() int, bool) {
 	return tagFunc, true
 }
 
-func effectiveTag(baseTag, baseClass int, o *Options) (int, int) {
-	// 0. Highest priority: CHOICE helper supplying an explicit tag.
+func effectiveHeader(baseTag, baseClass int, o *Options) (int, int) {
+	if o == nil {
+		return baseTag, baseClass
+	}
+	// Highest priority: CHOICE helper supplying an explicit tag.
 	if o.choiceTag != nil {
 		baseTag = *o.choiceTag
 	}
 
-	// case1: Ignore a *pure* zero-value Options{} (Tag==0 && Class==0).
+	// Ignore a *pure* zero-value Options{} (Tag==0 && Class==0).
 	if o.Tag() == 0 && o.Class() == 0 {
 		return baseTag, baseClass
 	}
 
-	// case2: Overlay that includes a TAG (implicit / explicit, incl. tag==0).
+	// Overlay that includes a TAG (implicit / explicit, incl. tag==0).
 	if o.Tag() >= 0 {
 		baseTag = o.Tag()   // always replace the tag
 		if o.Class() >= 0 { // copy class *IF* caller supplied one
@@ -236,7 +239,7 @@ func effectiveTag(baseTag, baseClass int, o *Options) (int, int) {
 		return baseTag, baseClass
 	}
 
-	// case3: Class-only overlay is legal *only* when
+	// Class-only overlay is legal *only* when
 	// the primitive's class is still unset (<0).
 	if o.HasClass() && baseClass > -1 {
 		baseClass = o.Class()

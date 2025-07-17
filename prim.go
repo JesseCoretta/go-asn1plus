@@ -58,9 +58,10 @@ type Primitive interface {
 }
 
 func primitiveCheckExplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
+	typ := pkt.Type()
 	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
 		err = primitiveErrorf("invalid explicit ", TagNames[tag], " header in ",
-			pkt.Type(), " packet; received TLV: ", tlv)
+			typ, " packet; received TLV: ", tlv)
 		return
 	}
 
@@ -72,7 +73,7 @@ func primitiveCheckExplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data 
 	// When an explicit wrapper is used, we assume its value holds the
 	// complete encoding of the inner TLV. Here we re‑parse that inner TLV
 	// and return its “trimmed” value.
-	innerPkt := pkt.Type().New(tlv.Value...)
+	innerPkt := typ.New(tlv.Value...)
 	innerPkt.Append(tlv.Value...)
 	innerPkt.SetOffset(0)
 
@@ -121,6 +122,7 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 	}
 
 	canBeEmpty := tag == TagOctetString || tag == TagNull
+	typ := pkt.Type()
 
 	if data, err = primitiveCheckReadOverride(tag, pkt, tlv, opts); err == nil {
 		// Chop the indefinite 0x00 0x00 markers IF we're
@@ -128,7 +130,7 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 		// WITH a length of 0x80.
 		//
 		// TODO: revisit this approach.
-		if pkt.Type().allowsIndefinite() && pkt.Data()[1] == indefByte {
+		if typ.allowsIndefinite() && pkt.Data()[1] == indefByte {
 			if data[len(data)-1] == 0x00 &&
 				data[len(data)-2] == 0x00 {
 				data = data[:len(data)-2]
@@ -138,7 +140,7 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 
 	if len(data) == 0 && !canBeEmpty {
 		err = primitiveErrorf("empty ", TagNames[tag],
-			" content in ", pkt.Type(), " PDU")
+			" content in ", typ, " PDU")
 	}
 
 	return

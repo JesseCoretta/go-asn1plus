@@ -256,7 +256,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	r.AddOffset(lenLen)
 	off = r.Offset()
 
-	if !r.Type().In(encodingRules...) {
+	if !typ.In(encodingRules...) {
 		err = tLVErr{errorRuleNotImplemented}
 		return
 	}
@@ -290,9 +290,9 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 		)
 	}
 
-	switch r.Type() {
+	switch typ {
 	case BER, CER, DER:
-		tlv = r.Type().newTLV(class, tag, length, compound, valueBytes...)
+		tlv = typ.newTLV(class, tag, length, compound, valueBytes...)
 		debugTLV(tlv)
 	}
 

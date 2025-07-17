@@ -74,7 +74,7 @@ func bcdTextWrite[T TextLike](c *textCodec[T], pkt PDU, o *Options) (off int, er
 		debugEvent(EventCodec, newLItem(wire, "wire bytes"))
 
 		if err == nil {
-			tag, cls := effectiveTag(c.tag, 0, o)
+			tag, cls := effectiveHeader(c.tag, 0, o)
 			start := pkt.Offset()
 			err = writeTLV(pkt, pkt.Type().newTLV(cls, tag, len(wire), false, wire...), o)
 			if err == nil {
