@@ -149,7 +149,7 @@ func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
 func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool) (err error) {
 	if !optional {
 		if fv.Kind() == reflect.Invalid || fv.Interface() == nil {
-			err = mkerrf(errorSeqEmptyNonOptField.Error(), ": ", name)
+			err = compositeErrorf(errorSeqEmptyNonOptField, ": ", name)
 		}
 	}
 
@@ -186,14 +186,14 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
-		err = mkerrf("unmarshalValue: reading SEQUENCE TL header failed: ", err.Error())
+		err = compositeErrorf("unmarshalValue: reading SEQUENCE TL header failed: ", err)
 		return
 	}
 
 	start := pkt.Offset()
 	end := start + tlv.Length
 	if end > pkt.Len() {
-		err = mkerr("unmarshalValue: insufficient data for SEQUENCE content")
+		err = compositeErrorf("unmarshalValue: insufficient data for SEQUENCE content")
 		return
 	}
 
@@ -234,7 +234,7 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 					err = nil
 				} else {
 					// TODO: I still don't like this.
-					err = mkerrf("unmarshalValue: failed for field ", field.Name, ": ", err.Error())
+					err = compositeErrorf("unmarshalValue: failed for field ", field.Name, ": ", err)
 					berr := checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional)
 					if berr == nil {
 						err = berr
@@ -272,7 +272,7 @@ func unmarshalSequenceComponentsOf(fv reflect.Value, sub PDU, fieldOpts *Options
 			} else {
 				berr := checkSequenceFieldCriticality(sf.Name, sfv, sfOpts.Optional)
 				if berr == nil {
-					err = mkerrf("unmarshalValue: failed for field ", sf.Name, ": ", err.Error())
+					err = compositeErrorf("unmarshalValue: failed for field ", sf.Name, ": ", err)
 				} else {
 					err = berr
 				}
