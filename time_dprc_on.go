@@ -122,7 +122,7 @@ func NewUTCTime(x any, constraints ...Constraint[Temporal]) (utc UTCTime, err er
 			// legacy slow path for rare corner cases
 			raw = chopZulu(raw)
 			if len(raw) < 10 {
-				err = mkerr("Invalid ASN.1 UTC TIME")
+				err = errorBadUTCTime
 			} else {
 				_utc, err = uTCHandler(raw, sec, diff, format)
 			}
@@ -146,20 +146,20 @@ func utcToInt(b0, b1 byte) int { return int(b0-'0')*10 + int(b1-'0') }
 func parseUTCCore(s string) (yy, mm, dd, hr, mn, sc, next int, err error) {
 	// need at least “YYMMDDhhmmZ” → 11 bytes
 	if len(s) < 11 {
-		err = mkerr("Invalid ASN.1 UTC TIME")
+		err = errorBadUTCTime
 		return
 	}
 
 	// first ten must be digits
 	for k := 0; k < 10; k++ {
 		if !utcDigit(s[k]) {
-			err = mkerr("Invalid ASN.1 UTC TIME")
+			err = errorBadUTCTime
 			return
 		}
 	}
 
 	if len(s) >= 12 && utcDigit(s[11]) {
-		err = mkerr("Invalid ASN.1 UTC TIME")
+		err = errorBadUTCTime
 		return
 	}
 
@@ -174,7 +174,7 @@ func parseUTCCore(s string) (yy, mm, dd, hr, mn, sc, next int, err error) {
 		sc = utcToInt(s[10], s[11])
 		next = 12
 		if len(s) < 13 {
-			err = mkerr("Invalid ASN.1 UTC TIME")
+			err = errorBadUTCTime
 		}
 	} else {
 		sc = 0
@@ -186,29 +186,33 @@ func parseUTCCore(s string) (yy, mm, dd, hr, mn, sc, next int, err error) {
 
 func parseUTCTimezone(s string, idx int) (loc *time.Location, err error) {
 	if idx >= len(s) {
-		return nil, mkerr("Invalid ASN.1 UTC TIME")
+		err = errorBadUTCTime
+		return nil, err
 	}
 
 	switch s[idx] {
 	case 'Z':
 		if idx != len(s)-1 {
-			return nil, mkerr("Invalid ASN.1 UTC TIME")
+			err = errorBadUTCTime
+			return nil, err
 		}
 		return time.UTC, nil
 
 	case '+', '-':
 		if idx+5 != len(s) {
-			return nil, mkerr("Invalid ASN.1 UTC TIME")
+			err = errorBadUTCTime
+			return nil, err
 		}
 		for k := 1; k <= 4; k++ {
 			if !utcDigit(s[idx+k]) {
-				return nil, mkerr("Invalid ASN.1 UTC TIME")
+				err = errorBadUTCTime
+				return nil, err
 			}
 		}
 		hh := utcToInt(s[idx+1], s[idx+2])
 		mm := utcToInt(s[idx+3], s[idx+4])
 		if hh > 23 || mm > 59 {
-			return nil, mkerr("Invalid ASN.1 UTC TIME")
+			return nil, errorBadUTCTime
 		}
 		off := (hh*60 + mm) * 60
 		if s[idx] == '-' {
@@ -216,7 +220,7 @@ func parseUTCTimezone(s string, idx int) (loc *time.Location, err error) {
 		}
 		return time.FixedZone("", off), nil
 	default:
-		return nil, mkerr("Invalid ASN.1 UTC TIME")
+		return nil, errorBadUTCTime
 	}
 }
 

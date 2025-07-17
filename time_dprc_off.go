@@ -5,7 +5,7 @@ package asn1plus
 import "time"
 
 func parseUTCTime(_ string) (time.Time, error) {
-	return time.Time{}, mkerr("Deprecated UTCTime not enabled")
+	return time.Time{}, primitiveErrorf("Deprecated UTCTime not enabled")
 }
 
 func fillTemporalHooks[T Temporal](
