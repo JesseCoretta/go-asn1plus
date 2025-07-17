@@ -84,7 +84,7 @@ func convertToNumericString(x any) (str string, err error) {
 	switch tv := x.(type) {
 	case string:
 		if len(tv) == 0 {
-			err = mkerr("ASN.1 NUMERICSTRING is zero")
+			err = primitiveErrorf("NumericString: zero")
 			return
 		}
 		str = tv
@@ -92,7 +92,7 @@ func convertToNumericString(x any) (str string, err error) {
 	case Primitive:
 		ns := tv.String()
 		if len(ns) == 0 {
-			err = mkerr("ASN.1 NUMERICSTRING is zero")
+			err = primitiveErrorf("NumericString: zero")
 			return
 		}
 		str = ns
@@ -105,14 +105,14 @@ func convertToNumericString(x any) (str string, err error) {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i := v.Int()
 		if i < 0 {
-			err = mkerr("Illegal sign (-) for ASN.1 NUMERICSTRING")
+			err = primitiveErrorf("NumericString: Illegal sign (-)")
 		} else {
 			str = fmtInt(i, 10)
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		str = fmtUint(v.Uint(), 10)
 	default:
-		err = errorBadTypeForConstructor("NUMERIC STRING", x)
+		err = errorBadTypeForConstructor("NumericString", x)
 	}
 
 	return
@@ -125,7 +125,7 @@ func init() {
 	NumericSpec = func(o NumericString) (err error) {
 		for _, c := range []rune(o.String()) {
 			if !(c == ' ' || (c >= '0' && c <= '9')) {
-				err = mkerrf("Illegal character for ASN.1 NUMERICSTRING: ", string(c))
+				err = primitiveErrorf("NumericString: illegal character ", string(c))
 				break
 			}
 		}

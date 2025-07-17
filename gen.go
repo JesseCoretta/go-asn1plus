@@ -102,7 +102,8 @@ func init() {
 			bit := r & 63
 
 			if (generalStringBitmap[word]>>bit)&1 == 0 {
-				err = mkerrf("Invalid character '", string(r), "' (<0x0000 | >0xFFFF) in GENERAL STRING")
+				err = primitiveErrorf("Invalid character '", string(r),
+					"' (<0x0000 | >0xFFFF) in GENERAL STRING")
 			}
 		}
 

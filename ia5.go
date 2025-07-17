@@ -94,7 +94,7 @@ func init() {
 		IA5StringConstraintPhase, nil, nil, nil, IA5Spec)
 	IA5Spec = func(o IA5String) (err error) {
 		if len(o) == 0 {
-			err = mkerr("Invalid IA5 String (zero)")
+			err = primitiveErrorf("IA5 String: zero")
 			return
 		}
 
@@ -102,7 +102,7 @@ func init() {
 		for i := 0; i < len(runes) && err == nil; i++ {
 			var char rune = runes[i]
 			if !(0x0000 <= char && char <= 0x00FF) {
-				err = mkerrf("Invalid IA5 String character: ", string(char))
+				err = primitiveErrorf("IA5 String: invalid character ", string(char))
 			}
 		}
 
