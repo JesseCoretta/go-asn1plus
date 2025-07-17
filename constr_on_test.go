@@ -108,21 +108,21 @@ func ExampleSizeConstraint_sequenceOf() {
 
 	// Test the valid sequence.
 	if err := constraint(validSeq); err != nil {
-		fmt.Println("validSeq error:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("validSeq OK")
 	}
 
 	// Test the invalid sequence.
 	if err := constraint(invalidSeq); err != nil {
-		fmt.Println("invalidSeq error:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("invalidSeq OK")
 	}
 
 	// Output:
 	// validSeq OK
-	// invalidSeq error: size 4 is out of bounds [1, 3]
+	// CONSTRAINT VIOLATION: size 4 is out of bounds [1, 3]
 }
 
 func ExampleSizeConstraint_octetString() {
@@ -135,20 +135,20 @@ func ExampleSizeConstraint_octetString() {
 	invalid := OctetString("abcdefgh") // length 8 => invalid
 
 	if err := constraint(valid); err != nil {
-		fmt.Println("valid error:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("valid OK")
 	}
 
 	if err := constraint(invalid); err != nil {
-		fmt.Println("invalid error:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("invalid OK")
 	}
 
 	// Output:
 	// valid OK
-	// invalid error: size 8 is out of bounds [3, 6]
+	// CONSTRAINT VIOLATION: size 8 is out of bounds [3, 6]
 }
 
 func ExampleUnion() {
@@ -252,19 +252,17 @@ func ExampleTimeEqualConstraint() {
 
 	// Check a slightly different value.
 	if err := eqCon(diff); err != nil {
-		// The error message is produced by mkerr as:
-		// "time " + diff.String() + " is not equal to " + ref.String()
-		fmt.Println("equal constraint correctly fails:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("error: constraint passed for different value")
 	}
 
 	// Output:
 	// equal constraint passes for identical value
-	// equal constraint correctly fails: time 2020-11-22T18:30:24 is not equal to 2020-11-22T18:30:23
+	// CONSTRAINT VIOLATION: time 2020-11-22T18:30:24 is not equal to 2020-11-22T18:30:23
 }
 
-// ExampleTimePointRangeConstraint demonstrates the use of TimePointRangeConstraint.
+// ExampleTimePointRangeConstraint demonstrates the use of [TimePointRangeConstraint].
 func ExampleTimePointRangeConstraint() {
 	// Define a range from the beginning to the end of 2020.
 	min, _ := NewDateTime("2020-01-01T00:00:00")
@@ -285,24 +283,24 @@ func ExampleTimePointRangeConstraint() {
 	}
 	// Check a value below the range.
 	if err := rangeCon(below); err != nil {
-		fmt.Println("below time correctly fails:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("error: below time passed")
 	}
 	// Check a value above the range.
 	if err := rangeCon(above); err != nil {
-		fmt.Println("above time correctly fails:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("error: above time passed")
 	}
 
 	// Output:
 	// inside time OK
-	// below time correctly fails: time 2019-12-31T23:59:59 is not in allowed range [2020-01-01T00:00:00, 2020-12-31T23:59:59]
-	// above time correctly fails: time 2021-01-01T00:00:00 is not in allowed range [2020-01-01T00:00:00, 2020-12-31T23:59:59]
+	// CONSTRAINT VIOLATION: time 2019-12-31T23:59:59 is not in allowed range [2020-01-01T00:00:00, 2020-12-31T23:59:59]
+	// CONSTRAINT VIOLATION: time 2021-01-01T00:00:00 is not in allowed range [2020-01-01T00:00:00, 2020-12-31T23:59:59]
 }
 
-// ExampleDurationRangeConstraint demonstrates the use of DurationRangeConstraint.
+// ExampleDurationRangeConstraint demonstrates the use of [DurationRangeConstraint].
 func ExampleDurationRangeConstraint() {
 	// Define minimum and maximum durations.
 	min, _ := NewDuration("P1Y2M3DT4H5M6S")
@@ -326,21 +324,21 @@ func ExampleDurationRangeConstraint() {
 	}
 	// Check the duration below the minimum.
 	if err := durCon(lower); err != nil {
-		fmt.Println("lower duration correctly fails:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("error: lower duration passed")
 	}
 	// Check the duration above the maximum.
 	if err := durCon(higher); err != nil {
-		fmt.Println("higher duration correctly fails:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("error: higher duration passed")
 	}
 
 	// Output:
 	// valid duration OK
-	// lower duration correctly fails: duration P1Y2M3DT4H5M5S is not in the allowed range [P1Y2M3DT4H5M6S, P2Y3M4DT5H6M7S]
-	// higher duration correctly fails: duration P2Y3M4DT5H6M8S is not in the allowed range [P1Y2M3DT4H5M6S, P2Y3M4DT5H6M7S]
+	// CONSTRAINT VIOLATION: duration P1Y2M3DT4H5M5S is not in the allowed range [P1Y2M3DT4H5M6S, P2Y3M4DT5H6M7S]
+	// CONSTRAINT VIOLATION: duration P2Y3M4DT5H6M8S is not in the allowed range [P1Y2M3DT4H5M6S, P2Y3M4DT5H6M7S]
 }
 
 func ExampleRecurrenceConstraint() {
@@ -366,14 +364,14 @@ func ExampleRecurrenceConstraint() {
 
 	// Apply the constraint to the value that is outside the allowed window.
 	if err := recCon(notAllowed); err != nil {
-		fmt.Println("notAllowed value fails:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("notAllowed value passes")
 	}
 
 	// Output:
 	// allowed value passes
-	// notAllowed value fails: time 2020-11-22T02:00:00 (remainder 2h0m0s) is not within the recurrence window [0s, 1h0m0s]
+	// CONSTRAINT VIOLATION: time 2020-11-22T02:00:00 (remainder 2h0m0s) is not within the recurrence window [0s, 1h0m0s]
 }
 
 func ExampleRangeConstraint() {
@@ -382,21 +380,21 @@ func ExampleRangeConstraint() {
 
 	// Check a value that is within the range.
 	if err := rCon(15); err != nil {
-		fmt.Println("15 error:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("15 passes")
 	}
 
 	// Check a value that is out of range.
 	if err := rCon(25); err != nil {
-		fmt.Println("25 error:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("25 passes")
 	}
 
 	// Output:
 	// 15 passes
-	// 25 error: value is out of range
+	// CONSTRAINT VIOLATION: value is out of range
 }
 
 func ExampleFrom() {
@@ -411,25 +409,25 @@ func ExampleFrom() {
 	invalid := "A1B2C3X"
 
 	if err := strCon(valid); err != nil {
-		fmt.Println("valid error:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("valid passes")
 	}
 
 	if err := strCon(invalid); err != nil {
-		fmt.Println("invalid error:", err.Error())
+		fmt.Println(err)
 	} else {
 		fmt.Println("invalid passes")
 	}
 
 	// Output:
 	// valid passes
-	// invalid error: character X at position 6 is not allowed
+	// CONSTRAINT VIOLATION: character X at position 6 is not allowed
 }
 
 func ExampleEqualityConstraint_caseIgnoreMatch() {
 	if err := Equality[string]()("hello", "Hello"); err != nil {
-		fmt.Println("Constraint failed:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("Constraint passed")
 	}
@@ -438,11 +436,11 @@ func ExampleEqualityConstraint_caseIgnoreMatch() {
 
 func ExampleEqualityConstraint_caseExactMatch() {
 	if err := Equality[string](true)("hello", "Hello"); err != nil {
-		fmt.Println("Constraint failed:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("Constraint passed")
 	}
-	// Output: Constraint failed: values are not equal
+	// Output: CONSTRAINT VIOLATION: values are not equal
 }
 
 func ExampleAncestor_stringSlices() {
@@ -490,21 +488,21 @@ func ExampleLiftConstraint_sizeConstraint() {
 
 	// Validate the valid value.
 	if err := liftedConstraint(valid); err != nil {
-		fmt.Println("valid:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("valid: ok")
 	}
 
 	// Validate the invalid value.
 	if err := liftedConstraint(invalid); err != nil {
-		fmt.Println("invalid:", err)
+		fmt.Println(err)
 	} else {
 		fmt.Println("invalid: ok")
 	}
 
 	// Output:
 	// valid: ok
-	// invalid: size 4 is out of bounds [5, 10]
+	// CONSTRAINT VIOLATION: size 4 is out of bounds [5, 10]
 }
 
 /*
@@ -612,7 +610,7 @@ func ExampleConstraintGroup_octetString() {
 
 	// Output:
 	// valid: ok
-	// tooShort: size 2 is out of bounds [5, 20]
+	// tooShort: CONSTRAINT VIOLATION: size 2 is out of bounds [5, 20]
 	// withBad: value contains forbidden substring
 	// missingChar: value must contain ' '
 }

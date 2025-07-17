@@ -194,7 +194,7 @@ func (r Choices) Register(
 	if ifacePtr != nil {
 		key = refTypeOf(ifacePtr).Elem()
 	} else if r.auto {
-		key = reflect.TypeOf((*Choice)(nil)).Elem()
+		key = refTypeOf((*Choice)(nil)).Elem()
 	} else {
 		key = derefTypePtr(refTypeOf(concrete))
 	}
@@ -224,7 +224,7 @@ func (r Choices) Register(
 
 	// Prevent duplicate tag
 	if _, dup := cd.tagToType[tag]; dup {
-		err = mkerrf("duplicate CHOICE tag during registration ", itoa(tag))
+		err = choiceErrorf("duplicate tag found during registration: ", tag)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (r Choices) Choose(value any, tag ...int) bool {
 		return ok
 	}
 
-	valType := derefTypePtr(reflect.TypeOf(value))
+	valType := derefTypePtr(refTypeOf(value))
 
 	switch len(tag) {
 	case 1:
@@ -327,8 +327,10 @@ func marshalChoiceWrapper(
 		return errorNoChoicesAvailable
 	}
 
+	typ := pkt.Type()
+
 	// marshal the inner TLV (universal tag) into a temp PDU
-	tmp := pkt.Type().New()
+	tmp := typ.New()
 	innerOpts := clearChildOpts(opts)
 	innerOpts.Choices = ""
 	if err := marshalValue(refValueOf(inner), tmp, innerOpts); err != nil {
@@ -343,33 +345,23 @@ func marshalChoiceWrapper(
 
 	if tag < 0 {
 		// no override → look up registry by concrete type
-		t := derefTypePtr(reflect.TypeOf(inner))
+		t := derefTypePtr(refTypeOf(inner))
 		_, desc, ok := cho.lookupDescriptorByConcrete(t)
 		if !ok {
-			return mkerrf(
-				"marshalChoiceWrapper: no CHOICE alt for ", t.String())
+			return choiceErrorf("marshalChoiceWrapper: no alternative for ", t.String())
 		}
 		tag = desc.typeToTag[t]
 		class = desc.class[tag]
 		explicit = desc.explicit[tag]
 	}
 
-	// emit the [class|tag] EXPLICIT mask header
-	// (0x20 bit == “constructed, explicit”)
-	idByte := byte(class<<6) | byte(tag)
-	if explicit {
-		idByte |= 0x20
-	}
-	pkt.Append(idByte)
-
-	// length of the inner TLV blob
+	pkt.Append(emitHeader(class, tag, explicit))
 	buf := getBuf()
-	encodeLengthInto(pkt.Type(), buf, len(innerBytes))
+	encodeLengthInto(typ, buf, len(innerBytes))
 	pkt.Append(*buf...)
 	putBuf(buf)
-
-	// append the whole inner TLV
 	pkt.Append(innerBytes...)
+
 	return nil
 }
 
@@ -391,7 +383,7 @@ func isChoice(v reflect.Value, opts *Options) bool {
 	}
 
 	// 3) Only the exact Choice‐alias type is a CHOICE
-	choiceType := reflect.TypeOf(Choice(nil))
+	choiceType := refTypeOf(Choice(nil))
 	var ok bool
 	if v.Type() == choiceType {
 		_, ok = v.Interface().(Choice)
@@ -402,7 +394,7 @@ func isChoice(v reflect.Value, opts *Options) bool {
 
 var (
 	// the Choice interface alias itself
-	choiceIfaceType = reflect.TypeOf(Choice(nil))
+	choiceIfaceType = refTypeOf(Choice(nil))
 	// the anonymous struct returned by TaggedChoice
 	taggedChoiceType = refTypeOf(NewChoice(nil, 0))
 )

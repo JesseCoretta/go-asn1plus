@@ -21,7 +21,8 @@ func Union[T any](constraints ...Constraint[T]) Constraint[T] {
 		}
 
 		if !passed {
-			err = mkerrf("union failed all ", itoa(len(constraints)), " constraints")
+			err = constraintViolationf("union failed all ",
+				len(constraints), " constraints")
 		}
 		return
 	}
@@ -52,8 +53,8 @@ func From(allowed string) Constraint[string] {
 	return func(s string) (err error) {
 		for i := 0; i < len(s) && err == nil; i++ {
 			if _, ok := allowedSet[rune(s[i])]; !ok {
-				err = mkerrf("character ", string(s[i]), " at position ",
-					itoa(i), " is not allowed")
+				err = constraintViolationf("character ", string(s[i]),
+					" at position ", i, " is not allowed")
 			}
 		}
 		return
@@ -86,7 +87,7 @@ func Equality[T comparable](caseExactMatch ...bool) EqualityConstraint[T] {
 		}
 
 		if !eq {
-			err = mkerr("values are not equal")
+			err = constraintViolationf("values are not equal")
 		}
 		return
 	}
@@ -104,13 +105,14 @@ func Ancestor[T any]() AncestralConstraint[T] {
 			}
 			return
 		}
-		// Fallback: if T does not implement String, rely on direct equality.
+		// Fallback: if T does not implement
+		// String, rely on direct equality.
 		return a == b
 	}
 
 	return func(ancestor, descendant []T) (ok bool) {
-		// If the candidate ancestor is longer than the descendant,
-		// it cannot be a prefix.
+		// If the candidate ancestor is longer than
+		// the descendant, it cannot be a prefix.
 		if len(ancestor) > len(descendant) {
 			return false
 		}
@@ -123,12 +125,13 @@ func Ancestor[T any]() AncestralConstraint[T] {
 	}
 }
 
-// DurationComponentConstraint returns a Constraint that applies a user-supplied check on a Duration.
-// For instance, one could require that the seconds component always equals 30.
+/*
+DurationComponentConstraint returns a [Constraint] that applies a
+user-supplied check on a Duration. For instance, one could require
+that the seconds component always equals 30.
+*/
 func DurationComponentConstraint(check func(Duration) error) Constraint[Duration] {
-	return func(val Duration) error {
-		return check(val)
-	}
+	return func(val Duration) error { return check(val) }
 }
 
 /*
@@ -138,7 +141,7 @@ of any ordered type is between the specified minimum and maximum.
 func RangeConstraint[T constraints.Ordered](min, max T) Constraint[T] {
 	return func(val T) (err error) {
 		if val < min || val > max {
-			err = mkerr("value is out of range")
+			err = constraintViolationf("value is out of range")
 		}
 		return
 	}
@@ -153,8 +156,9 @@ func SizeConstraint[T Lengthy](min, max Integer) Constraint[T] {
 		var size Integer
 		if size, err = NewInteger(val.Len()); err == nil {
 			if size.Lt(min) || size.Gt(max) {
-				err = mkerrf("size ", size.String(), " is out of bounds [",
-					min.String(), ", "+max.String(), "]")
+				err = constraintViolationf("size ", size.String(),
+					" is out of bounds [", min.String(),
+					", "+max.String(), "]")
 			}
 		}
 		return
@@ -167,7 +171,8 @@ func DurationRangeConstraint(min, max Duration) Constraint[Duration] {
 	return func(val Duration) error {
 		// If val is less than min or greater than max, reject.
 		if val.Lt(min) || max.Lt(val) {
-			return mkerrf("duration ", val.String(), " is not in the allowed range [",
+			return constraintViolationf("duration ", val.String(),
+				" is not in the allowed range [",
 				min.String(), ", ", max.String(), "]")
 		}
 		return nil
@@ -191,8 +196,10 @@ func RecurrenceConstraint[T Temporal](period time.Duration, windowStart, windowE
 		// For demonstration, using UnixNano remainder modulo the period.
 		remainder := time.Duration(t.UnixNano()) % period
 		if remainder < windowStart || remainder > windowEnd {
-			return mkerrf("time ", val.String(), " (remainder ", remainder.String(),
-				") is not within the recurrence window [", windowStart.String(), ", ",
+			return constraintViolationf("time ", val.String(),
+				" (remainder ", remainder.String(),
+				") is not within the recurrence window [",
+				windowStart.String(), ", ",
 				windowEnd.String(), "]")
 		}
 		return nil
@@ -203,7 +210,8 @@ func TimeEqualConstraint[T Temporal](ref T) Constraint[T] {
 	return func(val T) error {
 		// Compare underlying time.Time representations.
 		if !val.Cast().Equal(ref.Cast()) {
-			return mkerrf("time ", val.String(), " is not equal to ", ref.String())
+			return constraintViolationf("time ", val.String(),
+				" is not equal to ", ref.String())
 		}
 		return nil
 	}
@@ -213,7 +221,8 @@ func TimePointRangeConstraint[T Temporal](min, max T) Constraint[T] {
 	return func(val T) error {
 		t := val.Cast()
 		if t.Before(min.Cast()) || t.After(max.Cast()) {
-			return mkerrf("time ", val.String(), " is not in allowed range [",
+			return constraintViolationf("time ", val.String(),
+				" is not in allowed range [",
 				min.String(), ", ", max.String(), "]")
 		}
 		return nil

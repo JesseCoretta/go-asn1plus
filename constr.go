@@ -170,11 +170,12 @@ func collectConstraint[T any](names []string) (ConstraintGroup[T], error) {
 		n = trimL(lc(n), `^$`) // not part of the actual name, so toss them.
 		entry, ok := constraintReg[n]
 		if !ok {
-			return nil, mkerrf("unknown constraint ", n)
+			return nil, errorUnknownConstraint(n)
 		}
 
 		if entry.typ != want && !want.ConvertibleTo(entry.typ) {
-			return nil, mkerrf("constraint ", n, " not applicable to ", want.String())
+			return nil, constraintViolationf("constraint ", n,
+				" not applicable to ", want.String())
 		}
 
 		fnVal := refValueOf(entry.fn)
@@ -208,10 +209,10 @@ func applyFieldConstraints(val any, names []string, expect rune) error {
 		}
 		ent, ok := constraintReg[nm]
 		if !ok {
-			return mkerrf("unknown constraint ", nm)
+			return errorUnknownConstraint(nm)
 		}
 		if ent.typ != want {
-			return mkerrf("constraint ", nm, " not for ", want.String())
+			return constraintViolationf("constraint ", nm, " not for ", want)
 		}
 
 		// Pass nm into getCachedEntry so the key can be built
@@ -294,7 +295,8 @@ func getCachedFieldConstraint(ent constraintEntry, name string) (*cachedFieldCon
 
 	if !ce.isFunc {
 		if ce.methodVal = fnVal.MethodByName("Constraint"); !ce.methodVal.IsValid() {
-			return nil, mkerrf("no Constraint method on ", refTypeOf(ent.fn).String())
+			return nil, constraintViolationf("no constraint method on ",
+				refTypeOf(ent.fn).String())
 		}
 	}
 
