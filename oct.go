@@ -98,7 +98,8 @@ func init() {
 	OctetSpec = func(o OctetString) (err error) {
 		for _, r := range []rune(o.String()) {
 			if r > 0x00FF {
-				err = mkerrf("Invalid character '", string(r), "' (>0x00FF) in OCTET STRING")
+				err = primitiveErrorf("OCTET STRING: invalid character '",
+					string(r), "' (>0x00FF)")
 				break
 			}
 		}

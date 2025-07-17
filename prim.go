@@ -59,12 +59,13 @@ type Primitive interface {
 
 func primitiveCheckExplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
-		err = mkerrf("Invalid explicit ", TagNames[tag], " header in ",
-			pkt.Type().String(), " packet; received TLV: ", tlv.String())
+		err = primitiveErrorf("invalid explicit ", TagNames[tag], " header in ",
+			pkt.Type(), " packet; received TLV: ", tlv)
 		return
 	}
+
 	if len(pkt.Data()) < 2 {
-		err = mkerr("Truncated explicit TLV header")
+		err = errorTruncTLV
 		return
 	}
 
@@ -93,17 +94,17 @@ func primitiveCheckImplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data 
 
 	if overlay {
 		if opts.HasClass() && tlv.Class != opts.Class() {
-			return nil, mkerr("Class mismatch for implicit tag")
+			return nil, primitiveErrorf("Class mismatch for implicit tag")
 		}
 		if opts.HasTag() && tlv.Tag != opts.Tag() {
-			return nil, mkerr("Tag mismatch for implicit tag")
+			return nil, primitiveErrorf("Tag mismatch for implicit tag")
 		}
 		// no constructed check: implicit may keep compound bit unchanged
 	} else {
 		/* no overlay: expect universal header */
 		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
-			return nil, mkerrf("Invalid ", TagNames[tag], " header in ",
-				pkt.Type().String(), " packet; received TLV: ", tlv.String())
+			return nil, primitiveErrorf("Invalid ", TagNames[tag], " header in ",
+				pkt.Type(), " packet; received TLV: ", tlv)
 		}
 	}
 
@@ -116,7 +117,7 @@ func primitiveCheckImplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data 
 
 func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	if tlv.Length < 0 || (opts != nil && opts.Indefinite) {
-		return nil, mkerr("prohibited: indefinite length on primitive")
+		return nil, primitiveErrorf("prohibited: indefinite length on primitive")
 	}
 
 	canBeEmpty := tag == TagOctetString || tag == TagNull
@@ -127,7 +128,7 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 		// WITH a length of 0x80.
 		//
 		// TODO: revisit this approach.
-		if pkt.Type().allowsIndefinite() && pkt.Data()[1] == 0x80 {
+		if pkt.Type().allowsIndefinite() && pkt.Data()[1] == indefByte {
 			if data[len(data)-1] == 0x00 &&
 				data[len(data)-2] == 0x00 {
 				data = data[:len(data)-2]
@@ -136,8 +137,8 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 	}
 
 	if len(data) == 0 && !canBeEmpty {
-		err = mkerrf("Empty ", TagNames[tag], " content in ",
-			pkt.Type().String(), " PDU")
+		err = primitiveErrorf("empty ", TagNames[tag],
+			" content in ", pkt.Type(), " PDU")
 	}
 
 	return
@@ -155,13 +156,13 @@ func primitiveCheckReadOverride(tag int, pkt PDU, tlv TLV, opts *Options) (data 
 	} else {
 		// No tagging override: treat as UNIVERSAL.
 		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
-			err = mkerrf("Invalid ", TagNames[tag], " header in ",
-				pkt.Type().String(), " packet; received TLV: ", tlv.String())
+			err = primitiveErrorf("invalid ", TagNames[tag], " header in ",
+				pkt.Type(), " packet; received TLV: ", tlv)
 			return
 		}
 
 		if len(pkt.Data()) < 2 {
-			err = mkerr("Truncated TLV header")
+			err = errorTruncTLV
 		} else {
 			if full := tlv.Value; len(full) > tlv.Length && tlv.Length != -1 {
 				data = full[:tlv.Length]

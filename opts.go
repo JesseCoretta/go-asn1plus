@@ -186,7 +186,7 @@ func parseOptions(tagStr string) (opts Options, err error) {
 			numStr := trimPfx(token, "tag:")
 			n, convErr := atoi(numStr)
 			if convErr != nil || n < 0 {
-				err = mkerrf("invalid tag number ", numStr)
+				err = optionsErrorf("invalid tag number ", numStr)
 				goto Done
 			}
 			po.SetTag(n)
@@ -216,7 +216,7 @@ func parseOptions(tagStr string) (opts Options, err error) {
 	}
 
 	if len(po.unidentified) > 0 {
-		err = mkerrf("Unidentified or superfluous keywords found: ",
+		err = optionsErrorf("Unidentified or superfluous keywords found: ",
 			join(po.unidentified, ` `))
 	}
 
@@ -340,8 +340,8 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 	if tagStr, ok := field.Tag.Lookup("asn1"); ok {
 		var parsedOpts Options
 		if parsedOpts, err = parseOptions(tagStr); err != nil {
-			err = mkerrf("Marshal: error parsing tag for field ", field.Name,
-				"(", itoa(fieldNum), "): ", err.Error())
+			err = optionsErrorf("Marshal: error parsing tag for field ",
+				field.Name, "(", fieldNum, "): ", err)
 			return
 		} else {
 			opts = &parsedOpts
@@ -349,7 +349,7 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 
 		if !opts.HasTag() && automatic {
 			if opts.Explicit {
-				err = mkerr("EXPLICIT and AUTOMATIC are mutually exclusive")
+				err = optionsErrorf("EXPLICIT and AUTOMATIC are mutually exclusive")
 				return
 			}
 			if opts.Class() == ClassUniversal {

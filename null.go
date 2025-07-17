@@ -124,7 +124,7 @@ func bcdNullRead[T any](c *nullCodec[T], pkt PDU, tlv TLV, o *Options) error {
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
