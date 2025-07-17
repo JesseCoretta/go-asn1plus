@@ -6,6 +6,7 @@ components throughout this package.
 */
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"math"
@@ -22,6 +23,8 @@ import (
 official import aliases.
 */
 var (
+	bcmp       func([]byte, []byte) int                   = bytes.Compare
+	bidx       func([]byte, []byte) int                   = bytes.Index
 	itoa       func(int) string                           = strconv.Itoa
 	atoi       func(string) (int, error)                  = strconv.Atoi
 	fmtUint    func(uint64, int) string                   = strconv.FormatUint
