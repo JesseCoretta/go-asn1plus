@@ -100,7 +100,7 @@ func convertToNumericString(x any) (str string, err error) {
 	}
 
 	// Otherwise, use reflection on numeric types.
-	v := reflect.ValueOf(x)
+	v := refValueOf(x)
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i := v.Int()

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"reflect"
 	"sync"
 	"testing"
 )
@@ -401,7 +400,7 @@ func TestPDU_codecov(_ *testing.T) {
 	opts.SetTag(26)
 	Unmarshal(&BERPacket{}, &struct{}{}, With(opts))
 	var value *EmbeddedPDV
-	unmarshalValue(&BERPacket{}, reflect.ValueOf(value), nil)
+	unmarshalValue(&BERPacket{}, refValueOf(value), nil)
 
 	opts.SetTag(4)
 	opts.SetClass(3)

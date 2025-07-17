@@ -16,8 +16,8 @@ func TestCommon_codecov(_ *testing.T) {
 	isNumber("033")
 	validClass("9")
 	var iface interface{} = struct{ Name string }{}
-	toPtr(reflect.ValueOf(iface))
-	toPtr(reflect.ValueOf(&iface))
+	toPtr(refValueOf(iface))
+	toPtr(refValueOf(&iface))
 
 	var oct OctetString = OctetString("yoo")
 	var pdv EmbeddedPDV
@@ -112,7 +112,7 @@ func TestToPtr_UnwrapInterfaceBranch(t *testing.T) {
 
 	// Step 2: obtain a reflect.Value that still has Kind()==Interface.
 	//         Using Elem() on the address does the trick.
-	rv := reflect.ValueOf(&iface).Elem()
+	rv := refValueOf(&iface).Elem()
 	if rv.Kind() != reflect.Interface {
 		t.Fatalf("sanity: expected Interface kind, got %v", rv.Kind())
 	}

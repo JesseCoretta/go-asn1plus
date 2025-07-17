@@ -2,7 +2,6 @@ package asn1plus
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 )
 
@@ -178,5 +177,5 @@ func TestSet_codecov(_ *testing.T) {
 
 	pkt := BER.New()
 
-	unmarshalSet(reflect.ValueOf(&mine), pkt, nil)
+	unmarshalSet(refValueOf(&mine), pkt, nil)
 }

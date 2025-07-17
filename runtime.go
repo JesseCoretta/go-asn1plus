@@ -310,7 +310,7 @@ func wrapMarshalExplicit(pkt PDU, prim codecRW, opts *Options) (err error) {
 	if _, err = prim.write(tmp, &innerOpts); err == nil {
 		content := tmp.Data()
 
-		id := byte(opts.Class()<<6) | 0x20 | byte(opts.Tag())
+		id := emitHeader(opts.Class(), opts.Tag(), true)
 		debugPrim(newLItem(id, "EXPLICIT tag"))
 		pkt.Append(id)
 		bufPtr := getBuf()
@@ -471,11 +471,11 @@ func unmarshalChoice(v reflect.Value, pkt PDU, opts *Options) error {
 	}
 
 	// ALWAYS wrap back into the Choice interface
-	choiceType := reflect.TypeOf((*Choice)(nil)).Elem()
+	choiceType := refTypeOf((*Choice)(nil)).Elem()
 	if v.Type() == choiceType {
-		v.Set(reflect.ValueOf(NewChoice(inner.Interface(), tag)))
+		v.Set(refValueOf(NewChoice(inner.Interface(), tag)))
 	} else {
-		v.Set(reflect.ValueOf(inner.Interface()))
+		v.Set(refValueOf(inner.Interface()))
 	}
 	return nil
 }

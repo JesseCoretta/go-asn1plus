@@ -19,11 +19,7 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 	}
 
 	seqTag := getSequenceTag(globalOpts)
-
-	// Whether automatic tagging is enabled.
 	auto := globalOpts != nil && globalOpts.Automatic
-
-	// Create a temporary sub-packet for encoding this sequence’s fields.
 	sub := pkt.Type().New()
 
 	typ := v.Type()
@@ -32,7 +28,6 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 		field := typ.Field(i)
 		if field.PkgPath == "" {
 
-			// Begin with the implicit options for this field.
 			var fieldOpts *Options
 			if fieldOpts, err = extractOptions(field, i, auto); err != nil {
 				return
@@ -50,7 +45,6 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 			}
 
 			if fieldOpts.hasRegisteredDefault() && fieldOpts.defaultEquals(fv.Interface()) {
-				// omit this field from the sequence
 				continue
 			}
 
@@ -58,10 +52,8 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 				err = applyFieldConstraints(fv.Interface(), fieldOpts.Constraints, '^')
 				if err == nil {
 					if isChoice(fv, fieldOpts) {
-						// CHOICE field: do our explicit CHOICE handling.
 						err = marshalChoiceWrapper(fv, sub, fieldOpts, fv)
 					} else {
-						// For all non-CHOICE fields, recurse marshalSequence
 						fieldOpts.incDepth()
 						err = marshalValue(fv, sub, fieldOpts)
 					}
@@ -71,7 +63,6 @@ func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) 
 	}
 
 	if err == nil {
-		// wrap the entire sequence from the sub-packet.
 		err = marshalSequenceWrap(sub, pkt, globalOpts, seqTag)
 	}
 
@@ -129,12 +120,11 @@ func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
 	}
 
 	if err == nil {
-		// Construct the identifier byte: class + constructed bit + tag number
-		id := byte(ClassUniversal<<6) | 0x20 | byte(TagSequence)
+		id := emitHeader(ClassUniversal, TagSequence, true)
+		debugPrim(newLItem(id, "header"))
 		pkt.Append(id)
 		content := sub.Data()
 
-		// Encode the length
 		bufPtr := getBuf()
 		encodeLengthInto(pkt.Type(), bufPtr, len(content))
 		pkt.Append(*bufPtr...)

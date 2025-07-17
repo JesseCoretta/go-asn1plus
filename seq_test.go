@@ -2,7 +2,6 @@ package asn1plus
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 )
 
@@ -213,7 +212,7 @@ func TestMarshal_SequenceNested(t *testing.T) {
 }
 
 func TestSequence_codecov(_ *testing.T) {
-	unmarshalSequence(reflect.ValueOf(struct{}{}), &BERPacket{}, nil)
+	unmarshalSequence(refValueOf(struct{}{}), &BERPacket{}, nil)
 
 	type badSequence struct {
 		PrintableString `asn1:"AUTOMATIC,EXPLICIT"`
