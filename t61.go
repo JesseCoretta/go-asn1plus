@@ -107,7 +107,7 @@ func init() {
 		T61StringConstraintPhase, nil, nil, nil, T61Spec)
 	T61Spec = func(o T61String) (err error) {
 		if len(o) == 0 {
-			err = mkerr("ASN.1 T.61 STRING is zero length")
+			err = primitiveErrorf("T61String is zero length")
 			return
 		}
 
@@ -122,7 +122,7 @@ func init() {
 
 		for _, r := range []rune(o.String()) {
 			if !isT61Char(r) {
-				err = mkerrf("Invalid character '", itoa(int(r)), "' in T61 STRING")
+				err = primitiveErrorf("T61String: invalid character '", int(r), "'")
 				break
 			}
 		}

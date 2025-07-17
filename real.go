@@ -285,18 +285,18 @@ func validRealBase(base int) bool {
 }
 
 // float64Components decomposes f into mantissa × base^exp.
-// base must be 2, 8 or 10.
+// base must be 2, 8, 10 or 16.
 //
 //   - mantissa is an *odd* integer for base 2/8 (not divisible by base).
 //     For base 10 it is stripped of trailing zeros.
 //   - sign is carried in mantissa (negative mantissa ⇒ negative number).
 //   - Special values:
 //     ±Inf  → mant=±1 , exp=math.MaxInt32
-//     0   → mant=0  , exp=0
+//     0     → mant=0  , exp=0
 //     NaN   → mant=0  , exp=math.MinInt32
 func float64Components(f float64, base int) (mant *big.Int, exp int, err error) {
 	if !validRealBase(base) {
-		return nil, 0, mkerrf("unsupported base ", itoa(base))
+		return nil, 0, primitiveErrorf("REAL: unsupported base ", base)
 	}
 
 	switch {
@@ -468,7 +468,7 @@ func bcdRealWrite[T any](c *realCodec[T], pkt PDU, o *Options) (off int, err err
 					baseIndicator := realBaseToHeader(r.Base)
 					expBytes := encodeRealExponent(r.Exponent)
 					if len(expBytes) > 15 {
-						return 0, mkerr("Exponent too long")
+						return 0, primitiveErrorf("REAL: exponent too long")
 					}
 					header := 0x80 | baseIndicator | signFlag | byte(len(expBytes))
 					mantissaBytes := encodeMantissa(r.Mantissa.Big().Abs(r.Mantissa.Big()))
@@ -533,13 +533,13 @@ func bcdRealRead[T any](c *realCodec[T], pkt PDU, tlv TLV, o *Options) (err erro
 					header := wire[0]
 					expLen := int(header & 0x0F)
 					if 1+expLen >= len(wire) {
-						return mkerr("REAL: insufficient data for exponent")
+						return primitiveErrorf("REAL: insufficient data for exponent")
 					}
 
 					exp := decodeRealExponent(wire[1 : 1+expLen])
 					mantissa := decodeMantissa(wire[1+expLen:])
 
-					if header&0x20 != 0 {
+					if header&cmpndByte != 0 {
 						mantissa.Neg(mantissa)
 					}
 
@@ -558,7 +558,7 @@ func bcdRealRead[T any](c *realCodec[T], pkt PDU, tlv TLV, o *Options) (err erro
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
@@ -569,12 +569,12 @@ func bcdRealRead[T any](c *realCodec[T], pkt PDU, tlv TLV, o *Options) (err erro
 
 func byteToInfinity(b byte) (r Real, err error) {
 	switch b {
-	case 0x40:
+	case plusIByte:
 		r = NewRealPlusInfinity()
-	case 0x41:
+	case minusIByte:
 		r = NewRealMinusInfinity()
 	default:
-		err = mkerr("REAL: invalid special value for INFINITY")
+		err = primitiveErrorf("REAL: invalid special value for INFINITY")
 	}
 
 	return
@@ -583,9 +583,9 @@ func byteToInfinity(b byte) (r Real, err error) {
 func infinityToByte(special RealSpecial) (b []byte, ok bool) {
 	switch special {
 	case RealPlusInfinity:
-		b = []byte{0x40}
+		b = []byte{plusIByte}
 	case RealMinusInfinity:
-		b = []byte{0x41}
+		b = []byte{minusIByte}
 	}
 
 	ok = len(b) == 1

@@ -146,6 +146,15 @@ var classKeywords = map[string]struct{}{
 	"private":          {},
 }
 
+const (
+	indefByte  = 0x80
+	cmpndByte  = 0x20
+	plusIByte  = 0x40
+	minusIByte = 0x41
+)
+
+var indefEoC = []byte{0x00, 0x00}
+
 const hexDigits = "0123456789ABCDEF"
 
 func init() {
@@ -157,7 +166,7 @@ func init() {
 	derOID, _ = NewObjectIdentifier(2, 1, 2, 1)
 
 	//perOID, _ = NewObjectIdentifier(2, 1, 3, 0, 0)
-	//cperOID, _ = NewObjectIdentifier(2.1.3.1.0)
-	//ucperOID, _ = NewObjectIdentifier(2.1.3.1.1)
-	//uperOID, _ = NewObjectIdentifier(2.1.3.0.1)
+	//cperOID, _ = NewObjectIdentifier(2, 1, 3, 1, 0)
+	//ucperOID, _ = NewObjectIdentifier(2, 1, 3, 1, 1)
+	//uperOID, _ = NewObjectIdentifier(2, 1, 3, 0, 1)
 }

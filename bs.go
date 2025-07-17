@@ -377,7 +377,7 @@ func assertBitString(x any) (raw []byte, err error) {
 	switch tv := x.(type) {
 	case []byte:
 		if len(tv) == 0 {
-			err = mkerr("Invalid length for ASN.1 BITSTRING")
+			err = primitiveErrorf("BIT STRING: invalid length")
 			return
 		}
 		raw = tv
@@ -395,7 +395,7 @@ func assertBitString(x any) (raw []byte, err error) {
 
 func verifyBitStringContents(in []byte) (digits []byte, base int, err error) {
 	if len(in) < 2 {
-		err = mkerr("input too short for ASN.1 BIT STRING")
+		err = primitiveErrorf("BIT STRING: input too short")
 		return
 	}
 
@@ -406,7 +406,7 @@ func verifyBitStringContents(in []byte) (digits []byte, base int, err error) {
 	case 'H', 'h':
 		base = 16
 	default:
-		err = mkerr("Incompatible terminating character for ASN.1 BITSTRING: " + string(term))
+		err = primitiveErrorf("BIT STRING: incompatible terminating character: " + string(term))
 		return
 	}
 	// strip terminator
@@ -414,7 +414,7 @@ func verifyBitStringContents(in []byte) (digits []byte, base int, err error) {
 
 	// must be '<quote><digits>...<quote>'
 	if len(raw) < 3 || raw[0] != '\'' || raw[len(raw)-1] != '\'' {
-		err = mkerr("Incompatible encapsulating characters for ASN.1 BITSTRING")
+		err = primitiveErrorf("BIT STRING: incompatible encapsulating characters")
 		return
 	}
 	digits = raw[1 : len(raw)-1]
@@ -429,13 +429,13 @@ func verifyBitStringDigitSet(base int, digits []byte) (err error) {
 		c := digits[i]
 		if base == 2 {
 			if c != '0' && c != '1' {
-				err = mkerrf("non-binary character in ASN.1 BITSTRING: ", string(c))
+				err = primitiveErrorf("BIT STRING: non-binary character: ", string(c))
 			}
 		} else { // base == 16
 			if !((c >= '0' && c <= '9') ||
 				(c >= 'a' && c <= 'f') ||
 				(c >= 'A' && c <= 'F')) {
-				err = mkerrf("non-hex character in ASN.1 BITSTRING: ", string(c))
+				err = primitiveErrorf("BIT STRING: non-hex character: ", string(c))
 			}
 		}
 	}
@@ -537,19 +537,19 @@ func bcdBitStringRead[T any](c *bitStringCodec[T], pkt PDU, tlv TLV, o *Options)
 	wire, err := primitiveCheckRead(c.tag, pkt, tlv, o)
 	if err == nil {
 		if len(wire) < 1 {
-			err = mkerr("BIT STRING missing unused-bits byte")
+			err = primitiveErrorf("BIT STRING: missing unused-bits byte")
 			return err
 		}
 
 		unused := int(wire[0])
 		if unused < 0 || unused > 7 {
-			err = mkerr("BIT STRING: unused bits outside 0-7")
+			err = primitiveErrorf("BIT STRING: unused bits outside 0-7")
 			return err
 		}
 
 		bits := wire[1:]
 		if len(bits) == 0 && unused != 0 {
-			err = mkerr("BIT STRING: unused bits > length")
+			err = primitiveErrorf("BIT STRING: unused bits > length")
 			return err
 		}
 
@@ -581,7 +581,7 @@ func bcdBitStringRead[T any](c *bitStringCodec[T], pkt PDU, tlv TLV, o *Options)
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
@@ -594,7 +594,7 @@ func bitStringCheckDERPadding(rule EncodingRule, bits []byte, unused int) (err e
 	if rule == DER && len(bits) > 0 && unused > 0 {
 		last := bits[len(bits)-1]
 		if last&((1<<unused)-1) != 0 {
-			err = mkerr("DER BIT STRING: non-zero padding")
+			err = primitiveErrorf("DER BIT STRING: non-zero padding")
 		}
 	}
 

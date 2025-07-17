@@ -111,7 +111,7 @@ func init() {
 
 	UTF8Spec = func(o UTF8String) (err error) {
 		if !utf8OK(o.String()) {
-			err = mkerr("invalid UTF8 character(s) in ASN.1 UTF8 STRING")
+			err = primitiveErrorf("UTF8String: invalid character(s) in input")
 		}
 
 		return

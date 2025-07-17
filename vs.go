@@ -100,8 +100,8 @@ func init() {
 		for _, r := range []rune(o.String()) {
 			if r < 128 {
 				if r < 32 || r > 126 || !isPrint(r) || isCtrl(r) {
-					err = mkerrf("Invalid character for ASN.1 VISIBLE STRING: #",
-						itoa(int(r)), " (is control character)")
+					err = primitiveErrorf("Invalid character for ASN.1 VISIBLE STRING: #",
+						int(r), " (is control character)")
 					break
 				}
 			}

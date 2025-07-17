@@ -98,7 +98,7 @@ func graphicStringDecoderVerify(b []byte) (err error) {
 	for i := 0; i < len(runes) && err == nil; i++ {
 		ch := rune(runes[i])
 		if !unicode.IsPrint(ch) || unicode.IsControl(ch) || (ch < 128 && !(32 <= ch && ch <= 126)) {
-			err = mkerr("Invalid ASN.1 GRAPHIC STRING character")
+			err = primitiveErrorf("GraphicString: invalid character: ", string(ch))
 		}
 	}
 	return
@@ -106,7 +106,9 @@ func graphicStringDecoderVerify(b []byte) (err error) {
 
 func init() {
 	RegisterTextAlias[ObjectDescriptor](TagObjectDescriptor,
-		ObjectDescriptorConstraintPhase, nil, nil, nil, ObjectDescriptorSpec)
+		ObjectDescriptorConstraintPhase,
+		nil, nil, nil, ObjectDescriptorSpec)
+
 	ObjectDescriptorSpec = func(o ObjectDescriptor) error {
 		// ObjectDescriptor supports GRAPHIC STRING characters
 		return graphicStringDecoderVerify([]byte(o))

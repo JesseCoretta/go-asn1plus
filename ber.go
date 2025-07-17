@@ -168,6 +168,13 @@ If no variadic input is provided, the offset position index is set to zero (0).
 func (r *BERPacket) SetOffset(offset ...int) { r.offset = setPacketOffset(r, offset...) }
 
 /*
+AddOffset increments or decrements the current offset according to n. Though negative input is
+permitted, the product of offset + n must not be negative itself, nor may it exceed the receiver's
+buffer length.
+*/
+func (r *BERPacket) AddOffset(n int) { r.offset = incPacketOffset(r, n) }
+
+/*
 Free frees the receiver instance.
 */
 func (r *BERPacket) Free() {

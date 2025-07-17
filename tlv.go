@@ -100,7 +100,7 @@ func encodeTLV(t TLV, opts *Options) (out []byte) {
 
 	id := byte(t.Class << 6)
 	if t.Compound || (opts != nil && opts.Explicit) {
-		id |= 0x20
+		id |= cmpndByte
 	}
 
 	debugEvent(EventTrace|EventTLV,
@@ -130,7 +130,7 @@ func encodeTLV(t TLV, opts *Options) (out []byte) {
 	}
 
 	if tagVal < 0 {
-		panic("encodeTLV: negative tag reached encoder")
+		panic(errorNegativeTLV)
 	}
 
 	b4 := len(b)
@@ -158,7 +158,7 @@ func getTLVResolveOverride(class, tag int, compound bool, opts *Options) (int, i
 	var err error
 	if opts != nil && (opts.HasClass() || opts.HasTag()) {
 		if opts.Explicit && !compound {
-			err = mkerr("Expected constructed TLV for explicit tagging override")
+			err = errorNotExplicitTLV
 		} else {
 			if opts.HasClass() {
 				class = opts.Class()
@@ -189,9 +189,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 		)
 	}()
 
-	if r.Offset() >= r.Len() {
-		err = mkerrf(r.Type().String(), " PDU.TLV: no data available at offset ",
-			itoa(r.Offset()), " (len:", itoa(r.Len()), ")")
+	if err = errorTLVNoData(r); err != nil {
 		return
 	}
 
@@ -201,7 +199,8 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 		newLItem(d, "bytes"),
 	)
 
-	sub := d[r.Offset():]
+	off := r.Offset()
+	sub := d[off:]
 	debugEvent(EventTrace|EventTLV,
 		newLItem(sub, "chopped"),
 	)
@@ -214,6 +213,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 		lenLen,
 		length int
 		compound bool
+		typ      EncodingRule = r.Type()
 	)
 
 	if class, err = parseClassIdentifier(sub); err != nil {
@@ -225,7 +225,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	debugEvent(EventTrace|EventTLV, newLItem(compound, "compound"))
 
 	if tag, idLen, err = parseTagIdentifier(sub); err != nil {
-		err = mkerrf(r.Type().String(), " PDU.TLV: error reading tag: ", err.Error())
+		err = tLVErr{mkerrf(typ, " error reading tag: ", err)}
 		return
 	}
 
@@ -234,9 +234,10 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 		newLItem(idLen, "idLen"))
 
 	debugEvent(EventTrace|EventTLV,
-		newLItem([]int{r.Offset(), r.Offset() + idLen}, "offset orig/new"))
+		newLItem([]int{off, off + idLen}, "offset orig/new"))
 
-	r.SetOffset(r.Offset() + idLen)
+	r.AddOffset(idLen)
+	off = r.Offset()
 
 	// restore implicit/explicit override here
 	if class, tag, err = getTLVResolveOverride(class, tag, compound, opts); err != nil {
@@ -249,41 +250,42 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	}
 
 	debugEvent(EventTrace|EventTLV,
-		newLItem([]int{r.Offset(), r.Offset() + lenLen}, "offset orig/new"))
+		newLItem([]int{off, off + lenLen},
+			"offset orig/new"))
 
-	r.SetOffset(r.Offset() + lenLen)
+	r.AddOffset(lenLen)
+	off = r.Offset()
 
 	if !r.Type().In(encodingRules...) {
-		err = errorRuleNotImplemented
+		err = tLVErr{errorRuleNotImplemented}
 		return
 	}
 
-	start := r.Offset()
 	var valueBytes []byte
-
 	if length >= 0 {
 		// definite-length
-		end := start + length
+		end := off + length
 		if end > len(d) {
-			err = mkerrf("TLV: unexpected truncation of definite length value (", itoa(end), " > ", itoa(len(d)), ")")
+			err = tLVErr{mkerrf(errorTruncDefLen,
+				": ", end, " > ", len(d), ")")}
 			return
 		}
-		valueBytes = d[start:end]
+		valueBytes = d[off:end]
 		debugEvent(EventTrace|EventTLV,
-			newLItem(start, "value start"),
+			newLItem(off, "value start"),
 			newLItem(end, "value end"),
 		)
 	} else {
 		// indefinite-length (BER)
-		buf := d[start:]
-		eocIdx := bytes.Index(buf, []byte{0x00, 0x00})
+		buf := d[off:]
+		eocIdx := bytes.Index(buf, indefEoC)
 		if eocIdx < 0 {
-			err = mkerr("TLV: missing end-of-contents for indefinite value")
+			err = errorNoEOCIndefTLV
 			return
 		}
 		valueBytes = buf[:eocIdx]
 		debugEvent(EventTrace|EventTLV,
-			newLItem(start, "value start"),
+			newLItem(off, "value start"),
 			newLItem(eocIdx, "EOC index"),
 		)
 	}
@@ -310,17 +312,19 @@ func tlvVerifyLengthState(r PDU, d []byte) (length, lenLen int, err error) {
 		)
 	}()
 
-	if length, lenLen, err = parseLength(d[r.Offset():]); err != nil {
-		err = mkerrf(r.Type().String(),
-			" PDU.TLV: error reading length: ", err.Error())
-	} else if !r.Type().allowsIndefinite() && length < 0 {
-		err = errorIndefiniteProhibited
-	} else if r.Type() == DER {
+	off := r.Offset()
+	typ := r.Type()
+
+	if length, lenLen, err = parseLength(d[off:]); err != nil {
+		err = tLVErr{mkerrf(errorBadLength, ": ", err)}
+	} else if !typ.allowsIndefinite() && length < 0 {
+		err = tLVErr{errorIndefiniteProhibited}
+	} else if typ == DER {
 		// DER canonical-form checks
-		if lenLen > 1 && length < 0x80 {
-			err = mkerr("DER: non-minimal length encoding")
-		} else if lenLen > 2 && d[r.Offset()+1] == 0x00 {
-			err = mkerr("DER: leading zero in length")
+		if lenLen > 1 && length < indefByte {
+			err = tLVErr{errorDERNonMinLen}
+		} else if lenLen > 2 && d[off+1] == 0x00 {
+			err = tLVErr{errorDERLeadingZeroLen}
 		}
 	}
 
@@ -338,16 +342,20 @@ func writeTLV(pkt PDU, t TLV, opts *Options) (err error) {
 			newLItem(err))
 	}()
 
-	var indefBytes []byte
+	var (
+		indefBytes []byte
+		ptyp       EncodingRule = pkt.Type()
+		ttyp       EncodingRule = t.Type()
+	)
+
 	if (opts != nil && opts.Indefinite) || t.Length < 0 {
-		if !pkt.Type().allowsIndefinite() {
-			err = mkerrf(pkt.Type().String(), " forbids indefinite length")
+		if !ptyp.allowsIndefinite() {
+			err = tLVErr{mkerrf(ptyp, " forbids indefinite length")}
 			return
 		}
-		indefBytes = []byte{0x00, 0x00}
-	} else if !t.Type().In(encodingRules...) {
-		err = mkerrf(pkt.Type().String(), " PDU.WriteTLV: expected ",
-			pkt.Type().String(), ", got ", t.Type().String())
+		indefBytes = indefEoC
+	} else if ptyp != ttyp {
+		err = tLVErr{mkerrf("WriteTLV: expected ", ttyp, ", got ", ptyp)}
 		return
 	}
 
@@ -370,12 +378,12 @@ func readBase128Int(pkt PDU) (int, error) {
 	result := 0
 	for {
 		if pkt.Offset() >= pkt.Len() {
-			return 0, mkerr("truncated base-128 integer")
+			return 0, errorTruncBase128
 		}
 		b := pkt.Data()[pkt.Offset()]
-		pkt.SetOffset(pkt.Offset() + 1)
+		pkt.AddOffset(1)
 		result = (result << 7) | int(b&0x7f)
-		if b&0x80 == 0 {
+		if b&indefByte == 0 {
 			break
 		}
 	}

@@ -78,7 +78,8 @@ lookupAdapter returns an instance of adapter alongside an error, following
 an attempt to retrieve a particular adapter through a keyword/type pair.
 */
 func lookupAdapter(goType, kw string) (ad adapter, err error) {
-	debugEvent(EventEnter|EventAdapter, goType, newLItem(kw, "adapter keyword"))
+	debugEvent(EventEnter|EventAdapter,
+		goType, newLItem(kw, "adapter keyword"))
 	defer func() {
 		debugEvent(EventExit|EventAdapter, ad, err)
 	}()
@@ -88,14 +89,15 @@ func lookupAdapter(goType, kw string) (ad adapter, err error) {
 	if kw = lc(kw); kw != "" {
 		mapKey := [2]string{goType, kw} // Precompute the lookup key
 		if ad, exists = adapters[mapKey]; !exists {
-			err = mkerrf("no named adapter for ", goType, " with keyword ", kw)
+			err = adapterErrorf("no named adapter for ",
+				goType, " with keyword ", kw)
 		}
 		return
 	}
 
 	var list []adapter
 	if list, exists = defaultAdapters[goType]; !exists || len(list) == 0 {
-		err = mkerrf("no default adapter for ", goType)
+		err = adapterErrorf("no default adapter for ", goType)
 	} else {
 		ad = chainAdapters(list)
 	}
@@ -123,7 +125,7 @@ func chainAdapters(candidates []adapter) (adapt adapter) {
 				found = candidates[i].fromGo(g, prim, opts) == nil
 			}
 			if !found {
-				err = mkerr("none of the default adapters accepted value")
+				err = adapterErrorf("none of the default adapters accepted value")
 			}
 			return
 		},
@@ -438,7 +440,9 @@ func RegisterAdapter[T any, GoT any](
 		cs, err := collectConstraint[T](opts.Constraints)
 		if err == nil {
 			if goVal, ok := g.(GoT); !ok {
-				err = mkerrf("adapter: expected ", refTypeOf(*new(GoT)).String(), " got ", refTypeOf(g).String())
+				err = adapterErrorf("adapter: expected ",
+					refTypeOf(*new(GoT)).String(),
+					" got ", refTypeOf(g).String())
 			} else {
 				var val T
 				if val, err = ctor(goVal, cs...); err == nil {
@@ -481,7 +485,8 @@ func isAdapterKeyword(token string) (is bool) {
 	defer func() {
 		debugEvent(EventAdapter|EventTrace, "kwFastMu unlocking")
 		kwFastMu.RUnlock()
-		debugEvent(EventExit|EventAdapter, newLItem(is, "found adapter keyword "+token))
+		debugEvent(EventExit|EventAdapter,
+			newLItem(is, "found adapter keyword "+token))
 	}()
 
 	if cur == kwFastV {

@@ -142,7 +142,7 @@ func bcdTextRead[T TextLike](c *textCodec[T], pkt PDU, tlv TLV, o *Options) (err
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(val); err == nil {
 					c.val = val
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
@@ -251,7 +251,7 @@ func buildText(
 	for i := 0; i < len(in); {
 		r, sz := utf8.DecodeRuneInString(in[i:])
 		if r == utf8.RuneError && sz == 1 {
-			return nil, mkerr("invalid UTF-8")
+			return nil, codecErrorf("invalid UTF-8")
 		}
 		i += sz
 
@@ -262,7 +262,7 @@ func buildText(
 		pos += bw
 		used += cu
 		if used > maxUnits {
-			return nil, mkerr("too many code units")
+			return nil, codecErrorf("too many code units")
 		}
 	}
 	out[1] = byte(used)

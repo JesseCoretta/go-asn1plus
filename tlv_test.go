@@ -131,7 +131,7 @@ func TestGetTLV_BadTagIdentifier(t *testing.T) {
 
 	_, _ = getTLV(invalidPacket{}, nil)
 	_, err := getTLV(pkt, nil)
-	testWantSub(t, err, "BER PDU.TLV: error reading length: length bytes not found")
+	testWantSub(t, err, "TLV ERROR: error reading length: CODEC ERROR: length bytes not found")
 }
 
 func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
@@ -142,14 +142,14 @@ func TestGetTLV_ExplicitButPrimitive(t *testing.T) {
 	opts.SetClass(0)
 
 	_, err := getTLV(pkt, opts)
-	testWantSub(t, err, "Expected constructed TLV for explicit tagging")
+	testWantSub(t, err, "TLV ERROR: expected constructed TLV for explicit tagging")
 }
 
 func TestGetTLV_BadLengthHeader(t *testing.T) {
 	pkt := BER.New(0x02, 0x82)
 
 	_, err := getTLV(pkt, nil)
-	testWantSub(t, err, "error reading length:")
+	testWantSub(t, err, "TLV ERROR: error reading length: CODEC ERROR: length bytes not found")
 }
 
 func TestGetTLV_TagClassOverrideSuccess(t *testing.T) {
@@ -231,8 +231,8 @@ func TestGetTLV_UnsupportedEncodingRule(t *testing.T) {
 	}
 
 	_, err := getTLV(pkt, nil)
-	expect := errorRuleNotImplemented.Error()
-	if err == nil || err.Error() != expect {
+	expect := tLVErr{errorRuleNotImplemented}
+	if err == nil || err.Error() != expect.Error() {
 		t.Fatalf("expected '%s', got %v", expect, err)
 	}
 }

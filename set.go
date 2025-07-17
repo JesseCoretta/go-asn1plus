@@ -6,7 +6,6 @@ ASN.1 SET type.
 */
 
 import (
-	"bytes"
 	"reflect"
 	"slices"
 )
@@ -50,11 +49,11 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			}
 		}
 		if !found {
-			err = mkerr("marshalSet: no suitable slice field found in struct")
+			err = compositeErrorf("marshalSet: no suitable slice field found in struct")
 			return
 		}
 	} else if v.Kind() != reflect.Slice {
-		err = mkerr("marshalSet: value is not a slice or struct containing a slice")
+		err = compositeErrorf("marshalSet: value is not a slice or struct containing a slice")
 		return
 	}
 
@@ -70,12 +69,12 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	}
 
 	if err != nil {
-		err = mkerrf("marshalSet: error marshaling slice element: ", err.Error())
+		err = compositeErrorf("marshalSet: error marshaling slice element: ", err)
 		return
 	}
 
 	if pkt.Type().canonicalOrdering() {
-		slices.SortFunc(elements, func(a, b []byte) int { return bytes.Compare(a, b) })
+		slices.SortFunc(elements, func(a, b []byte) int { return bcmp(a, b) })
 	}
 
 	bufPtr := getBuf()
@@ -105,7 +104,7 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			return err
 		}
 	} else if v.Kind() != reflect.Slice {
-		err = mkerr("unmarshalSet: target value is not a slice or struct containing a slice")
+		err = compositeErrorf("unmarshalSet: target value is not a slice or struct containing a slice")
 		return
 	}
 
@@ -121,7 +120,7 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			}
 			subData := outerTLV.Value
 			subPkt := pkt.Type().New(subData...)
-			subPkt.SetOffset(0)
+			subPkt.SetOffset()
 			pkt = subPkt
 		}
 	}
@@ -147,7 +146,7 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			err = unmarshalValue(pkt, tmp, subOpts)
 		}
 		if err != nil {
-			err = mkerrf("unmarshalSet: error unmarshaling SET element: ", err.Error())
+			err = compositeErrorf("unmarshalSet: error unmarshaling SET element: ", err)
 			return
 		}
 		elements = append(elements, tmp)
@@ -188,13 +187,14 @@ func unmarshalSequenceAsSet(v reflect.Value) (reflect.Value, error) {
 				v = f
 				found = true
 			} else {
-				err = mkerrf("unmarshalSet: struct field ", field.Name, " is not a slice; got ", f.Kind().String())
+				err = compositeErrorf("unmarshalSet: struct field ", field.Name,
+					" is not a slice; got ", f.Kind().String())
 			}
 		}
 	}
 
 	if !found && err == nil {
-		err = mkerr("unmarshalSet: no suitable slice field found in struct")
+		err = compositeErrorf("unmarshalSet: no suitable slice field found in struct")
 	}
 
 	return v, err
@@ -203,7 +203,7 @@ func unmarshalSequenceAsSet(v reflect.Value) (reflect.Value, error) {
 func unmarshalSetOfChoiceHeaderLength(start int, pkt PDU) (data []byte, headerLen int) {
 	// Compute headerLen = identifier + length octets
 	data = pkt.Data()
-	if data[start+1]&0x80 != 0 {
+	if data[start+1]&indefByte != 0 {
 		headerLen = 2 + int(data[start+1]&0x7F)
 	} else {
 		headerLen = 2
@@ -214,7 +214,7 @@ func unmarshalSetOfChoiceHeaderLength(start int, pkt PDU) (data []byte, headerLe
 
 func unmarshalSetOfChoiceGetTag(tlv TLV, fullWrapper []byte) (tag int) {
 	tag = int(fullWrapper[0]) & 0x1F
-	if tlv.Tag != 17 { // override if non‐universal SET
+	if tlv.Tag != TagSet { // override if non‐universal SET
 		tag = tlv.Tag
 	}
 
@@ -240,31 +240,23 @@ func setPickChoiceAlternative(
 		}
 		// recurse into its contents
 		sub := pkt.Type().New(tlv.Value...)
-		sub.SetOffset(0)
+		sub.SetOffset()
 		return setPickChoiceAlternative(sub, parentOpts)
 	}
 
 	// 2) Consume the context-specific wrapper TLV ([n] EXPLICIT)
-	outer, err := pkt.TLV()
-	if err != nil {
-		return
+	var outer TLV
+	if outer, err = pkt.TLV(); err == nil {
+		pkt.AddOffset(outer.Length) ///pkt.Offset() + len(outer.Value))
+
+		childOpts = clearChildOpts(parentOpts)
+		childOpts.Choices = parentOpts.Choices
+
+		payload = outer.Value
+		tag = outer.Tag
+		payloadPK = pkt.Type().New(payload...)
+		payloadPK.SetOffset()
 	}
-	pkt.SetOffset(pkt.Offset() + len(outer.Value))
-
-	// 3) Clone parent opts but keep the registry name
-	childOpts = clearChildOpts(parentOpts)
-	childOpts.Choices = parentOpts.Choices
-
-	// 4) outer.Value already contains the full inner TLV
-	//    (universal tag + length + bytes), so just reuse it
-	payload = outer.Value
-
-	// 5) The CHOICE selector is the wrapper’s tag number
-	tag = outer.Tag
-
-	// 6) Build a PDU over payload so unmarshalValue sees a valid TLV
-	payloadPK = pkt.Type().New(payload...)
-	payloadPK.SetOffset(0)
 
 	return
 }

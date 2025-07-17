@@ -116,7 +116,7 @@ func videotexDecoderVerify(b []byte) error {
 	for i := 0; i < len(b); {
 		r, n := utf8.DecodeRune(b[i:])
 		if r == utf8.RuneError || !isVideotexRune(r) {
-			return mkerr("invalid Videotex character")
+			return primitiveErrorf("VideotexString: invalid character(s) in input")
 		}
 		i += n
 	}
@@ -139,7 +139,7 @@ func init() {
 	VideotexSpec = func(o VideotexString) (err error) {
 		for _, r := range []rune(o.String()) {
 			if !isVideotexRune(r) {
-				err = mkerrf("Invalid character '", itoa(int(r)), "' in VIDEOTEX STRING")
+				err = primitiveErrorf("VideotexString: invalid character '", int(r), "'")
 				break
 			}
 		}

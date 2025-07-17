@@ -6,7 +6,6 @@ abstraction interface known as Packet.
 */
 
 import (
-	"bytes"
 	"io"
 	"sync"
 )
@@ -100,7 +99,18 @@ type PDU interface {
 	Append(...byte)
 
 	// SetOffset sets the underlying buffer offset to the input integer.
+	// If the input integer is -1, the offset advances to the final byte
+	// in the underlying buffer. Providing no input integer is equivalent
+	// to providing 0 in that the offset will retreat to the first byte.
+	//
+	// Note that this method clobbers the existing value. See the AddOffset
+	// method for a means of incrementing the existing value.
 	SetOffset(...int)
+
+	// AddOffset increments the underlying buffer offset using the magnitude
+	// of the input integer. Negative input integers may be (carefully) used
+	// to decrement the underlying buffer offset.
+	AddOffset(int)
 
 	// Free frees the receiver instance from memory.
 	Free()
@@ -122,6 +132,7 @@ func (_ invalidPacket) HasMoreData() bool                { return false }
 func (_ invalidPacket) Compound() (bool, error)          { return false, errorInvalidPacket }
 func (_ invalidPacket) Offset() int                      { return 0 }
 func (_ invalidPacket) SetOffset(_ ...int)               {}
+func (_ invalidPacket) AddOffset(_ int)                  {}
 func (_ invalidPacket) Free()                            {}
 func (_ invalidPacket) ID() string                       { return `` }
 func (_ invalidPacket) Hex() string                      { return `` }
@@ -141,6 +152,25 @@ func setPacketOffset(pkt PDU, offset ...int) (off int) {
 		}
 	} else {
 		off = 0
+	}
+
+	return
+}
+
+func incPacketOffset(pkt PDU, n int) (off int) {
+	var _off int
+	switch {
+	case n > 0:
+		_off = pkt.Offset() + n
+	case n < 0:
+		_off = pkt.Offset() - n
+	default:
+		off = pkt.Offset() // no change
+		return
+	}
+
+	if 0 < _off && _off <= pkt.Len() {
+		off = _off
 	}
 
 	return
@@ -462,7 +492,7 @@ func panicOnMissingEncodingRuleConstructor(table map[EncodingRule]func(...byte) 
 	for i := 0; i < len(encodingRules); i++ {
 		rule := encodingRules[i]
 		if _, found := table[rule]; !found {
-			panic(mkerrf("EncodingRule ", rule.String(), " has no registered constructor"))
+			panic(codecErrorf("EncodingRule ", rule, " has no registered constructor"))
 		}
 	}
 }
@@ -502,7 +532,7 @@ func dumpLevel(w io.Writer, rule EncodingRule, data []byte, depth, width int) er
 
 		length, lenLen, err := parseLength(data[offset+idLen:])
 		if err != nil {
-			return mkerrf("PDU.Dump", "error reading length: ", err.Error())
+			return codecErrorf(errorBadLength, ": ", err)
 		}
 
 		name := resolveTagName(class, tag)
@@ -535,12 +565,12 @@ func dumpLevel(w io.Writer, rule EncodingRule, data []byte, depth, width int) er
 		if length >= 0 {
 			end = start + length
 			if end > len(data) {
-				return mkerrf("truncation ", itoa(end), " > ", itoa(len(data)))
+				return codecErrorf("PDU truncation ", end, " > ", len(data))
 			}
 		} else {
-			idx := bytes.Index(data[start:], []byte{0x00, 0x00})
+			idx := bidx(data[start:], indefEoC)
 			if idx < 0 {
-				return mkerr("no EOC")
+				return codecErrorf("PDU contains no EOC")
 			}
 			end = start + idx
 		}
@@ -588,6 +618,16 @@ func dumpHexLines(w io.Writer, b []byte, depth, width int) {
 
 		w.Write([]byte(line.String()))
 	}
+}
+
+// emit the [class|tag] EXPLICIT mask header
+// (0x20 bit == “constructed, explicit”)
+func emitHeader(class, tag int, expl bool) (mask byte) {
+	mask = byte(class)<<6 | byte(tag)
+	if expl {
+		mask |= cmpndByte
+	}
+	return
 }
 
 var pDUConstructors map[EncodingRule]func(...byte) PDU = make(map[EncodingRule]func(...byte) PDU)

@@ -84,13 +84,13 @@ var UniversalSpec Constraint[UniversalString]
 
 func universalStringDecoderVerify(b []byte) (err error) {
 	if len(b)%4 != 0 {
-		err = mkerr("UNIVERSAL STRING: byte length not multiple of 4")
+		err = primitiveErrorf("UNIVERSAL STRING: byte length not multiple of 4")
 		return
 	}
 	for i := 0; i < len(b); i += 4 {
 		code := binary.BigEndian.Uint32(b[i:])
 		if code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) {
-			err = mkerrf("UNIVERSAL STRING: invalid code point: ", itoa(int(code)))
+			err = primitiveErrorf("UNIVERSAL STRING: invalid code point: ", int(code))
 			break
 		}
 	}
@@ -130,7 +130,7 @@ func encodeUniversalString(u UniversalString) ([]byte, error) {
 	for i := 0; i < len(s); {
 		r, sz := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && sz == 1 {
-			return nil, mkerr("invalid UTF-8 in UniversalString")
+			return nil, primitiveErrorf("UniversalString: invalid UTF-8")
 		}
 		if err = universalStringCharacterOutOfBounds(r); err == nil {
 			binary.BigEndian.PutUint32(out[pos:], uint32(r))
@@ -144,7 +144,8 @@ func encodeUniversalString(u UniversalString) ([]byte, error) {
 
 func universalStringCharacterOutOfBounds(r rune) (err error) {
 	if r > 0x10FFFF || (r >= 0xD800 && r <= 0xDFFF) {
-		err = mkerrf("UNIVERSAL STRING: invalid code point ", string(r), " (", itoa(int(r)), ")")
+		err = primitiveErrorf("UNIVERSAL STRING: invalid code point ",
+			string(r), " (", int(r), ")")
 	}
 
 	return
@@ -188,7 +189,7 @@ func init() {
 	UniversalSpec = func(us UniversalString) (err error) {
 		// Reject byte sequences that are not valid UTF-8.
 		if !utf8OK(string(us)) {
-			return mkerr("UniversalString: input is not valid UTF-8")
+			return primitiveErrorf("UniversalString: input is not valid UTF-8")
 		}
 
 		// Reject surrogates and code points beyond Unicode max.

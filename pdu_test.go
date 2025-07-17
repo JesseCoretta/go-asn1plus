@@ -24,6 +24,7 @@ type testPacket struct {
 func (r testPacket) Data() []byte                          { return r.data }
 func (r testPacket) Offset() int                           { return r.offset }
 func (r *testPacket) SetOffset(i ...int)                   { setPacketOffset(r, i...) }
+func (r *testPacket) AddOffset(i int)                      { incPacketOffset(r, i) }
 func (r testPacket) Len() int                              { return r.length }
 func (r testPacket) Type() EncodingRule                    { return r.typ }
 func (r testPacket) Hex() string                           { return formatHex(r) }

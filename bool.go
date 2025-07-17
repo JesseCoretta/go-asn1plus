@@ -178,7 +178,7 @@ func bcdBooleanRead[T Truthy](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) 
 	wire, err := primitiveCheckRead(c.Tag(), pkt, tlv, o)
 	if err == nil {
 		if len(wire) != 1 {
-			return mkerr("BOOLEAN: content length ≠ 1")
+			return primitiveErrorf("BOOLEAN: content length ≠ 1")
 		}
 
 		decodeVerify := func() (err error) {
@@ -201,7 +201,7 @@ func bcdBooleanRead[T Truthy](c *booleanCodec[T], pkt PDU, tlv TLV, o *Options) 
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + 1)
+					pkt.AddOffset(1)
 				}
 			}
 		}

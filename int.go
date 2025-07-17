@@ -63,7 +63,7 @@ func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err 
 	case string:
 		// Attempt to parse the string in base 10.
 		if _i, ok := newBigInt(0).SetString(value, 10); !ok {
-			err = mkerrf("Invalid string value for ASN.1 INTEGER: ", value)
+			err = primitiveErrorf("INTEGER: invalid string value ", value)
 		} else if _i.IsInt64() {
 			i = Integer{native: _i.Int64()}
 		} else {
@@ -195,7 +195,7 @@ func (r Integer) cmpAny(x any) int {
 		return r.cmpBig(t)
 
 	default:
-		panic(mkerrf("Integer.cmpAny: unsupported type ", refTypeOf(x).String()))
+		panic(primitiveErrorf("INTEGER: unsupported type for comparison ", refTypeOf(x)))
 	}
 }
 
@@ -334,12 +334,12 @@ is safe since this fact is confirmed prior to any call of this function.
 */
 func decodeNativeInt(data []byte) (int, error) {
 	if len(data) == 0 {
-		return 0, mkerr("empty data for INTEGER")
+		return 0, primitiveErrorf("INTEGER: zero bytes for decoding")
 	}
 
 	// Interpret the value in two's complement.
 	// Determine if the number is negative from the first byte.
-	negative := data[0]&0x80 != 0
+	negative := data[0]&indefByte != 0
 
 	var value int64 = 0
 	for _, b := range data {
@@ -467,7 +467,7 @@ func bcdIntegerRead[T any](c *integerCodec[T], pkt PDU, tlv TLV, o *Options) err
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = fromInt[T](out)
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}

@@ -120,13 +120,13 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 			return
 		} else if slice2, ok := x[0].(ObjectIdentifier); ok {
 			if !slice2.Valid() {
-				err = mkerr("Invalid ASN.1 OBJECT IDENTIFIER")
+				err = primitiveErrorf("OBJECT IDENTIFIER: invalid value")
 			} else {
 				r = slice2
 			}
 			return
 		} else {
-			err = mkerr("An OID must have two (2) or more number forms")
+			err = errorMinOIDArcs
 			return
 		}
 	}
@@ -145,7 +145,7 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 		}
 
 		if nf.Lt(Integer{big: true, bigInt: newBigInt(0)}) {
-			err = mkerr("Number form values cannot be negative")
+			err = primitiveErrorf("OBJECT IDENTIFIER: number form values cannot be negative")
 			break
 		}
 
@@ -166,7 +166,7 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 
 func newObjectIdentifierStr(dot string) (r ObjectIdentifier, err error) {
 	if !isNumericOID(dot) {
-		err = mkerrf("Invalid OID cannot be processed ", dot)
+		err = primitiveErrorf("OBJECT IDENTIFIER: invalid OID ", dot)
 		return
 	}
 
@@ -217,10 +217,10 @@ Successful output can be cast as an instance of [encoding/asn1.ObjectIdentifier]
 */
 func (r ObjectIdentifier) IntSlice() (slice []int, err error) {
 	if r.IsZero() {
-		err = mkerr("Nil receiver")
+		err = errorNilReceiver
 		return
 	} else if r.Len() < 2 {
-		err = mkerr("An OID must have two (2) or more number forms")
+		err = errorMinOIDArcs
 		return
 	}
 
@@ -251,10 +251,10 @@ desired.
 */
 func (r ObjectIdentifier) Uint64Slice() (slice []uint64, err error) {
 	if r.IsZero() {
-		err = mkerr("Nil receiver")
+		err = errorNilReceiver
 		return
 	} else if r.Len() < 2 {
-		err = mkerr("An OID must have two (2) or more number forms")
+		err = errorMinOIDArcs
 		return
 	}
 
@@ -403,7 +403,7 @@ func NewRelativeOID(x ...any) (rel RelativeOID, err error) {
 		}
 
 		if nf.Lt(Integer{big: true, bigInt: newBigInt(0)}) {
-			err = mkerr("Number form values cannot be negative")
+			err = primitiveErrorf("OBJECT IDENTIFIER: number form values cannot be negative")
 			break
 		}
 
@@ -503,18 +503,18 @@ func bcdOIDWrite[T any](c *oidCodec[T], pkt PDU, o *Options) (off int, err error
 		} else {
 			oid := toObjectIdentifier(c.val)
 			if len(oid) < 2 {
-				err = mkerr("OID must have at least two arcs")
+				err = errorMinOIDArcs
 				return
 			}
 
 			first, second := oid[0].Big(), oid[1].Big()
 			if first.Cmp(newBigInt(0)) < 0 || first.Cmp(newBigInt(2)) > 0 {
-				err = mkerr("first arc must be 0..2")
+				err = primitiveErrorf("OBJECT IDENTIFIER: first arc must be 0..2")
 				return
 			}
 
 			if first.Cmp(newBigInt(2)) < 0 && second.Cmp(newBigInt(40)) >= 0 {
-				err = mkerr("second arc must be 0..39 when first arc is 0 or 1")
+				err = primitiveErrorf("OBJECT IDENTIFIER: second arc must be 0..39 when first arc is 0 or 1")
 				return
 			}
 
@@ -588,7 +588,7 @@ func bcdOIDRead[T any](c *oidCodec[T], pkt PDU, tlv TLV, o *Options) error {
 				}
 
 				if len(subs) == 0 {
-					err = mkerr("zero-length OBJECT IDENTIFIER")
+					err = primitiveErrorf("OBJECT IDENTIFIER is zero")
 				} else {
 					arcs := objectIdentifierReadExpandFirstArcs(subs)
 					out = fromObjectIdentifier[T](arcs)
@@ -599,7 +599,7 @@ func bcdOIDRead[T any](c *oidCodec[T], pkt PDU, tlv TLV, o *Options) error {
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
@@ -613,7 +613,7 @@ func readArc(buf []byte, p *int) (*big.Int, error) {
 	n := newBigInt(0)
 	for {
 		if *p >= len(buf) {
-			return nil, mkerr("truncated VLQ")
+			return nil, primitiveErrorf("OBJECT IDENTIFIER contains truncated VLQ")
 		}
 		b := buf[*p]
 		*p++
@@ -669,7 +669,7 @@ func objectIdentifierReadData(pkt PDU, tlv TLV, o *Options) (data []byte, err er
 	}
 
 	if len(data) == 0 {
-		err = mkerr("empty OBJECT IDENTIFIER content")
+		err = primitiveErrorf("OBJECT IDENTIFIER content is zero")
 	}
 
 	return
@@ -772,7 +772,7 @@ func bcdRelOIDRead[T any](c *relOIDCodec[T], pkt PDU, tlv TLV, o *Options) error
 	}
 
 	if len(wire) == 0 {
-		return mkerr("empty RELATIVE-OID content")
+		return primitiveErrorf("RELATIVE-OID decoded empty content")
 	}
 
 	decodeVerify := func() (err error) {
@@ -820,7 +820,7 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 			}
 			i++
 			if i >= len(data) {
-				err = mkerr("truncated RELATIVE-OID subidentifier")
+				err = primitiveErrorf("RELATIVE-OID read truncated subidentifier")
 				return
 			}
 		}
@@ -838,7 +838,7 @@ func relativeOIDReadArcs(data []byte) (roid RelativeOID, err error) {
 	}
 
 	if len(roid) == 0 {
-		err = mkerr("Relative OID must have at least one arc")
+		err = errorMinRelOIDArcs
 	}
 
 	return
@@ -865,12 +865,12 @@ func bcdRelOIDWrite[T any](c *relOIDCodec[T], pkt PDU, o *Options) (off int, err
 		} else {
 			roid := toRelativeOID[T](c.val)
 			if len(roid) == 0 {
-				return 0, mkerr("Relative OID must have at least one arc")
+				return 0, errorMinRelOIDArcs
 			}
 
 			for _, arc := range roid {
 				if arc.Big().Sign() < 0 {
-					return 0, mkerr("Relative OID arcs may not be negative")
+					return 0, primitiveErrorf("RELATIVE-OID arcs may not be negative")
 				}
 				wire = append(wire, vlqEncodeBig(arc.Big())...)
 			}

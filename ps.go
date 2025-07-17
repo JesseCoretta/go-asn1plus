@@ -74,14 +74,14 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 		raw = tv.String()
 	case string:
 		if len(tv) == 0 {
-			err = mkerr("Printable String is zero length")
+			err = primitiveErrorf("PrintableString is zero length")
 			return
 		}
 		raw = tv
 	case []byte:
 		raw = string(tv)
 	default:
-		err = errorBadTypeForConstructor("PRINTABLE STRING", x)
+		err = errorBadTypeForConstructor("PrintableString", x)
 		return
 	}
 
@@ -116,13 +116,15 @@ func init() {
 	PrintableSpec = func(o PrintableString) (err error) {
 		for _, r := range []rune(o.String()) {
 			if r < 0 || r > 0xFFFF {
-				err = mkerrf("Invalid character '", string(r), "' (>0xFFFF) in PRINTABLE STRING")
+				err = primitiveErrorf("PrintableString: invalid character '",
+					string(r), "' (>0xFFFF)")
 				break
 			}
 			word := r >> 6
 			bit := r & 63
 			if (printableStringBitmap[word]>>bit)&1 == 0 {
-				err = mkerrf("Invalid character '", string(r), "' (", itoa(int(r)), ") in PRINTABLE STRING")
+				err = primitiveErrorf("PrintableString: invalid character '",
+					string(r), "' (", int(r), ")")
 				break
 			}
 		}

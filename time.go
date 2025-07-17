@@ -237,7 +237,7 @@ func fallbackTimeMatch(s string) (out time.Time, err error) {
 	}
 
 	if !matched {
-		err = mkerr("Invalid TIME format")
+		err = primitiveErrorf("TIME: invalid format")
 	}
 
 	return
@@ -367,10 +367,10 @@ func (r Date) truncate() time.Time {
 // parseDate parses YYYY-MM-DD in UTC, no heap, ~70 ns.
 func parseDate(s string) (time.Time, error) {
 	if len(s) != 10 {
-		return time.Time{}, mkerr("Invalid ASN.1 DATE length")
+		return time.Time{}, primitiveErrorf("DATE: invalid length")
 	}
 	if s[4] != '-' || s[7] != '-' {
-		return time.Time{}, mkerr("Invalid ASN.1 DATE format")
+		return time.Time{}, primitiveErrorf("DATE: invalid format")
 	}
 	toInt := func(b0, b1 byte) int { return int(b0-'0')*10 + int(b1-'0') }
 
@@ -379,7 +379,7 @@ func parseDate(s string) (time.Time, error) {
 	day := toInt(s[8], s[9])
 
 	if month == 0 || month > 12 || day == 0 || day > 31 {
-		return time.Time{}, mkerr("Invalid ASN.1 DATE value")
+		return time.Time{}, primitiveErrorf("DATE: invalid input")
 	}
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), nil
 }
@@ -509,11 +509,11 @@ func (r DateTime) Layout() string { return dateTimeLayout }
 // Returns UTC.  Zero allocs; ~120 ns on modern CPUs.
 func parseDateTime(s string) (time.Time, error) {
 	if len(s) != 19 {
-		return time.Time{}, mkerr("Invalid DATE-TIME length")
+		return time.Time{}, primitiveErrorf("DATE-TIME: invalid length")
 	}
 	// quick layout check – cheap and rejects most garbage early
 	if s[4] != '-' || s[7] != '-' || s[10] != 'T' || s[13] != ':' || s[16] != ':' {
-		return time.Time{}, mkerr("Invalid DATE-TIME format")
+		return time.Time{}, primitiveErrorf("DATE-TIME: invalid format")
 	}
 	toInt := func(b0, b1 byte) int { return int(b0-'0')*10 + int(b1-'0') } // ascii digits
 
@@ -673,10 +673,10 @@ func NewTimeOfDay(x any, constraints ...Constraint[Temporal]) (TimeOfDay, error)
 // returns a time in UTC with zero date; no allocs, ~60 ns
 func parseTimeOfDay(s string) (time.Time, error) {
 	if len(s) != 8 {
-		return time.Time{}, mkerr("Invalid ASN.1 TIME-OF-DAY length")
+		return time.Time{}, primitiveErrorf("TimeOfDay: invalid length")
 	}
 	if s[2] != ':' || s[5] != ':' {
-		return time.Time{}, mkerr("Invalid ASN.1 TIME-OF-DAY format")
+		return time.Time{}, primitiveErrorf("TimeOfDay: invalid format")
 	}
 	toInt := func(b0, b1 byte) int { return int(b0-'0')*10 + int(b1-'0') } // ASCII
 
@@ -684,7 +684,7 @@ func parseTimeOfDay(s string) (time.Time, error) {
 	mm := toInt(s[3], s[4])
 	ss := toInt(s[6], s[7])
 	if hh > 23 || mm > 59 || ss > 59 {
-		return time.Time{}, mkerr("Invalid ASN.1 TIME-OF-DAY value")
+		return time.Time{}, primitiveErrorf("TimeOfDay: invalid input")
 	}
 	return time.Date(0, 1, 1, hh, mm, ss, 0, time.UTC), nil
 }
@@ -849,7 +849,7 @@ func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
 	}
 
 	if len(s) == 0 || s[0] != 'P' {
-		return Duration{}, mkerr("duration must start with 'P'")
+		return Duration{}, primitiveErrorf("Duration: must start with 'P'")
 	}
 	s = s[1:] // remove leading 'P'
 	var _r Duration
@@ -888,7 +888,7 @@ func checkDurationEmpty(r Duration, err error) error {
 		r.Hours == 0 &&
 		r.Minutes == 0 &&
 		r.Seconds == 0 {
-		err = mkerr("ASN.1 DURATION must contain at least one component")
+		err = primitiveErrorf("Duration: must contain at least one component")
 	}
 
 	return err
@@ -919,18 +919,11 @@ func (r *Duration) parseDuration(datePart, timePart string) (err error) {
 	// Helper to parse a numeric value ending with a given suffix.
 	parseNumber := func(str string, suffix byte) (float64, string, error) {
 		idx := stridxb(str, suffix)
-		/*
-			// COVERAGE: unreachable
-			if idx < 0 {
-				return 0, str, mkerrf("expected suffix ", string(suffix), " not found in ", str)
-			}
-		*/
 		numStr := str[:idx]
-		// Replace comma with dot if necessary.
 		numStr = replace(numStr, ",", ".", 1)
 		num, err := pfloat(numStr, 64)
 		if err != nil {
-			return 0, str, mkerrf("error parsing number ", numStr, ": ", err.Error())
+			return 0, str, primitiveErrorf("error parsing number ", numStr, ": ", err)
 		}
 		return num, str[idx+1:], nil
 	}
@@ -1278,11 +1271,11 @@ func NewGeneralizedTime(x any, constraints ...Constraint[Temporal]) (gt Generali
 	switch tv := x.(type) {
 	case string:
 		if len(tv) < 15 {
-			return gt, mkerr("Invalid ASN.1 GENERALIZED TIME")
+			return gt, primitiveErrorf("GeneralizedTime: invalid input")
 		}
 		raw = tv
 	default:
-		return gt, errorBadTypeForConstructor("GENERALIZED TIME", x)
+		return gt, errorBadTypeForConstructor("GeneralizedTime", x)
 	}
 
 	var t time.Time
@@ -1310,7 +1303,7 @@ func genTimeFracDiffFormat(raw, base, diff, format string) (string, error) {
 		format += string(".")
 		for fidx, ch := range base[1:] {
 			if fidx > 6 {
-				err = mkerr(`Fraction exceeds Generalized Time fractional limit`)
+				err = primitiveErrorf(`GeneralizedTime fraction exceeds fractional limit`)
 			} else if '0' <= ch && ch <= '9' {
 				format += `0`
 				continue
@@ -1333,12 +1326,12 @@ func parseCoreGTDateTime(s string) (year, mon, day, hr, min, sec, i int, err err
 	toInt := func(b0, b1 byte) int { return int(b0-'0')*10 + int(b1-'0') }
 
 	if len(s) < 14 {
-		err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+		err = primitiveErrorf("GeneralizedTime: invalid input")
 		return
 	}
 	for k := 0; k < 14; k++ {
 		if !digit(s[k]) {
-			err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+			err = primitiveErrorf("GeneralizedTime: invalid input")
 			return
 		}
 	}
@@ -1365,7 +1358,7 @@ func parseGTFraction(s string, i int) (nsec, next int, err error) {
 	}
 	fd := next - start
 	if fd == 0 || fd > 6 {
-		err = mkerr("Fraction exceeds Generalized Time fractional limit")
+		err = primitiveErrorf("GeneralizedTime: fraction exceeds fractional limit")
 		return
 	}
 	frac := 0
@@ -1383,32 +1376,32 @@ func parseGTTimezone(s string, i int) (loc *time.Location, next int, err error) 
 	digit := func(b byte) bool { return '0' <= b && b <= '9' }
 	next = i
 	if next >= len(s) {
-		err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+		err = errorBadGT
 		return
 	}
 	switch s[next] {
 	case 'Z':
 		if next != len(s)-1 {
-			err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+			err = errorBadGT
 			return
 		}
 		loc = time.UTC
 		next++
 	case '+', '-':
 		if next+5 != len(s) {
-			err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+			err = errorBadGT
 			return
 		}
 		for k := 1; k <= 4; k++ {
 			if !digit(s[next+k]) {
-				err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+				err = errorBadGT
 				return
 			}
 		}
 		toInt := func(b0, b1 byte) int { return int(b0-'0')*10 + int(b1-'0') }
 		hh, mm := toInt(s[next+1], s[next+2]), toInt(s[next+3], s[next+4])
 		if hh > 23 || mm > 59 {
-			err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+			err = errorBadGT
 			return
 		}
 		off := (hh*60 + mm) * 60
@@ -1418,7 +1411,7 @@ func parseGTTimezone(s string, i int) (loc *time.Location, next int, err error) 
 		loc = time.FixedZone("", off)
 		next += 5
 	default:
-		err = mkerr("Invalid ASN.1 GENERALIZED TIME")
+		err = errorBadGT
 	}
 	return
 }
@@ -1433,13 +1426,6 @@ func parseGeneralizedTime(s string) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-
-	/*
-		// COVERAGE: unreachable
-		if i != len(s) {
-			return time.Time{}, mkerr("Invalid ASN.1 GENERALIZED TIME")
-		}
-	*/
 
 	var loc *time.Location
 	var t time.Time
@@ -1640,7 +1626,7 @@ func bcdTemporalRead[T Temporal](c *temporalCodec[T], pkt PDU, tlv TLV, o *Optio
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
@@ -1868,7 +1854,7 @@ func bcdDurationRead[T any](c *durationCodec[T], pkt PDU, tlv TLV, o *Options) e
 				cc := c.cg.phase(c.cphase, CodecConstraintDecoding)
 				if err = cc(out); err == nil {
 					c.val = out
-					pkt.SetOffset(pkt.Offset() + tlv.Length)
+					pkt.AddOffset(tlv.Length)
 				}
 			}
 		}
