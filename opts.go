@@ -34,8 +34,7 @@ type Options struct {
 	Default      any      // Manual default value (not recommended, use RegisterDefaultValue)
 
 	tag, // if non-nil, indicates an alternative tag number.
-	class, // represents the ASN.1 class: universal, application, context-specific, or private.
-	choiceTag *int
+	class *int // represents the ASN.1 class: universal, application, context-specific, or private.
 	depth          int      // recursion depth
 	defaultKeyword string   // the discovered DEFAULT keyword for registered lookup
 	unidentified   []string // for unidentified or superfluous keywords
@@ -102,9 +101,6 @@ func (r Options) String() string {
 	addStringConfigValue(&parts, r.depth > 0, "depth:"+itoa(r.depth))
 	addStringConfigValue(&parts, r.Tag() >= 0, "tag:"+itoa(r.Tag()))
 	addStringConfigValue(&parts, validClass(r.Class()) && r.Class() > 0, lc(ClassNames[r.Class()]))
-	if r.choiceTag != nil {
-		addStringConfigValue(&parts, true, "choice-tag:"+itoa(*r.choiceTag))
-	}
 	addStringConfigValue(&parts, r.Explicit, "explicit")
 	addStringConfigValue(&parts, r.Optional, "optional")
 	addStringConfigValue(&parts, r.Automatic, "automatic")
@@ -130,10 +126,6 @@ func (r Options) String() string {
 	addStringConfigValue(&parts, r.Choices != "", "choices:"+lc(r.Choices))
 
 	return join(parts, ",")
-}
-
-func (r Options) hasRegisteredDefault() bool {
-	return r.Default != nil && r.defaultKeyword != ""
 }
 
 func (r Options) defaultEquals(x any) bool { return deepEq(r.Default, x) }
@@ -190,9 +182,6 @@ func parseOptions(tagStr string) (opts Options, err error) {
 				goto Done
 			}
 			po.SetTag(n)
-			if po.Class() == ClassUniversal {
-				po.SetClass(ClassContextSpecific)
-			}
 
 		case isBoolKeyword(token):
 			po.setBool(token)
@@ -371,11 +360,18 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 SetTag assigns n to the receiver instance. n MUST be greater
 than zero (0).
 
+Note that this method also sets the underlying class to
+[ClassContextSpecific] if, and only if, the current class is
+set to [ClassUniversal].
+
 This is a fluent method.
 */
 func (r *Options) SetTag(n int) *Options {
 	if n >= 0 {
 		r.tag = &n
+		if r.Class() == ClassUniversal {
+			r.class = ptrClassContextSpecific
+		}
 	}
 	return r
 }
@@ -456,3 +452,101 @@ func clearChildOpts(o *Options) (c *Options) {
 var optPool = sync.Pool{New: func() any { return &Options{} }}
 
 func borrowOptions() *Options { return optPool.Get().(*Options) }
+
+var (
+	overrideOptions map[reflect.Type]*Options
+	opMu            sync.RWMutex
+)
+
+/*
+RegisterOverrideOptions associates a type with a dedicated instance of
+*[Options]. Note that the input value 'typ' need not contain any values.
+
+This is used in cases where it is not possible to supply field instructions
+or a top-level *[Options] instance for use upon an instance of a type,
+typically in cases where very complex structures are involved.
+
+See also [UnregisterOverrideOptions] and [OverrideOptions].
+*/
+func RegisterOverrideOptions(typ any, opts *Options) {
+	rtyp := refTypeOf(typ)
+
+	debugEnter(
+		newLItem(rtyp, "override type"),
+		newLItem(opts, "override options"))
+
+	if opts == nil {
+		debugInfo("nil override options registration aborted for " + rtyp.String())
+		return
+	}
+
+	debugTrace("opMu locking")
+	opMu.Lock()
+	defer func() {
+		debugTrace("opMu unlocking")
+		opMu.Unlock()
+		debugExit()
+	}()
+
+	overrideOptions[rtyp] = opts
+}
+
+/*
+UnregisterOverrideOptions deletes the type registration from
+the underlying override registry in a thread safe manner.
+
+See also [RegisterOverrideOptions] and [OverrideOptions].
+*/
+func UnregisterOverrideOptions(typ any) {
+	rtyp := refTypeOf(typ)
+	debugEnter(newLItem(rtyp, "del override type"))
+
+	debugTrace("opMu locking")
+	opMu.Lock()
+	defer func() {
+		debugTrace("opMu unlocking")
+		opMu.Unlock()
+		debugExit()
+	}()
+
+	delete(overrideOptions, rtyp)
+}
+
+/*
+OverrideOptions returns the underlying map[reflect.Type]*[Options]
+instance in which override *[Options] value registrations reside.
+
+As this function does not employ locking, the return instance MUST
+NOT be modified directly, but may be read without issue.
+
+See also [RegisterOverrideOptions] and [UnregisterOverrideOptions].
+*/
+func OverrideOptions() map[reflect.Type]*Options { return overrideOptions }
+
+func lookupOverrideOptions(typ any) (opts *Options, err error) {
+	rtyp := refTypeOf(typ)
+	debugEnter(newLItem(rtyp, "lup override type"))
+
+	debugTrace("opMu locking")
+	opMu.RLock()
+
+	defer func() {
+		debugTrace("opMu unlocking")
+		opMu.RUnlock()
+
+		debugExit(
+			newLItem(opts, "override options"),
+			newLItem(err))
+	}()
+
+	var exists bool
+	if opts, exists = overrideOptions[rtyp]; !exists {
+		err = errorOverrideOptionsNotFound(rtyp)
+	}
+
+	return
+}
+
+func init() {
+	overrideOptions = make(map[reflect.Type]*Options)
+}

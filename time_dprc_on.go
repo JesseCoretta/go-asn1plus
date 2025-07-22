@@ -98,7 +98,7 @@ instead.
 NewUTCTime returns an instance of [UTCTime] alongside an error following an attempt
 to marshal x.
 */
-func NewUTCTime(x any, constraints ...Constraint[Temporal]) (utc UTCTime, err error) {
+func NewUTCTime(x any, constraints ...Constraint) (utc UTCTime, err error) {
 	var (
 		format string = `0601021504` // kept for legacy fallback
 		sec    string = `05`
@@ -130,8 +130,7 @@ func NewUTCTime(x any, constraints ...Constraint[Temporal]) (utc UTCTime, err er
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Temporal] = constraints
-		err = group.Constrain(UTCTime(_utc))
+		err = ConstraintGroup(constraints).Constrain(UTCTime(_utc))
 	}
 
 	if err == nil {
@@ -324,5 +323,6 @@ func fillTemporalHooks[T Temporal](
 
 func init() {
 	RegisterTemporalAlias[UTCTime](TagUTCTime,
-		UTCTimeConstraintPhase, nil, nil, nil, nil)
+		UTCTimeConstraintPhase,
+		nil, nil, nil, nil)
 }

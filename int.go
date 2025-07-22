@@ -34,52 +34,44 @@ var IntegerConstraintPhase = CodecConstraintDecoding
 NewInteger returns an instance of [Integer] supporting any signed
 magnitude.
 
-Input types may be int, int32, int64, uint64, string or *[math/big.Int].
+Input types may be int, int32, int64, uint64, string, []byte or
+*[math/big.Int]. In the case of []byte, the value is expected to
+be the Big Endian representation of the desired integer.
 
-When the input value is NOT a string and when NO constraints are utilized,
-it is safe to shadow the return error.
+When the input value is NOT a string and when NO constraints are
+utilized, it is safe to shadow the return error.
 */
-func NewInteger[T any](v T, constraints ...Constraint[Integer]) (i Integer, err error) {
+func NewInteger[T any](v T, constraints ...Constraint) (i Integer, err error) {
+	if i, err = assertInteger(v); err == nil {
+		if len(constraints) > 0 {
+			err = ConstraintGroup(constraints).Constrain(i)
+		}
+	}
+
+	return
+}
+
+func assertInteger[T any](v T) (i Integer, err error) {
 	switch value := any(v).(type) {
 	case int:
-		i = Integer{native: int64(value)}
-	case int32:
 		i = Integer{native: int64(value)}
 	case int64:
 		i = Integer{native: value}
 	case uint64:
-		// If the value cannot fit in an int64, use big.Int.
-		if value > uint64(math.MaxInt64) {
-			i = Integer{big: true, bigInt: newBigInt(0).SetUint64(value)}
-		} else {
-			i = Integer{native: int64(value)}
-		}
+		i = uint64ToInteger(value)
+	case []byte:
+		i = bEToInteger(value)
 	case *big.Int:
-		if value.IsInt64() {
-			i = Integer{native: value.Int64()}
-		} else {
-			i = Integer{big: true, bigInt: value}
-		}
+		i = bigToInteger(value)
+	case int32:
+		i = Integer{native: int64(value)}
 	case string:
-		// Attempt to parse the string in base 10.
-		if _i, ok := newBigInt(0).SetString(value, 10); !ok {
-			err = primitiveErrorf("INTEGER: invalid string value ", value)
-		} else if _i.IsInt64() {
-			i = Integer{native: _i.Int64()}
-		} else {
-			i = Integer{big: true, bigInt: _i}
-		}
+		i, err = strToInteger(value)
 	case Integer:
 		i = value
 	default:
 		err = errorBadTypeForConstructor("INTEGER", value)
 	}
-
-	if len(constraints) > 0 {
-		var group ConstraintGroup[Integer] = constraints
-		err = group.Constrain(i)
-	}
-
 	return
 }
 
@@ -127,10 +119,19 @@ instance. Note that this method should not be used unless a call of
 func (r Integer) Native() int64 { return r.native }
 
 /*
-Big returns the *[big.Int] form of the receiver instance. Note that
-use of this method constructs an entirely new instance of *[big.Int]
-if the underlying value is only an int64. Thus, this method should
-only usually be needed if a call to [Integer.IsBig] returns true.
+Big returns the *[big.Int] form of the receiver instance.
+
+Note that use of this method constructs an entirely new instance of
+*[big.Int] if the underlying value is an int64.  Thus, this method
+should only usually be needed if a call to [Integer.IsBig] returns
+true. In that case, the preexisting *[big.Int] value is returned, as
+opposed to being generated on the fly.
+
+When [Integer.IsBig] returns false, the return instance of *[big.Int]
+is entirely independent of the receiver and does not replace the
+underlying value. This can be useful, though potentially costly, in
+cases where methods extended by *[big.Int] that are not wrapped in
+this package directly need to be accessed for some reason.
 */
 func (r Integer) Big() (i *big.Int) {
 	if r.big {
@@ -140,6 +141,20 @@ func (r Integer) Big() (i *big.Int) {
 	}
 
 	return
+}
+
+/*
+Bytes returns the receiver instance expressed as Big Endian bytes.
+*/
+func (r Integer) Bytes() []byte {
+	var buf []byte
+	if r.big {
+		buf = r.bigInt.Bytes()
+	} else {
+		buf = int64ToBE(r.native)
+	}
+
+	return buf
 }
 
 /*
@@ -174,29 +189,34 @@ Le returns a bool indicative of r being less than or equal to x.
 */
 func (r Integer) Le(x any) bool { return r.cmpAny(x) <= 0 }
 
-func (r Integer) cmpAny(x any) int {
+func (r Integer) cmpAny(x any) (result int) {
 	switch t := x.(type) {
 	case Integer:
-		return cmpInteger(r, t)
+		result = cmpInteger(r, t)
 
 	case int:
-		return r.cmpInt64(int64(t))
+		result = r.cmpInt64(int64(t))
 
 	case int32:
-		return r.cmpInt64(int64(t))
+		result = r.cmpInt64(int64(t))
 
 	case int64:
-		return r.cmpInt64(t)
+		result = r.cmpInt64(t)
 
 	case uint64:
-		return r.cmpUint64(t)
+		result = r.cmpUint64(t)
+
+	case []byte:
+		result = cmpInteger(r, bEToInteger(t))
 
 	case *big.Int:
-		return r.cmpBig(t)
+		result = r.cmpBig(t)
 
 	default:
 		panic(primitiveErrorf("INTEGER: unsupported type for comparison ", refTypeOf(x)))
 	}
+
+	return
 }
 
 func cmpInteger(a, b Integer) int {
@@ -240,6 +260,97 @@ func (r Integer) cmpBig(b *big.Int) int {
 		return big.NewInt(r.native).Cmp(b)
 	}
 	return r.bigInt.Cmp(b)
+}
+
+func bEToInt64(b []byte) int64 {
+	n := len(b)
+	if n > 8 {
+		panic("bigEndianToInt64: buffer length must be ≤ 8")
+	}
+
+	pad := byte(0x00)
+	if n > 0 && b[0]&0x80 != 0 {
+		pad = 0xFF
+	}
+
+	var u uint64
+	for i := 0; i < 8-n; i++ {
+		u = (u << 8) | uint64(pad)
+	}
+	for _, by := range b {
+		u = (u << 8) | uint64(by)
+	}
+	return int64(u)
+}
+
+func int64ToBE(n int64) []byte {
+	b := make([]byte, 8)
+	u := uint64(n)
+	for i := 7; i >= 0; i-- {
+		b[i] = byte(u & 0xFF)
+		u >>= 8
+	}
+	return b
+}
+
+func bEFitsInt64(b []byte) bool {
+	n := len(b)
+	if n <= 8 {
+		return true
+	}
+	high := b[n-8]
+	var ext byte = 0x00
+	if high&0x80 != 0 {
+		ext = 0xFF
+	}
+	for i := 0; i < n-8; i++ {
+		if b[i] != ext {
+			return false
+		}
+	}
+	return true
+}
+
+func bEToInteger(b []byte) (i Integer) {
+	if i.big = !bEFitsInt64(b); i.big {
+		i.bigInt = newBigInt(0).SetBytes(b)
+	} else {
+		i.native = bEToInt64(b)
+	}
+
+	return
+}
+
+func strToInteger(num string) (i Integer, err error) {
+	if _i, ok := newBigInt(0).SetString(num, 10); !ok {
+		err = primitiveErrorf("INTEGER: invalid string value ", num)
+	} else if _i.IsInt64() {
+		i = Integer{native: _i.Int64()}
+	} else {
+		i = Integer{big: true, bigInt: _i}
+	}
+
+	return
+}
+
+func bigToInteger(num *big.Int) (i Integer) {
+	if i.big = !num.IsInt64(); i.big {
+		i.bigInt = num
+	} else {
+		i.native = num.Int64()
+	}
+
+	return
+}
+
+func uint64ToInteger(num uint64) (i Integer) {
+	if i.big = num > uint64(math.MaxInt64); i.big {
+		i.bigInt = newBigInt(0).SetUint64(num)
+	} else {
+		i.native = int64(num)
+	}
+
+	return
 }
 
 func decodeIntegerContent(encoded []byte) (val *big.Int) {
@@ -362,7 +473,7 @@ type integerCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[Integer]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -482,10 +593,10 @@ func RegisterIntegerAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[Integer],
-	user ...Constraint[Integer],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[Integer]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

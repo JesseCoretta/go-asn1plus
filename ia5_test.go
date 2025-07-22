@@ -104,6 +104,11 @@ func TestIA5String_codecov(t *testing.T) {
 	_ = ia5.String()
 	NewIA5String(ia5)
 
+	IA5Spec(``)
+	IA5Spec(`test`)
+	IA5Spec([]byte(`test`))
+	IA5Spec(struct{}{})
+
 	for _, bogus := range []any{
 		"",    // Zero len
 		123,   // Not a string, []byte or ASN.1 Primitive
@@ -118,28 +123,28 @@ func TestIA5String_codecov(t *testing.T) {
 
 func ExampleIA5String_withConstraints() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o IA5String) IA5String { return o },
-		func(o IA5String) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(x any) (err error) {
+		o, _ := x.(IA5String)
+		for i := 0; i < len(o); i++ {
+			if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o IA5String) IA5String { return o },
-		func(o IA5String) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(IA5String)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// First try trips on a digit violation, so caseConstraint is never reached.
 	_, err := NewIA5String(`A0B876EFFFF0`, digitConstraint, caseConstraint)

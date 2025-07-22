@@ -7,21 +7,18 @@ import (
 	"time"
 )
 
-// wrapTemporalStringCtor adapts a temporal constructor that wants
-// (time.Time, ...Constraint[Temporal]) so it can be fed with a string.
 func wrapTemporalStringCtor[T Temporal](
-	raw func(any, ...Constraint[Temporal]) (T, error),
+	raw func(any, ...Constraint) (T, error),
 	parse parseFn,
-) func(string, ...Constraint[T]) (T, error) {
+) func(string, ...Constraint) (T, error) {
 
-	return func(s string, cs ...Constraint[T]) (t T, err error) {
+	return func(s string, cs ...Constraint) (t T, err error) {
 		var tm time.Time
 		t = *new(T)
 		if tm, err = parse(s); err == nil {
-			tc := make([]Constraint[Temporal], len(cs))
+			tc := make(ConstraintGroup, len(cs))
 			for i, c := range cs {
-				cc := c
-				tc[i] = func(x Temporal) error { return cc(x.(T)) }
+				tc[i] = func(x any) error { return c(x) }
 			}
 			t, err = raw(tm, tc...)
 		}
@@ -30,14 +27,13 @@ func wrapTemporalStringCtor[T Temporal](
 }
 
 func wrapTruthyCtor[T Truthy](
-	raw func(any, ...Constraint[Truthy]) (T, error),
-) func(bool, ...Constraint[T]) (T, error) {
-	return func(b bool, cs ...Constraint[T]) (t T, err error) {
-		tc := make([]Constraint[Truthy], len(cs))
+	raw func(any, ...Constraint) (T, error),
+) func(bool, ...Constraint) (T, error) {
+	return func(b bool, cs ...Constraint) (t T, err error) {
+		tc := make(ConstraintGroup, len(cs))
 		for i, c := range cs {
-			cc := c
-			tc[i] = func(x Truthy) error {
-				return cc(x.(T))
+			tc[i] = func(x any) error {
+				return c(x)
 			}
 		}
 		return raw(b, tc...)
@@ -47,9 +43,9 @@ func wrapTruthyCtor[T Truthy](
 func wrapRealCtor[GoT any](
 	base int,
 	toComponents func(GoT, int) (mant any, exp int, err error),
-) func(GoT, ...Constraint[Real]) (Real, error) {
+) func(GoT, ...Constraint) (Real, error) {
 
-	return func(v GoT, cs ...Constraint[Real]) (Real, error) {
+	return func(v GoT, cs ...Constraint) (Real, error) {
 		m, e, err := toComponents(v, base)
 		var r Real
 		if err == nil {
@@ -66,8 +62,8 @@ slightly different (but functionally equivalent) input signature.
 func wrapOIDCtor[S any](
 	raw func(...any) (ObjectIdentifier, error),
 	convert func(S) any,
-) func(S, ...Constraint[ObjectIdentifier]) (ObjectIdentifier, error) {
-	return func(s S, cs ...Constraint[ObjectIdentifier]) (ObjectIdentifier, error) {
+) func(S, ...Constraint) (ObjectIdentifier, error) {
+	return func(s S, cs ...Constraint) (ObjectIdentifier, error) {
 		args := make([]any, 1+len(cs))
 		args[0] = convert(s)
 		for i, c := range cs {
@@ -84,8 +80,8 @@ constructor's slightly different (but functionally equivalent) input signature.
 func wrapRelOIDCtor[S any](
 	raw func(...any) (RelativeOID, error),
 	convert func(S) any,
-) func(S, ...Constraint[RelativeOID]) (RelativeOID, error) {
-	return func(s S, cs ...Constraint[RelativeOID]) (RelativeOID, error) {
+) func(S, ...Constraint) (RelativeOID, error) {
+	return func(s S, cs ...Constraint) (RelativeOID, error) {
 		args := make([]any, 1+len(cs))
 		args[0] = convert(s)
 		for i, c := range cs {
@@ -100,14 +96,13 @@ wrapTemporalCtor is a special adapter "converter" to help deal with the Temporal
 constraint signature for Temporal types.
 */
 func wrapTemporalCtor[T any](
-	raw func(any, ...Constraint[Temporal]) (T, error),
-) func(time.Time, ...Constraint[T]) (T, error) {
+	raw func(any, ...Constraint) (T, error),
+) func(time.Time, ...Constraint) (T, error) {
 
-	return func(t time.Time, cs ...Constraint[T]) (T, error) {
-		tc := make([]Constraint[Temporal], len(cs))
+	return func(t time.Time, cs ...Constraint) (T, error) {
+		tc := make(ConstraintGroup, len(cs))
 		for i, c := range cs {
-			cc := c
-			tc[i] = func(x Temporal) error { return cc(x.(T)) }
+			tc[i] = func(x any) error { return c(x) }
 		}
 		return raw(t, tc...)
 	}
@@ -115,7 +110,7 @@ func wrapTemporalCtor[T any](
 
 func registerMiscAdapters() {
 	RegisterAdapter[Duration, string](
-		func(s string, cs ...Constraint[Duration]) (Duration, error) {
+		func(s string, cs ...Constraint) (Duration, error) {
 			return NewDuration(s, cs...)
 		},
 		func(p *Duration) string { return p.String() },
@@ -123,7 +118,7 @@ func registerMiscAdapters() {
 	)
 
 	RegisterAdapter[Duration, time.Duration](
-		func(td time.Duration, cs ...Constraint[Duration]) (Duration, error) {
+		func(td time.Duration, cs ...Constraint) (Duration, error) {
 			return NewDuration(td, cs...)
 		},
 		func(p *Duration) time.Duration { return p.Duration() },
@@ -131,7 +126,7 @@ func registerMiscAdapters() {
 	)
 
 	RegisterAdapter[Duration, int64](
-		func(td int64, cs ...Constraint[Duration]) (Duration, error) {
+		func(td int64, cs ...Constraint) (Duration, error) {
 			return NewDuration(time.Duration(td), cs...)
 		},
 		func(p *Duration) int64 { return int64(p.Duration()) },
@@ -155,7 +150,7 @@ func registerMiscAdapters() {
 	)
 
 	RegisterAdapter[ObjectDescriptor, string](
-		func(s string, cs ...Constraint[ObjectDescriptor]) (ObjectDescriptor, error) {
+		func(s string, cs ...Constraint) (ObjectDescriptor, error) {
 			return NewObjectDescriptor(s, cs...)
 		},
 		func(p *ObjectDescriptor) string { return string(*p) },
@@ -233,7 +228,7 @@ func registerTemporalAliasAdapters() {
 
 func registerNumericalAdapters() {
 	RegisterAdapter[Integer, int](
-		func(n int, cs ...Constraint[Integer]) (Integer, error) {
+		func(n int, cs ...Constraint) (Integer, error) {
 			return NewInteger(int64(n), cs...)
 		},
 		func(p *Integer) int {
@@ -246,7 +241,7 @@ func registerNumericalAdapters() {
 	)
 
 	RegisterAdapter[Integer, *big.Int](
-		func(bi *big.Int, cs ...Constraint[Integer]) (Integer, error) {
+		func(bi *big.Int, cs ...Constraint) (Integer, error) {
 			return NewInteger(bi, cs...)
 		},
 		func(p *Integer) *big.Int { return p.Big() },
@@ -254,7 +249,7 @@ func registerNumericalAdapters() {
 	)
 
 	RegisterAdapter[Enumerated, int](
-		func(n int, cs ...Constraint[Enumerated]) (Enumerated, error) {
+		func(n int, cs ...Constraint) (Enumerated, error) {
 			return NewEnumerated(n, cs...)
 		},
 		func(p *Enumerated) int { return int(*p) },
@@ -313,7 +308,7 @@ func registerNumericalAdapters() {
 func registerStringAdapters() {
 	// string <-> UTF8STring [string default!]
 	RegisterAdapter[UTF8String, string](
-		func(s string, cs ...Constraint[UTF8String]) (UTF8String, error) {
+		func(s string, cs ...Constraint) (UTF8String, error) {
 			return NewUTF8String(s, cs...)
 		},
 		func(p *UTF8String) string { return string(*p) },
@@ -321,7 +316,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[NumericString, string](
-		func(s string, cs ...Constraint[NumericString]) (NumericString, error) {
+		func(s string, cs ...Constraint) (NumericString, error) {
 			return NewNumericString(s, cs...)
 		},
 		func(p *NumericString) string { return string(*p) },
@@ -329,7 +324,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[PrintableString, string](
-		func(s string, cs ...Constraint[PrintableString]) (PrintableString, error) {
+		func(s string, cs ...Constraint) (PrintableString, error) {
 			return NewPrintableString(s, cs...)
 		},
 		func(p *PrintableString) string { return string(*p) },
@@ -337,7 +332,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[VisibleString, string](
-		func(s string, cs ...Constraint[VisibleString]) (VisibleString, error) {
+		func(s string, cs ...Constraint) (VisibleString, error) {
 			return NewVisibleString(s, cs...)
 		},
 		func(p *VisibleString) string { return string(*p) },
@@ -345,7 +340,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[OctetString, string](
-		func(s string, cs ...Constraint[OctetString]) (OctetString, error) {
+		func(s string, cs ...Constraint) (OctetString, error) {
 			return NewOctetString(s, cs...)
 		},
 		func(p *OctetString) string { return string(*p) },
@@ -353,7 +348,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[IA5String, string](
-		func(s string, cs ...Constraint[IA5String]) (IA5String, error) {
+		func(s string, cs ...Constraint) (IA5String, error) {
 			return NewIA5String(s, cs...)
 		},
 		func(p *IA5String) string { return string(*p) },
@@ -361,7 +356,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[BMPString, string](
-		func(s string, cs ...Constraint[BMPString]) (BMPString, error) {
+		func(s string, cs ...Constraint) (BMPString, error) {
 			return NewBMPString(s, cs...)
 		},
 		func(p *BMPString) string { return string(*p) },
@@ -369,7 +364,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[UniversalString, string](
-		func(s string, cs ...Constraint[UniversalString]) (UniversalString, error) {
+		func(s string, cs ...Constraint) (UniversalString, error) {
 			return NewUniversalString(s, cs...)
 		},
 		func(p *UniversalString) string { return string(*p) },
@@ -377,7 +372,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[OctetString, []byte](
-		func(s []byte, cs ...Constraint[OctetString]) (OctetString, error) {
+		func(s []byte, cs ...Constraint) (OctetString, error) {
 			return NewOctetString(s, cs...)
 		},
 		func(p *OctetString) []byte { return []byte(*p) },
@@ -385,7 +380,7 @@ func registerStringAdapters() {
 	)
 
 	RegisterAdapter[BitString, []byte](
-		func(s []byte, cs ...Constraint[BitString]) (BitString, error) {
+		func(s []byte, cs ...Constraint) (BitString, error) {
 			return NewBitString(s, cs...)
 		},
 		func(p *BitString) []byte { return []byte(p.Bytes) },

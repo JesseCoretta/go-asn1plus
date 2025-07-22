@@ -47,6 +47,11 @@ func ExampleBMPString_roundTripBER() {
 
 func TestBMPString_codecov(t *testing.T) {
 
+	BMPSpec(``)
+	BMPSpec(`test`)
+	BMPSpec([]byte(`test`))
+	BMPSpec(struct{}{})
+
 	results := []string{
 		"Σ",
 		"HELLO",
@@ -207,28 +212,28 @@ func TestBMPString_UTF16Encoding(t *testing.T) {
 
 func ExampleBMPString_withConstraints() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o BMPString) BMPString { return o },
-		func(o BMPString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(o any) (err error) {
+		str, _ := o.(BMPString)
+		for i := 0; i < len(str); i++ {
+			if '0' <= rune(str[i]) && rune(str[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o BMPString) BMPString { return o },
-		func(o BMPString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(o any) (err error) {
+		str, _ := o.(BMPString)
+		for i := 0; i < len(str); i++ {
+			if 'a' <= rune(str[i]) && rune(str[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// First try trips on a digit violation, so caseConstraint is never reached.
 	_, err := NewBMPString(`A0B876EFFFF0`, digitConstraint, caseConstraint)

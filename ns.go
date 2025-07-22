@@ -55,7 +55,7 @@ func (r NumericString) IsZero() bool { return len(r) == 0 }
 NewNumericString returns an instance of [NumericString] alongside
 an error following an attempt to marshal x.
 */
-func NewNumericString(x any, constraints ...Constraint[NumericString]) (ns NumericString, err error) {
+func NewNumericString(x any, constraints ...Constraint) (ns NumericString, err error) {
 	var raw string
 	if raw, err = convertToNumericString(x); err == nil {
 		// Validate that raw contains only digits and space.
@@ -63,7 +63,7 @@ func NewNumericString(x any, constraints ...Constraint[NumericString]) (ns Numer
 		_ns := NumericString(raw)
 		err = NumericSpec(_ns)
 		if len(constraints) > 0 && err == nil {
-			var group ConstraintGroup[NumericString] = constraints
+			var group ConstraintGroup = constraints
 			err = group.Constrain(_ns)
 		}
 
@@ -77,7 +77,7 @@ func NewNumericString(x any, constraints ...Constraint[NumericString]) (ns Numer
 /*
 NumericSpec implements the formal [Constraint] specification for [NumericString].
 */
-var NumericSpec Constraint[NumericString]
+var NumericSpec Constraint
 
 func convertToNumericString(x any) (str string, err error) {
 	// Do an explicit check for string first.
@@ -119,10 +119,18 @@ func convertToNumericString(x any) (str string, err error) {
 }
 
 func init() {
-	RegisterTextAlias[NumericString](TagNumericString,
-		NumericStringConstraintPhase, nil, nil, nil, NumericSpec)
+	NumericSpec = func(ns any) (err error) {
+		var o NumericString
+		switch tv := ns.(type) {
+		case string:
+			o = NumericString(tv)
+		case Primitive:
+			o = NumericString(tv.String())
+		default:
+			err = errorPrimitiveAssertionFailed(o)
+			return
+		}
 
-	NumericSpec = func(o NumericString) (err error) {
 		for _, c := range []rune(o.String()) {
 			if !(c == ' ' || (c >= '0' && c <= '9')) {
 				err = primitiveErrorf("NumericString: illegal character ", string(c))
@@ -132,4 +140,8 @@ func init() {
 
 		return
 	}
+
+	RegisterTextAlias[NumericString](TagNumericString,
+		NumericStringConstraintPhase,
+		nil, nil, nil, NumericSpec)
 }

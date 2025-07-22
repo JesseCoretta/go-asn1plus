@@ -111,9 +111,17 @@ func (r optionsErr) Error() string    { return `OPTIONS ERROR: ` + r.e.Error() }
 func (r primitiveErr) Error() string  { return `PRIMITIVE ERROR: ` + r.e.Error() }
 func (r tLVErr) Error() string        { return `TLV ERROR: ` + r.e.Error() }
 
+func errorPrimitiveAssertionFailed(x any) error {
+	return primitiveErrorf("Assertion failed for ", refTypeOf(x))
+}
+
+func errorOverrideOptionsNotFound(rtyp reflect.Type) error {
+	return optionsErrorf("Unknown override options key ", rtyp)
+}
+
 func errorNamedDefaultNotFound(name string) (err error) {
-	if len(name) == 0 {
-		name = "unknown default"
+	if len(name) > 0 {
+		name = ":" + name
 	}
 	err = mkerrf(errorDefaultNotFound.Error(), ": ", name)
 	return
@@ -130,10 +138,6 @@ func errorBadTypeForConstructor(asn1Type string, inputType any) (err error) {
 	}
 	return primitiveErrorf("Invalid input type for ASN.1 ",
 		asn1Type, " constructor: ", inName)
-}
-
-func errorNoChoiceMatched(name string) (err error) {
-	return choiceErrorf(errorNoChoiceForType.Error() + " " + name)
 }
 
 func errorNullLengthNonZero(length int) (err error) {
@@ -196,11 +200,17 @@ func errorASN1ConstructedTagClass(wantTLV, gotTLV TLV) error {
 var errCache sync.Map
 
 func mkerrf(parts ...any) error {
+	if len(parts) == 0 {
+		return nil
+	}
+
 	if len(parts) == 1 {
 		if s, ok := parts[0].(string); ok {
 			if v, hit := errCache.Load(s); hit {
 				return v.(error)
 			}
+		} else if parts[0] == nil {
+			return nil
 		}
 	}
 

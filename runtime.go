@@ -97,12 +97,23 @@ func marshalCheckBadOptions(rule EncodingRule, o *Options) (err error) {
 }
 
 func marshalValue(v reflect.Value, pkt PDU, opts *Options) (err error) {
-	// 0) Guard against zero reflect.Value
+	debugEnter(v, pkt, opts)
+	defer func() {
+		debugExit(newLItem(err))
+	}()
+
+	// Guard against zero reflect.Value
 	if !v.IsValid() {
 		return mkerr("marshalValue: invalid or nil value")
 	}
 
-	// 1) Handle pointers first
+	oopts, _ := lookupOverrideOptions(v.Interface())
+	if oopts != nil {
+		opts = oopts
+		debugEvent(EventTrace, newLItem(opts, "override options"))
+	}
+
+	// Handle pointers first
 	if v.Kind() == reflect.Ptr {
 		return marshalValue(v.Elem(), pkt, opts)
 	}
@@ -112,8 +123,7 @@ func marshalValue(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		if !v.IsNil() && v.CanInterface() {
 			if _, ok := v.Interface().(Choice); ok {
 				// ensure opts isn’t nil, so marshalChoiceWrapper never sees nil opts
-				opts = deferImplicit(opts)
-				return marshalChoiceWrapper(nil, pkt, opts, v)
+				return marshalChoiceWrapper(nil, pkt, deferImplicit(opts), v)
 			}
 		}
 		// not a Choice interface, so peel and recurse
@@ -128,24 +138,19 @@ func marshalValue(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		}
 	}
 
-	// 3.b) wrap any concrete type registered in any interface-family
+	// Wrap any concrete type registered in any interface-family
 	var handled bool
 
 	if handled, err = marshalInterfaceChoice(v, pkt, opts); handled {
 		return
 	}
 
-	debugEnter(v, pkt, opts)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
-
 	switch {
 	case v.Kind() == reflect.Invalid:
-		err = mkerr("Nil value passed to Marshal")
+		err = codecErrorf("Nil value passed to Marshal")
 		return
-	case v.Kind() == reflect.Ptr && v.IsNil():
-		err = mkerr("Marshal: input must be non-nil")
+	case ptrIsNil(v):
+		err = codecErrorf("Marshal: input must be non-nil")
 		return
 	}
 	v = derefValuePtr(v)
@@ -218,6 +223,7 @@ func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bo
 			case reflect.Struct:
 				err = marshalSequence(v, tmp, opts)
 			default:
+				opts.Choices = ""
 				err = marshalValue(v, tmp, opts)
 			}
 
@@ -304,14 +310,10 @@ func wrapMarshalExplicit(pkt PDU, prim codecRW, opts *Options) (err error) {
 
 	typ := pkt.Type()
 	tmp := typ.New()
-	innerOpts := *opts
-	innerOpts.Explicit = false
-	innerOpts.tag = nil
-	innerOpts.class = nil
+	innerOpts := clearChildOpts(opts)
 
-	if _, err = prim.write(tmp, &innerOpts); err == nil {
+	if _, err = prim.write(tmp, innerOpts); err == nil {
 		content := tmp.Data()
-
 		id := emitHeader(opts.Class(), opts.Tag(), true)
 		debugPrim(newLItem(id, "EXPLICIT tag"))
 		pkt.Append(id)
@@ -378,7 +380,12 @@ This function is called by the top-level Unmarshal function, as well as certain 
 level functions via recursion.
 */
 func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
-	if v.Kind() == reflect.Interface && opts.Choices != "" {
+	oopts, _ := lookupOverrideOptions(v.Interface())
+	if oopts != nil {
+		opts = oopts
+	}
+
+	if isInterfaceChoice(v, opts) {
 		err = unmarshalChoice(v, pkt, opts)
 		return
 	}
@@ -423,9 +430,9 @@ func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
 		goVal := refValueOf(ad.toGo(codec))
 		if !goVal.Type().AssignableTo(v.Type()) {
 			err = mkerrf("type mismatch decoding ", kw)
-			return
+		} else {
+			err = refSetValue(v, goVal)
 		}
-		v.Set(goVal)
 		return
 	}
 
@@ -475,11 +482,12 @@ func unmarshalChoice(v reflect.Value, pkt PDU, opts *Options) error {
 	// ALWAYS wrap back into the Choice interface
 	choiceType := refTypeOf((*Choice)(nil)).Elem()
 	if v.Type() == choiceType {
-		v.Set(refValueOf(NewChoice(inner.Interface(), tag)))
+		ch := refValueOf(NewChoice(inner.Interface(), tag))
+		err = refSetValue(v, ch)
 	} else {
-		v.Set(refValueOf(inner.Interface()))
+		err = refSetValue(v, inner)
 	}
-	return nil
+	return err
 }
 
 func unmarshalSequenceBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
@@ -513,9 +521,12 @@ func unmarshalSequenceBranch(v reflect.Value, pkt PDU, opts *Options) (err error
 		// create a zero‐value element
 		elem := refNew(elemType).Elem()
 		if err = unmarshalValue(sub, elem, &elemOpts); err != nil {
-			return mkerrf("unmarshalSequenceBranch: element decode failed: ", err.Error())
+			err = mkerrf("unmarshalSequenceBranch: element decode failed: ", err.Error())
+			return
 		}
-		v.Set(reflect.Append(v, elem))
+		if err = refSetValue(v, reflect.Append(v, elem)); err != nil {
+			return
+		}
 	}
 
 	return
@@ -547,6 +558,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		if outer, err = pkt.TLV(); err != nil {
 			return
 		}
+		pkt.AddOffset(outer.Length)
 		sub := typ.New(outer.Value...)
 		sub.SetOffset(0)
 
@@ -569,7 +581,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 			// decode into the concrete type
 			innerVal := refNew(childType).Elem()
-			if err = unmarshalValue(childPK, innerVal, childOpts); e != nil {
+			if err = unmarshalValue(childPK, innerVal, childOpts); err != nil {
 				return
 			}
 
@@ -577,7 +589,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			result = reflect.Append(result, innerVal.Convert(elemType))
 		}
 
-		v.Set(result)
+		err = refSetValue(v, result)
 		return
 	}
 
@@ -615,7 +627,7 @@ func unmarshalPrimitive(pkt PDU, v reflect.Value, opts *Options) (err error) {
 			err = c.read(pkt, tlv, opts)
 		} else if bx, ok := createCodecForPrimitive(v.Interface()); ok { // Path 2: build codec
 			if err = bx.read(pkt, tlv, opts); err == nil {
-				v.Set(refValueOf(bx.getVal()))
+				err = refSetValue(v, refValueOf(bx.getVal()))
 			}
 		} else {
 			err = mkerr("no codec for primitive")

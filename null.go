@@ -49,7 +49,7 @@ type nullCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -145,10 +145,10 @@ func RegisterNullAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

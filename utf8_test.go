@@ -48,18 +48,6 @@ func ExampleUTF8String_bER() {
 
 }
 
-func mustContainNoDigits[T ~string]() Constraint[T] {
-	return func(val T) (err error) {
-		for _, char := range []rune(val) {
-			if '0' <= char && char <= '9' {
-				err = mkerr("Constraint violation: invalid ASN.1 UTF-8 codepoints found")
-				break
-			}
-		}
-		return
-	}
-}
-
 /*
 This example demonstrates the parsing of a UTF-8 STRING with a
 constraining validator function employed.
@@ -71,46 +59,30 @@ to UTF-8 alone.
 
 The example constraint in this function simply rejects strings if
 they contain any ASCII digits (0..9).
-
-For the purposes of this example, the user should assume the following
-function exists:
-
-	func mustContainNoDigits[T ~string]() Constraint[T] {
-	    return func(val T) (err error) {
-	        for _, char := range []rune(val) {
-	                if '0' <= char && char <= '9' {
-	                        err = mkerr("Constraint violation: invalid ASN.1 UTF-8 codepoints found")
-	                        break
-	                }
-	        }
-	        return
-	    }
-	}
 */
 func ExampleUTF8String_withConstraint() {
-	numericalConstraint := LiftConstraint(func(o UTF8String) string {
-		return string(o)
-	}, mustContainNoDigits[string]())
-
-	_, err := NewUTF8String(`this is a UTF-8 string`, numericalConstraint)
+	_, err := NewUTF8String(`this is a UTF-8 string`, func(val any) (err error) {
+		str, _ := val.(UTF8String)
+		for _, char := range []rune(str) {
+			if '0' <= char && char <= '9' {
+				err = mkerr("Constraint violation: invalid ASN.1 UTF-8 codepoints found")
+				break
+			}
+		}
+		return
+	})
 	fmt.Println(err)
 	// Output: Constraint violation: invalid ASN.1 UTF-8 codepoints found
 }
 
 func TestNewUTF8String_constraint(t *testing.T) {
-	// Step 1: Define the base validator as an anonymous function with concrete type string.
-	baseValidator := func(s string) error {
-		if !(utf8.ValidString(s) && !strings.Contains(s, "@")) {
+	validator := func(x any) error {
+		u, _ := x.(UTF8String)
+		if !(utf8.ValidString(u.String()) && !strings.Contains(u.String(), "@")) {
 			return mkerr("UTF-8 constraint violation")
 		}
 		return nil
 	}
-
-	// Step 2: Lift the base validator from Constraint[string] to Constraint[UTF8String].
-	// Assuming UTF8String is defined as a type based on []byte or string.
-	validator := LiftConstraint(func(u UTF8String) string {
-		return string(u)
-	}, baseValidator)
 
 	validInput := "hello world"
 	u8, err := NewUTF8String(validInput, validator)
@@ -122,8 +94,7 @@ func TestNewUTF8String_constraint(t *testing.T) {
 	}
 
 	invalidInput := "hello@world"
-	_, err = NewUTF8String(invalidInput, validator)
-	if err == nil {
+	if _, err = NewUTF8String(invalidInput, validator); err == nil {
 		t.Errorf("Expected error for UTF8String input %q with '@' via custom validator, got nil", invalidInput)
 	}
 }
@@ -134,6 +105,10 @@ func TestUTF8String_codecov(t *testing.T) {
 	u.IsZero()
 	u.Tag()
 	u.Len()
+
+	UTF8Spec(`test`)
+	UTF8Spec([]byte(`test`))
+	UTF8Spec(struct{}{})
 
 	for _, valid := range []struct {
 		value  any

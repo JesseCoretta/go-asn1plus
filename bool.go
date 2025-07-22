@@ -69,7 +69,7 @@ func (r Boolean) IsPrimitive() bool { return true }
 NewBoolean returns an instance of [Boolean] alongside an error following
 an attempt to marshal x.
 */
-func NewBoolean(x any, constraints ...Constraint[Truthy]) (b Boolean, err error) {
+func NewBoolean(x any, constraints ...Constraint) (b Boolean, err error) {
 	switch tv := x.(type) {
 	case Truthy:
 		b = Boolean(tv.Bool())
@@ -94,7 +94,7 @@ func NewBoolean(x any, constraints ...Constraint[Truthy]) (b Boolean, err error)
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Truthy] = constraints
+		var group ConstraintGroup = constraints
 		err = group.Constrain(Boolean(b == true))
 	}
 
@@ -105,7 +105,7 @@ type booleanCodec[T Truthy] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[Truthy]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -216,10 +216,10 @@ func RegisterBooleanAlias[T Truthy](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[Truthy],
-	user ...Constraint[Truthy],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[Truthy]{}, user...)
+	all := ConstraintGroup(user)
 
 	var verList []DecodeVerifier
 	if verify != nil {

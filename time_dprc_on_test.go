@@ -9,14 +9,14 @@ import (
 )
 
 func ExampleUTCTime_withConstraint() {
-	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
-		func(o Temporal) (err error) {
-			deadline, _ := NewUTCTime(`6810310904Z`)
-			if o.Cast().After(deadline.Cast()) {
-				err = fmt.Errorf("Constraint violation: you're late!")
-			}
-			return
-		})
+	deadlineConstraint := func(x any) (err error) {
+		o, _ := x.(Temporal)
+		deadline, _ := NewUTCTime(`6810310904Z`)
+		if o.Cast().After(deadline.Cast()) {
+			err = fmt.Errorf("Constraint violation: you're late!")
+		}
+		return
+	}
 
 	_, err := NewUTCTime(`9104051614Z`, deadlineConstraint)
 	fmt.Println(err)

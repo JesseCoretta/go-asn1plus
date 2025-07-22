@@ -30,7 +30,7 @@ var BitStringConstraintPhase = CodecConstraintDecoding
 NewBitString returns an instance of [BitString] alongside an error
 following an attempt to parse x.
 */
-func NewBitString(x any, constraints ...Constraint[BitString]) (bs BitString, err error) {
+func NewBitString(x any, constraints ...Constraint) (bs BitString, err error) {
 	var raw []byte
 	if raw, err = assertBitString(x); err != nil {
 		return
@@ -53,7 +53,7 @@ func NewBitString(x any, constraints ...Constraint[BitString]) (bs BitString, er
 
 	_bs := BitString{Bytes: bytesOut, BitLength: bitLen}
 	if len(constraints) > 0 && err == nil {
-		err = (ConstraintGroup[BitString](constraints)).Constrain(_bs)
+		err = ConstraintGroup(constraints).Constrain(_bs)
 	}
 
 	if err == nil {
@@ -447,7 +447,7 @@ type bitStringCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -607,10 +607,10 @@ func RegisterBitStringAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

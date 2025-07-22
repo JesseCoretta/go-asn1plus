@@ -12,91 +12,103 @@ import "reflect"
 marshalSequence returns an error following an
 attempt to marshal sequence (struct) v into pkt.
 */
-func marshalSequence(v reflect.Value, pkt PDU, globalOpts *Options) (err error) {
-	if isSet(v.Interface(), globalOpts) {
-		err = marshalSet(v, pkt, globalOpts)
+func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	if isSet(v.Interface(), opts) {
+		err = marshalSet(v, pkt, opts)
 		return
 	}
 
-	seqTag := getSequenceTag(globalOpts)
-	auto := globalOpts != nil && globalOpts.Automatic
+	seqTag := getSequenceTag(opts) // use opts.Tag OR fallback to 16
+	auto := opts != nil && opts.Automatic
 	sub := pkt.Type().New()
 
 	typ := v.Type()
 
 	for i := 0; i < v.NumField() && err == nil; i++ {
-		field := typ.Field(i)
-		if field.PkgPath == "" {
-
-			var fieldOpts *Options
-			if fieldOpts, err = extractOptions(field, i, auto); err != nil {
-				return
-			}
-			fieldOpts.copyDepth(globalOpts)
-
-			fv := v.Field(i)
-			if fieldOpts.ComponentsOf {
-				if !field.Anonymous {
-					err = errorComponentsNotAnonymous
+		if field := typ.Field(i); field.PkgPath == "" {
+			var fOpts *Options
+			if fOpts, err = extractOptions(field, i, auto); err == nil {
+				if fOpts.ComponentsOf {
+					err = marshalSequenceComponentsOf(field, v.Field(i), sub, fOpts, auto)
 				} else {
-					err = marshalSequenceComponentsOf(fv, sub, fieldOpts, globalOpts, auto)
-				}
-				continue
-			}
-
-			if fieldOpts.hasRegisteredDefault() && fieldOpts.defaultEquals(fv.Interface()) {
-				continue
-			}
-
-			if err = checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional); err == nil {
-				err = applyFieldConstraints(fv.Interface(), fieldOpts.Constraints, '^')
-				if err == nil {
-					if isChoice(fv, fieldOpts) {
-						err = marshalChoiceWrapper(fv, sub, fieldOpts, fv)
-					} else {
-						fieldOpts.incDepth()
-						err = marshalValue(fv, sub, fieldOpts)
-					}
+					err = marshalSequenceField(field.Name, v, v.Field(i), sub, fOpts)
 				}
 			}
 		}
 	}
 
 	if err == nil {
-		err = marshalSequenceWrap(sub, pkt, globalOpts, seqTag)
+		err = marshalSequenceWrap(sub, pkt, opts, seqTag)
 	}
 
 	return
 }
 
-func marshalSequenceComponentsOf(fv reflect.Value, sub PDU, fOpts, gOpts *Options, auto bool) (err error) {
-	et := fv.Type()
-	for j := 0; j < et.NumField() && err == nil; j++ {
-		sf := et.Field(j)
-		if sf.PkgPath != "" {
-			continue
-		}
-		var sfOpts *Options
-		if sfOpts, err = extractOptions(sf, j, auto); err == nil {
-			sfOpts.copyDepth(fOpts)
-			sfv := fv.Field(j)
-			if sfOpts.hasRegisteredDefault() && sfOpts.defaultEquals(sfv.Interface()) {
-				continue
-			}
-			if err = checkSequenceFieldCriticality(sf.Name, sfv, sfOpts.Optional); err == nil {
-				err = applyFieldConstraints(sfv.Interface(), sfOpts.Constraints, '^')
-				if err == nil {
-					if isChoice(sfv, sfOpts) {
-						err = marshalChoiceWrapper(sfv, sub, sfOpts, sfv)
-					} else {
-						sfOpts.incDepth()
-						err = marshalValue(sfv, sub, sfOpts)
-					}
-				}
+func marshalSequenceField(name string, v, fv reflect.Value, pkt PDU, opts *Options) (err error) {
+	if opts.defaultEquals(fv.Interface()) {
+		// Value matches the known default, so return early.
+		return
+	}
+
+	if (opts != nil && opts.OmitEmpty) && fv.IsZero() {
+		// Value is zero and omitempty was declared.
+		return
+	}
+
+	// Check optional vs. missing value state
+	if err = checkSequenceFieldCriticality(name, fv, opts.Optional); err == nil {
+		// Apply any constraints (if we're supposed to)
+		if err = applyFieldConstraints(fv.Interface(), opts.Constraints, '^'); err == nil {
+			var handled bool
+			// If field is some kind of Choice, handle it.
+			handled, err = marshalSequenceFieldChoice(v, fv, pkt, opts)
+			if !handled {
+				// ... otherwise marshal value as usual.
+				opts.incDepth()
+				err = marshalValue(fv, pkt, opts)
 			}
 		}
 	}
 
+	return
+}
+
+func marshalSequenceComponentsOf(
+	field reflect.StructField,
+	v reflect.Value,
+	sub PDU,
+	opts *Options,
+	auto bool,
+) (err error) {
+	if !field.Anonymous {
+		err = errorComponentsNotAnonymous
+		return
+	}
+
+	t := v.Type()
+	for i := 0; i < t.NumField() && err == nil; i++ {
+		if field = t.Field(i); field.PkgPath == "" {
+			var fOpts *Options
+			if fOpts, err = extractOptions(field, i, auto); err == nil {
+				fOpts.copyDepth(opts)
+				err = marshalSequenceField(field.Name, v, v.Field(i), sub, fOpts)
+			}
+		}
+	}
+
+	return
+}
+
+func marshalSequenceFieldChoice(v, fv reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
+	if handled = isChoice(fv, opts); handled {
+		// fv is a bonafide Choice interface instance
+		err = marshalChoiceWrapper(fv, pkt, opts, fv)
+	} else if handled = isInterfaceChoice(fv, opts); handled {
+		// User is treating a non Choice interface
+		// as a Choice. Artificially wrap fv.
+		ch := refValueOf(NewChoice(fv.Interface(), opts.Tag()))
+		err = marshalChoiceWrapper(v, pkt, opts, ch)
+	}
 	return
 }
 
@@ -173,7 +185,7 @@ func marshalSequenceWrap(sub, pkt PDU, opts *Options, seqTag int) (err error) {
 /*
 unmarshalSequence returns an error following an attempt to write pkt into sequence (struct) v.
 */
-func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
+func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
@@ -194,45 +206,18 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 	sub.SetOffset(0)
 
 	// Whether automatic tagging is enabled.
-	var auto bool = options != nil && options.Automatic
+	var auto bool = opts != nil && opts.Automatic
 
 	typ := v.Type()
 	for i := 0; i < v.NumField() && err == nil; i++ {
-		field := typ.Field(i)
-		if field.PkgPath != "" {
-			continue
-		}
-
-		fieldOpts := implicitOptions()
-		if field.Tag != "" {
-			fieldOpts, err = extractOptions(field, i, auto)
-		}
-
-		fv := v.Field(i)
-		if fieldOpts.ComponentsOf {
-			if !field.Anonymous {
-				err = errorComponentsNotAnonymous
-			} else {
-				err = unmarshalSequenceComponentsOf(fv, sub, fieldOpts, auto)
-			}
-			continue
-		}
-
-		if err == nil {
-			if err = unmarshalValue(sub, fv, fieldOpts); err != nil {
-				if fieldOpts.Default != nil && fieldOpts.defaultKeyword != "" {
-					fv.Set(refValueOf(fieldOpts.Default))
-					err = nil
+		if field := typ.Field(i); field.PkgPath == "" {
+			var fOpts *Options
+			if fOpts, err = extractOptions(field, i, auto); err == nil {
+				if fOpts.ComponentsOf {
+					err = unmarshalSequenceComponentsOf(field, v.Field(i), sub, fOpts, auto)
 				} else {
-					// TODO: I still don't like this.
-					err = compositeErrorf("unmarshalValue: failed for field ", field.Name, ": ", err)
-					berr := checkSequenceFieldCriticality(field.Name, fv, fieldOpts.Optional)
-					if berr == nil {
-						err = berr
-					}
+					err = unmarshalSequenceField(field.Name, v.Field(i), sub, fOpts)
 				}
-			} else {
-				err = applyFieldConstraints(fv.Interface(), fieldOpts.Constraints, '$')
 			}
 		}
 	}
@@ -240,36 +225,102 @@ func unmarshalSequence(v reflect.Value, pkt PDU, options *Options) (err error) {
 	return
 }
 
-func unmarshalSequenceComponentsOf(fv reflect.Value, sub PDU, fieldOpts *Options, auto bool) (err error) {
-	et := fv.Type()
-	for j := 0; j < et.NumField() && err == nil; j++ {
-		sf := et.Field(j)
-		if sf.PkgPath != "" {
-			continue
-		}
-		sfOpts := implicitOptions()
-		if sf.Tag != "" {
-			sfOpts, err = extractOptions(sf, j, auto)
-			if err != nil {
-				continue
+func unmarshalSequenceField(
+	name string,
+	fv reflect.Value,
+	sub PDU,
+	opts *Options,
+) (err error) {
+	var handled bool
+	if handled, err = unmarshalSequenceFieldOptionalEmpty(sub, opts); err != nil {
+		return err
+	} else if handled {
+		return nil
+	}
+
+	if err = unmarshalUnwrapInterfaceChoice(sub, fv, opts); err == nil {
+		if err = unmarshalValue(sub, fv, opts); err != nil {
+			// Error *might* be recoverable.
+			def := opts.Default
+			if def == nil {
+				def, _ = lookupDefaultValue(opts.defaultKeyword)
 			}
-		}
-		sfOpts.copyDepth(fieldOpts)
-		sfv := fv.Field(j)
-		if err = unmarshalValue(sub, sfv, sfOpts); err != nil {
-			if sfOpts.Default != nil && sfOpts.defaultKeyword != "" {
-				sfv.Set(refValueOf(sfOpts.Default))
-				err = nil
+			if def != nil {
+				err = refSetValue(fv, refValueOf(def))
 			} else {
-				berr := checkSequenceFieldCriticality(sf.Name, sfv, sfOpts.Optional)
-				if berr == nil {
-					err = compositeErrorf("unmarshalValue: failed for field ", sf.Name, ": ", err)
-				} else {
+				err = compositeErrorf(
+					"unmarshalValue: failed for field ", name, ": ", err,
+				)
+				if berr := checkSequenceFieldCriticality(name, fv, opts.Optional); berr == nil {
 					err = berr
 				}
 			}
-		} else {
-			err = applyFieldConstraints(sfv.Interface(), sfOpts.Constraints, '$')
+		}
+
+		if err == nil {
+			err = applyFieldConstraints(
+				fv.Interface(), opts.Constraints, '$',
+			)
+		}
+	}
+
+	return
+}
+
+func unmarshalSequenceFieldOptionalEmpty(
+	sub PDU,
+	opts *Options,
+) (handled bool, err error) {
+	if opts == nil || !opts.OmitEmpty {
+		return false, nil
+	}
+
+	if sub.Len()-sub.Offset() == 0 {
+		return true, nil
+	}
+
+	tlv, peekErr := sub.PeekTLV()
+	if peekErr != nil {
+		// peek-failure means “no TLV here” → skip
+		return true, nil
+	}
+
+	expClass, expTag, err := getTLVResolveOverride(
+		/* original class */ opts.Class(),
+		/* original tag   */ opts.Tag(),
+		/* compound?      */ false,
+		opts,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	if tlv.Class != expClass || tlv.Tag != expTag {
+		return true, nil
+	}
+	return false, nil
+}
+
+func unmarshalSequenceComponentsOf(
+	field reflect.StructField,
+	v reflect.Value,
+	sub PDU,
+	opts *Options,
+	auto bool,
+) (err error) {
+	if !field.Anonymous {
+		err = errorComponentsNotAnonymous
+		return
+	}
+
+	t := v.Type()
+	for i := 0; i < t.NumField() && err == nil; i++ {
+		if field = t.Field(i); field.PkgPath == "" {
+			var fOpts *Options
+			if fOpts, err = extractOptions(field, i, auto); err == nil {
+				fOpts.copyDepth(opts)
+				err = unmarshalSequenceField(field.Name, v.Field(i), sub, fOpts)
+			}
 		}
 	}
 

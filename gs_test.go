@@ -52,6 +52,11 @@ func TestGraphicString_codecov(_ *testing.T) {
 	od.IsPrimitive()
 	_ = od.String()
 
+	GraphicSpec(``)
+	GraphicSpec(`test`)
+	GraphicSpec([]byte(`test`))
+	GraphicSpec(struct{}{})
+
 	_, _ = NewGraphicString(nil)
 	_, _ = NewGraphicString(string(rune(2)))
 	_, _ = NewGraphicString(struct{}{})
@@ -109,28 +114,28 @@ func TestGraphicString_encodingRules(t *testing.T) {
 
 func ExampleGraphicString_withConstraints() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o GraphicString) GraphicString { return o },
-		func(o GraphicString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(x any) (err error) {
+		o, _ := x.(GraphicString)
+		for i := 0; i < len(o); i++ {
+			if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o GraphicString) GraphicString { return o },
-		func(o GraphicString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(GraphicString)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// First try trips on a digit violation, so caseConstraint is never reached.
 	_, err := NewGraphicString(`A0B876EFFFF0`, digitConstraint, caseConstraint)

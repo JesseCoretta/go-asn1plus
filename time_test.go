@@ -7,14 +7,14 @@ import (
 )
 
 func ExampleTime_withConstraint() {
-	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
-		func(o Temporal) (err error) {
-			deadline, _ := NewTime(`2014-12-31T08:04:55`)
-			if o.Cast().After(deadline.Cast()) {
-				err = fmt.Errorf("Constraint violation: you're late!")
-			}
-			return
-		})
+	deadlineConstraint := func(x any) (err error) {
+		o, _ := x.(Temporal)
+		deadline, _ := NewTime(`2014-12-31T08:04:55`)
+		if o.Cast().After(deadline.Cast()) {
+			err = fmt.Errorf("Constraint violation: you're late!")
+		}
+		return
+	}
 
 	// Here, we use the DateTime format for Time, though another
 	// format could also apply.
@@ -24,14 +24,14 @@ func ExampleTime_withConstraint() {
 }
 
 func ExampleDate_withConstraint() {
-	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
-		func(o Temporal) (err error) {
-			deadline, _ := NewDate(`2014-12-31`)
-			if o.Cast().After(deadline.Cast()) {
-				err = fmt.Errorf("Constraint violation: you're late!")
-			}
-			return
-		})
+	deadlineConstraint := func(x any) (err error) {
+		o, _ := x.(Temporal)
+		deadline, _ := NewDate(`2014-12-31`)
+		if o.Cast().After(deadline.Cast()) {
+			err = fmt.Errorf("Constraint violation: you're late!")
+		}
+		return
+	}
 
 	_, err := NewDate(`2015-04-19`, deadlineConstraint)
 	fmt.Println(err)
@@ -39,14 +39,14 @@ func ExampleDate_withConstraint() {
 }
 
 func ExampleDateTime_withConstraint() {
-	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
-		func(o Temporal) (err error) {
-			deadline, _ := NewDateTime(`2014-12-31T23:59:59`)
-			if o.Cast().After(deadline.Cast()) {
-				err = fmt.Errorf("Constraint violation: you're late!")
-			}
-			return
-		})
+	deadlineConstraint := func(x any) (err error) {
+		o, _ := x.(Temporal)
+		deadline, _ := NewDateTime(`2014-12-31T23:59:59`)
+		if o.Cast().After(deadline.Cast()) {
+			err = fmt.Errorf("Constraint violation: you're late!")
+		}
+		return
+	}
 
 	_, err := NewDateTime(`2015-04-19T13:44:13`, deadlineConstraint)
 	fmt.Println(err)
@@ -54,14 +54,14 @@ func ExampleDateTime_withConstraint() {
 }
 
 func ExampleTimeOfDay_withConstraint() {
-	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
-		func(o Temporal) (err error) {
-			deadline, _ := NewTimeOfDay(`20:30:00`)
-			if o.Cast().After(deadline.Cast()) {
-				err = fmt.Errorf("Constraint violation: you're late!")
-			}
-			return
-		})
+	deadlineConstraint := func(x any) (err error) {
+		o, _ := x.(Temporal)
+		deadline, _ := NewTimeOfDay(`20:30:00`)
+		if o.Cast().After(deadline.Cast()) {
+			err = fmt.Errorf("Constraint violation: you're late!")
+		}
+		return
+	}
 
 	_, err := NewTimeOfDay(`22:44:13`, deadlineConstraint)
 	fmt.Println(err)
@@ -69,14 +69,14 @@ func ExampleTimeOfDay_withConstraint() {
 }
 
 func ExampleGeneralizedTime_withConstraint() {
-	deadlineConstraint := LiftConstraint(func(o Temporal) Temporal { return o },
-		func(o Temporal) (err error) {
-			deadline, _ := NewGeneralizedTime(`20141231110451Z`)
-			if o.Cast().After(deadline.Cast()) {
-				err = fmt.Errorf("Constraint violation: you're late!")
-			}
-			return
-		})
+	deadlineConstraint := func(x any) (err error) {
+		o, _ := x.(Temporal)
+		deadline, _ := NewGeneralizedTime(`20141231110451Z`)
+		if o.Cast().After(deadline.Cast()) {
+			err = fmt.Errorf("Constraint violation: you're late!")
+		}
+		return
+	}
 
 	_, err := NewGeneralizedTime(`20250620171207Z`, deadlineConstraint)
 	fmt.Println(err)

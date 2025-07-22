@@ -131,15 +131,15 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 		}
 	}
 
-	var constraints ConstraintGroup[ObjectIdentifier]
+	var constraints ConstraintGroup
 
 	for i := 0; i < len(x) && err == nil; i++ {
 		var nf Integer
 		switch tv := x[i].(type) {
 		case *big.Int, Integer, string, int64, uint64, int:
 			nf, err = NewInteger(tv)
-		case Constraint[ObjectIdentifier]:
-			constraints = append(constraints, tv)
+		case func(any) error:
+			constraints = append(constraints, Constraint(tv))
 		default:
 			err = errorBadTypeForConstructor("OBJECT IDENTIFIER", x[i])
 		}
@@ -153,8 +153,7 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[ObjectIdentifier] = constraints
-		err = group.Constrain(_d)
+		err = constraints.Constrain(_d)
 	}
 
 	if err == nil {
@@ -466,7 +465,7 @@ type oidCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -681,11 +680,10 @@ func RegisterOIDAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
-
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {
@@ -721,7 +719,7 @@ type relOIDCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -895,10 +893,10 @@ func RegisterRelativeOIDAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

@@ -62,7 +62,7 @@ and then print only that entry from the returned slice.
 func ExampleListAdapters() {
 	// 1. Register a throw-away keyword so we know exactly what to expect.
 	RegisterAdapter[UTF8String, string](
-		func(s string, cs ...Constraint[UTF8String]) (UTF8String, error) {
+		func(s string, cs ...Constraint) (UTF8String, error) {
 			return NewUTF8String(s, cs...)
 		},
 		func(p *UTF8String) string { return string(*p) },
@@ -72,7 +72,8 @@ func ExampleListAdapters() {
 	// 2. Enumerate and filter for that keyword.
 	for _, ai := range ListAdapters() {
 		if ai.Keyword == "example" {
-			fmt.Printf("%s: %s  (keyword %q)\n", ai.GoType, ai.Primitive, ai.Keyword)
+			fmt.Printf("%s: %s  (keyword %q)\n",
+				ai.GoType, ai.Primitive, ai.Keyword)
 		}
 	}
 
@@ -88,8 +89,8 @@ func testMust[T any](v T, err error) T {
 }
 
 // dummy constraints just flip a flag when invoked
-func testMakeConstraint[T any](hit *bool) Constraint[T] {
-	return func(_ T) error { *hit = true; return nil }
+func testMakeConstraint[T any](hit *bool) Constraint {
+	return func(_ any) error { *hit = true; return nil }
 }
 
 func TestAdapter_ValueOfShouldPanic(t *testing.T) {
@@ -115,5 +116,6 @@ func TestAdapter_codecov(_ *testing.T) {
 	opts.Identifier = "brogusCodec"
 	pkt, _ = Marshal(stubby, With(opts))
 	_ = Unmarshal(pkt, &stubbs, With(opts))
+	UnregisterAdapter[stubPrimitive, string]()
 	unregisterType(refTypeOf(stubby))
 }

@@ -65,6 +65,7 @@ func TestInteger_codecov(_ *testing.T) {
 		int32(1),
 		int64(1),
 		uint64(1),
+		[]byte{0x5},
 		uint64(9999897458392723342),
 		`1`,
 		`48329849320840239840328`,
@@ -76,6 +77,9 @@ func TestInteger_codecov(_ *testing.T) {
 			i, _ := NewInteger(number)
 			_ = i.String()
 			i.Big()
+			i.IsBig()
+			i.Bytes()
+			i.Native()
 			i.Eq(i)
 			i.Lt(i)
 			i.Le(i)
@@ -130,6 +134,23 @@ func TestInteger_codecov(_ *testing.T) {
 		_ = f.newWith(Integer{}).(box)
 	}
 
+}
+
+func TestInteger_Compare(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+
+	x, _ := NewInteger(5)
+	x.Eq(5)
+	x.Eq(newBigInt(5))
+	x.Eq([]byte{0x5})
+	x.Eq(int64(5))
+	x.Eq(int32(5))
+	x.Eq(uint64(5))
+	x.Eq(struct{}{})
 }
 
 // TestEncodeIntegerContent_Coverage tests every branch of encodeIntegerContent.
@@ -250,7 +271,8 @@ func TestEncodeIntegerContent_NegativeBranches(t *testing.T) {
 
 func TestNewIntegerConstraints(t *testing.T) {
 	// Define a custom constraint: the integer must be between 10 and 100 inclusive.
-	allowedRange := func(i Integer) error {
+	allowedRange := func(x any) error {
+		i, _ := NewInteger(x)
 		var value int64
 		if !i.big {
 			value = i.native
@@ -268,9 +290,8 @@ func TestNewIntegerConstraints(t *testing.T) {
 		return nil
 	}
 
-	constraint := LiftConstraint(func(i Integer) Integer { return i }, allowedRange)
 	for _, tc := range integerConstraintTests {
-		i, err := NewInteger(tc.input, constraint)
+		i, err := NewInteger(tc.input, allowedRange)
 		if tc.expectFailure {
 			if err == nil {
 				t.Errorf("expected failure, but got integer: %+v", i)

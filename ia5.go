@@ -53,7 +53,7 @@ func (r IA5String) IsZero() bool { return len(r) == 0 }
 IA5String returns an instance of [IA5String] alongside an error following
 an attempt to marshal x.
 */
-func NewIA5String(x any, constraints ...Constraint[IA5String]) (ia5 IA5String, err error) {
+func NewIA5String(x any, constraints ...Constraint) (ia5 IA5String, err error) {
 	var raw string
 	switch tv := x.(type) {
 	case string:
@@ -70,7 +70,7 @@ func NewIA5String(x any, constraints ...Constraint[IA5String]) (ia5 IA5String, e
 	_ia5 := IA5String(raw)
 	err = IA5Spec(_ia5)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[IA5String] = constraints
+		var group ConstraintGroup = constraints
 		err = group.Constrain(_ia5)
 	}
 
@@ -87,12 +87,20 @@ IA5Spec implements the formal [Constraint] specification for [IA5String].
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var IA5Spec Constraint[IA5String]
+var IA5Spec Constraint
 
 func init() {
-	RegisterTextAlias[IA5String](TagIA5String,
-		IA5StringConstraintPhase, nil, nil, nil, IA5Spec)
-	IA5Spec = func(o IA5String) (err error) {
+	IA5Spec = func(ia5 any) (err error) {
+		var o IA5String
+		switch tv := ia5.(type) {
+		case string:
+			o = IA5String(tv)
+		case Primitive:
+			o = IA5String(tv.String())
+		default:
+			err = errorPrimitiveAssertionFailed(o)
+			return
+		}
 		if len(o) == 0 {
 			err = primitiveErrorf("IA5 String: zero")
 			return
@@ -108,4 +116,8 @@ func init() {
 
 		return
 	}
+
+	RegisterTextAlias[IA5String](TagIA5String,
+		IA5StringConstraintPhase,
+		nil, nil, nil, IA5Spec)
 }

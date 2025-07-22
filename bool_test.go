@@ -133,13 +133,12 @@ func ExampleNewBoolean() {
 }
 
 func ExampleBoolean_withConstraint() {
-	constraint := LiftConstraint(func(b Truthy) Truthy { return b },
-		func(b Truthy) (err error) {
-			if !b.Bool() {
-				err = fmt.Errorf("Constraint violation: Boolean must be true")
-			}
-			return
-		})
+	constraint := func(b any) (err error) {
+		if truth, _ := b.(Truthy); !truth.Bool() {
+			err = fmt.Errorf("Constraint violation: Boolean must be true")
+		}
+		return
+	}
 
 	if _, err := NewBoolean("false", constraint); err != nil {
 		fmt.Println(err)

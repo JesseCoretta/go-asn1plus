@@ -132,9 +132,9 @@ func TestChoice_SequenceOfChoice(t *testing.T) {
 }
 
 func TestSequence_choiceAutomaticTagging(t *testing.T) {
-	choices := NewChoices(true) // engage auto tagging
-	o := &Options{Explicit: true}
+	o := Options{Explicit: true}
 
+	choices := NewChoices(true) // engage auto tagging
 	choices.Register(nil, ObjectIdentifier{})
 	choices.Register(nil, Integer{}, o.SetTag(7))
 	choices.Register(nil, EmbeddedPDV{})

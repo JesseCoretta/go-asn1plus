@@ -27,7 +27,7 @@ var GraphicStringConstraintPhase = CodecConstraintDecoding
 NewGraphicString returns an instance of [GraphicString] alongside an error
 following attempt to marshal x.
 */
-func NewGraphicString(x any, constraints ...Constraint[GraphicString]) (gs GraphicString, err error) {
+func NewGraphicString(x any, constraints ...Constraint) (gs GraphicString, err error) {
 	var s string
 	switch tv := x.(type) {
 	case string:
@@ -44,7 +44,7 @@ func NewGraphicString(x any, constraints ...Constraint[GraphicString]) (gs Graph
 	_gs := GraphicString(s)
 	err = GraphicSpec(_gs)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[GraphicString] = constraints
+		var group ConstraintGroup = constraints
 		err = group.Constrain(_gs)
 	}
 
@@ -61,7 +61,7 @@ GraphicSpec implements the formal [Constraint] specification for [GraphicString]
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var GraphicSpec Constraint[GraphicString]
+var GraphicSpec Constraint
 
 /*
 Len returns the integer byte length of the receiver instance.
@@ -90,11 +90,20 @@ known ASN.1 primitive.
 func (r GraphicString) IsPrimitive() bool { return true }
 
 func init() {
+	GraphicSpec = func(gs any) (err error) {
+		switch tv := gs.(type) {
+		case string:
+			err = graphicStringDecoderVerify([]byte(tv))
+		case Primitive:
+			err = graphicStringDecoderVerify([]byte(tv.String()))
+		default:
+			err = errorPrimitiveAssertionFailed(GraphicString(``))
+		}
+		return
+	}
+
 	RegisterTextAlias[GraphicString](TagGraphicString,
 		GraphicStringConstraintPhase,
 		graphicStringDecoderVerify,
 		nil, nil, GraphicSpec)
-	GraphicSpec = func(o GraphicString) error {
-		return graphicStringDecoderVerify([]byte(o))
-	}
 }

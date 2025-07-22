@@ -13,10 +13,6 @@ import (
 	"time"
 )
 
-type stringSet map[string]struct{}
-
-func (s stringSet) Add(v string) { s[v] = struct{}{} }
-
 var (
 	mu                 sync.RWMutex // locker for adapters
 	sortedAdapters     []AdapterInfo
@@ -33,23 +29,11 @@ var (
 	kwFast   map[string]struct{}
 )
 
-var (
-	keywordSet   stringSet
-	keywordSetMu sync.RWMutex
-)
-
 // cached results + guards for ListAdapters()
 var (
 	listCacheMu   sync.RWMutex
 	listCacheVer  int64
 	listCacheData []AdapterInfo
-)
-
-// cached results + guards for adapterKeywords()
-var (
-	kwCacheMu   sync.RWMutex // retire
-	kwCacheVer  int64        // retire
-	kwCacheData []string     // retire
 )
 
 type adapterKwCache struct {
@@ -376,10 +360,10 @@ Example (untested)
 	//   3. keywords     (no default "", user must ask for it)
 	asn1plus.RegisterAdapter[asn1plus.ObjectIdentifier, []int](
 	    // constructor
-	    func(input []int, _ ...asn1plus.Constraint[asn1plus.ObjectIdentifier]) (asn1plus.ObjectIdentifier, error) {
+	    func(input []int, _ ...asn1plus.Constraint) (asn1plus.ObjectIdentifier, error) {
 	        // promote each int to an interface{} so it matches
 	        // NewObjectIdentifier(...any). Note that your input
-	        // variables can include Constraint[ObjectIdentifier].
+	        // variables can include zero or more Constraints.
 	        params := make([]any, len(arcs))
 	        for i, v := range arcs {
 	            params[i] = v  // or int64(v) if your ctor prefers
@@ -407,7 +391,7 @@ See the bottom of adapt.go for a complete look at the (actively used) built-in
 adapter registrations for further insight.
 */
 func RegisterAdapter[T any, GoT any](
-	ctor func(GoT, ...Constraint[T]) (T, error),
+	ctor func(GoT, ...Constraint) (T, error),
 	asGo func(*T) GoT,
 	aliases ...string,
 ) {
@@ -437,7 +421,7 @@ func RegisterAdapter[T any, GoT any](
 	}
 
 	fromGo := func(g any, prim Primitive, opts *Options) (err error) {
-		cs, err := collectConstraint[T](opts.Constraints)
+		cs, err := collectConstraint(opts.Constraints)
 		if err == nil {
 			if goVal, ok := g.(GoT); !ok {
 				err = adapterErrorf("adapter: expected ",
@@ -471,6 +455,68 @@ func RegisterAdapter[T any, GoT any](
 		}
 	}
 	atomic.AddInt64(&adaptersVer, 1) // cache invalidation
+}
+
+/*
+UnregisterAdapter removes previously registered adapters for the GoT-T binding.
+  - If no aliases are passed, it deletes *all* adapters (both keyed and default) for GoT.
+  - If an empty string alias ("") is passed, it clears the defaultAdapters entry.
+  - Otherwise it deletes each adapters[[GoT,alias]] entry.
+
+For instance:
+
+	// remove only the "oid" adapter for ObjectIdentifier→string
+	UnregisterAdapter[ObjectIdentifier,string]("oid")
+
+	// remove *all* adapters for ObjectIdentifier→string
+	UnregisterAdapter[ObjectIdentifier,string]()
+*/
+func UnregisterAdapter[T any, GoT any](aliases ...string) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Identify the Go‐type name and Primitive pointer type
+	goTypeName := refTypeOf((*GoT)(nil)).Elem().String()
+	primPtrType := reflect.TypeOf((*T)(nil))
+
+	// Build alias set; empty means “remove all for T→GoT”
+	removeAll := len(aliases) == 0
+	aliasSet := make(map[string]bool, len(aliases))
+	for _, a := range aliases {
+		aliasSet[lc(a)] = true
+	}
+
+	// 1) Remove matching entries from the keyed adapters map
+	for key, ad := range adapters {
+		if key[0] != goTypeName {
+			continue
+		}
+		if reflect.TypeOf(ad.newCodec()) != primPtrType {
+			continue
+		}
+		if removeAll || aliasSet[key[1]] {
+			delete(adapters, key)
+		}
+	}
+
+	// 2) Remove from defaultAdapters slice if we’re removing all
+	if removeAll {
+		if slice, ok := defaultAdapters[goTypeName]; ok {
+			var kept []adapter
+			for _, ad := range slice {
+				if reflect.TypeOf(ad.newCodec()) != primPtrType {
+					kept = append(kept, ad)
+				}
+			}
+			if len(kept) == 0 {
+				delete(defaultAdapters, goTypeName)
+			} else {
+				defaultAdapters[goTypeName] = kept
+			}
+		}
+	}
+
+	atomic.AddInt64(&adaptersVer, 1)
 }
 
 func isAdapterKeyword(token string) (is bool) {

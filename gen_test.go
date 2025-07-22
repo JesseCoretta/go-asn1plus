@@ -52,6 +52,11 @@ func TestGeneralString_codecov(_ *testing.T) {
 	od.IsPrimitive()
 	_ = od.String()
 
+	GeneralSpec(``)
+	GeneralSpec(`test`)
+	GeneralSpec([]byte(`test`))
+	GeneralSpec(struct{}{})
+
 	_, _ = NewGeneralString(nil)
 	_, _ = NewGeneralString(string(rune(2)))
 	_, _ = NewGeneralString(struct{}{})
@@ -99,28 +104,28 @@ func TestGeneralString_encodingRules(t *testing.T) {
 
 func ExampleGeneralString_withConstraints() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o GeneralString) GeneralString { return o },
-		func(o GeneralString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(x any) (err error) {
+		o, _ := x.(GeneralString)
+		for i := 0; i < len(o); i++ {
+			if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o GeneralString) GeneralString { return o },
-		func(o GeneralString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(GeneralString)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// First try trips on a digit violation, so caseConstraint is never reached.
 	_, err := NewGeneralString(`A0B876EFFFF0`, digitConstraint, caseConstraint)

@@ -71,7 +71,7 @@ var TimeConstraintPhase = CodecConstraintDecoding
 NewTime returns an instance of [Time] alongside an error following an
 attempt to marshal x.
 */
-func NewTime(x any, constraints ...Constraint[Temporal]) (Time, error) {
+func NewTime(x any, constraints ...Constraint) (Time, error) {
 	var raw string
 	var err error
 
@@ -94,8 +94,7 @@ func NewTime(x any, constraints ...Constraint[Temporal]) (Time, error) {
 	}
 
 	if err == nil && len(constraints) > 0 {
-		var group ConstraintGroup[Temporal] = constraints
-		err = group.Constrain(Time(t))
+		err = ConstraintGroup(constraints).Constrain(Time(t))
 	}
 
 	var tm Time
@@ -274,7 +273,7 @@ var DateConstraintPhase = CodecConstraintDecoding
 NewDate returns an instance of [Date] alongside an error following an attempt
 to marshal x.
 */
-func NewDate(x any, constraints ...Constraint[Temporal]) (Date, error) {
+func NewDate(x any, constraints ...Constraint) (Date, error) {
 	var s string
 	var err error
 
@@ -297,8 +296,7 @@ func NewDate(x any, constraints ...Constraint[Temporal]) (Date, error) {
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Temporal] = constraints
-		err = group.Constrain(Date(t))
+		err = ConstraintGroup(constraints).Constrain(Date(t))
 	}
 
 	var d Date
@@ -460,7 +458,7 @@ var DateTimeConstraintPhase = CodecConstraintDecoding
 NewDateTime returns an instance of [DateTime] alongside an error following an
 attempt to marshal x.
 */
-func NewDateTime(x any, constraints ...Constraint[Temporal]) (DateTime, error) {
+func NewDateTime(x any, constraints ...Constraint) (DateTime, error) {
 	var s string
 	var err error
 
@@ -483,8 +481,7 @@ func NewDateTime(x any, constraints ...Constraint[Temporal]) (DateTime, error) {
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Temporal] = constraints
-		err = group.Constrain(DateTime(t))
+		err = ConstraintGroup(constraints).Constrain(DateTime(t))
 	}
 
 	var d DateTime
@@ -635,7 +632,7 @@ var TimeOfDayConstraintPhase = CodecConstraintDecoding
 NewDateTime returns an instance of [TimeOfDay] alongside an error following an
 attempt to marshal x.
 */
-func NewTimeOfDay(x any, constraints ...Constraint[Temporal]) (TimeOfDay, error) {
+func NewTimeOfDay(x any, constraints ...Constraint) (TimeOfDay, error) {
 	var s string
 	var err error
 
@@ -658,8 +655,7 @@ func NewTimeOfDay(x any, constraints ...Constraint[Temporal]) (TimeOfDay, error)
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Temporal] = constraints
-		err = group.Constrain(TimeOfDay(t))
+		err = ConstraintGroup(constraints).Constrain(TimeOfDay(t))
 	}
 
 	var d TimeOfDay
@@ -835,7 +831,7 @@ instance as input.
 
 Instances of this type DO NOT qualify the [Temporal] interface.
 */
-func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
+func NewDuration(x any, constraints ...Constraint) (Duration, error) {
 	var s string
 	switch tv := x.(type) {
 	case string:
@@ -868,8 +864,7 @@ func NewDuration(x any, constraints ...Constraint[Duration]) (Duration, error) {
 	if err = _r.parseDuration(datePart, timePart); err == nil {
 		err = checkDurationEmpty(_r, err)
 		if len(constraints) > 0 && err == nil {
-			var group ConstraintGroup[Duration] = constraints
-			err = group.Constrain(_r)
+			err = ConstraintGroup(constraints).Constrain(_r)
 		}
 
 		if err == nil {
@@ -1261,7 +1256,7 @@ func (r GeneralizedTime) IsPrimitive() bool { return true }
 NewGeneralizedTime returns an instance of [GeneralizedTime] alongside an error
 following an attempt to marshal x.
 */
-func NewGeneralizedTime(x any, constraints ...Constraint[Temporal]) (gt GeneralizedTime, err error) {
+func NewGeneralizedTime(x any, constraints ...Constraint) (gt GeneralizedTime, err error) {
 	var (
 		format string = gt.Layout()
 		diff   string = "-0700"
@@ -1288,8 +1283,7 @@ func NewGeneralizedTime(x any, constraints ...Constraint[Temporal]) (gt Generali
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Temporal] = constraints
-		err = group.Constrain(GeneralizedTime(t))
+		err = ConstraintGroup(constraints).Constrain(GeneralizedTime(t))
 	}
 
 	return GeneralizedTime(t), err
@@ -1561,7 +1555,7 @@ type temporalCodec[T Temporal] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[Temporal]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -1676,10 +1670,10 @@ func RegisterTemporalAlias[T Temporal](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[Temporal],
-	user ...Constraint[Temporal],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[Temporal]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	encoder, decoder = fillTemporalHooks[T](encoder, decoder)
 
@@ -1756,7 +1750,7 @@ type durationCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -1897,10 +1891,10 @@ func RegisterDurationAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

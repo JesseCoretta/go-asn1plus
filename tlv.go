@@ -245,7 +245,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	}
 
 	// Parse length.
-	if length, lenLen, err = tlvVerifyLengthState(r, d); err != nil {
+	if length, lenLen, err = tlvVerifyLengthState(r, d, opts); err != nil {
 		return
 	}
 
@@ -262,32 +262,34 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	}
 
 	var valueBytes []byte
-	if length >= 0 {
-		// definite-length
-		end := off + length
-		if end > len(d) {
-			err = tLVErr{mkerrf(errorTruncDefLen,
-				": ", end, " > ", len(d), ")")}
-			return
+	if lenLen > 0 {
+		if length >= 0 {
+			// definite-length
+			end := off + length
+			if end > len(d) {
+				err = tLVErr{mkerrf(errorTruncDefLen,
+					": ", end, " > ", len(d), ")")}
+				return
+			}
+			valueBytes = d[off:end]
+			debugEvent(EventTrace|EventTLV,
+				newLItem(off, "value start"),
+				newLItem(end, "value end"),
+			)
+		} else {
+			// indefinite-length (BER)
+			buf := d[off:]
+			eocIdx := bytes.Index(buf, indefEoC)
+			if eocIdx < 0 {
+				err = errorNoEOCIndefTLV
+				return
+			}
+			valueBytes = buf[:eocIdx]
+			debugEvent(EventTrace|EventTLV,
+				newLItem(off, "value start"),
+				newLItem(eocIdx, "EOC index"),
+			)
 		}
-		valueBytes = d[off:end]
-		debugEvent(EventTrace|EventTLV,
-			newLItem(off, "value start"),
-			newLItem(end, "value end"),
-		)
-	} else {
-		// indefinite-length (BER)
-		buf := d[off:]
-		eocIdx := bytes.Index(buf, indefEoC)
-		if eocIdx < 0 {
-			err = errorNoEOCIndefTLV
-			return
-		}
-		valueBytes = buf[:eocIdx]
-		debugEvent(EventTrace|EventTLV,
-			newLItem(off, "value start"),
-			newLItem(eocIdx, "EOC index"),
-		)
 	}
 
 	switch typ {
@@ -299,7 +301,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	return
 }
 
-func tlvVerifyLengthState(r PDU, d []byte) (length, lenLen int, err error) {
+func tlvVerifyLengthState(r PDU, d []byte, opts *Options) (length, lenLen int, err error) {
 	debugEvent(EventEnter|EventTLV,
 		newLItem(r, "PDU"),
 		newLItem(d, "bytes"))
@@ -308,11 +310,15 @@ func tlvVerifyLengthState(r PDU, d []byte) (length, lenLen int, err error) {
 		debugEvent(EventExit|EventTLV,
 			newLItem(length, "len"),
 			newLItem(lenLen, "lenLen"),
-			newLItem(err),
-		)
+			newLItem(err))
 	}()
 
 	off := r.Offset()
+
+	if (opts != nil && opts.Optional) && len(d[off:]) == 0 {
+		return
+	}
+
 	typ := r.Type()
 
 	if length, lenLen, err = parseLength(d[off:]); err != nil {

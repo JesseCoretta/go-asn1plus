@@ -17,16 +17,16 @@ func ExampleVisibleString() {
 }
 
 func ExampleVisibleString_withConstraint() {
-	caseConstraint := LiftConstraint(func(o VisibleString) VisibleString { return o },
-		func(o VisibleString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(VisibleString)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	_, err := NewVisibleString(`this is a VISIBLE STRING`, caseConstraint)
 	fmt.Println(err)
@@ -102,6 +102,10 @@ func TestVisibleString_codecov(t *testing.T) {
 			}
 		}
 	}
+
+	VisibleSpec(`test`)
+	VisibleSpec([]byte(`test`))
+	VisibleSpec(struct{}{})
 
 	NewVisibleString([]byte{0x7F, 0x7F, 0x08})
 	_, _ = NewVisibleString(struct{}{})

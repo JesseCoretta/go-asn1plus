@@ -43,7 +43,7 @@ func (r UniversalString) Len() int { return len(r) }
 NewUniversalString returns an instance of [UniversalString] alongside an
 error following an attempt to marshal x.
 */
-func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (UniversalString, error) {
+func NewUniversalString(x any, constraints ...Constraint) (UniversalString, error) {
 	var (
 		us  UniversalString
 		raw string
@@ -64,10 +64,9 @@ func NewUniversalString(x any, constraints ...Constraint[UniversalString]) (Univ
 
 	_us := UniversalString(raw)
 	group := append(
-		ConstraintGroup[UniversalString]{UniversalSpec}, // built-in
+		ConstraintGroup{UniversalSpec}, // built-in
 		constraints...)
-	err = group.Constrain(_us)
-	if err == nil {
+	if err = group.Constrain(_us); err == nil {
 		us = _us
 	}
 
@@ -80,7 +79,7 @@ UniversalSpec implements the formal [Constraint] specification for [UniversalStr
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var UniversalSpec Constraint[UniversalString]
+var UniversalSpec Constraint
 
 func universalStringDecoderVerify(b []byte) (err error) {
 	if len(b)%4 != 0 {
@@ -179,24 +178,38 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 func (r UniversalString) IsZero() bool { return len(r) == 0 }
 
 func init() {
+	UniversalSpec = func(us any) (err error) {
+		var o string
+		switch tv := us.(type) {
+		case Primitive:
+			o = tv.String()
+		case []byte:
+			o = string(tv)
+		case string:
+			o = tv
+		default:
+			err = errorPrimitiveAssertionFailed(UniversalString(``))
+			return
+		}
+
+		// Reject byte sequences that are not valid UTF-8.
+		if !utf8OK(string(o)) {
+			return primitiveErrorf("UniversalString: input is not valid UTF-8")
+		}
+
+		// Reject surrogates and code points beyond Unicode max.
+		runes := []rune(o)
+		for i := 0; i < len(runes) && err == nil; i++ {
+			err = universalStringCharacterOutOfBounds(runes[i])
+		}
+
+		return
+	}
+
 	RegisterTextAlias[UniversalString](TagUniversalString,
 		UniversalStringConstraintPhase,
 		universalStringDecoderVerify,
 		decodeUniversalString,
 		encodeUniversalString,
 		UniversalSpec)
-
-	UniversalSpec = func(us UniversalString) (err error) {
-		// Reject byte sequences that are not valid UTF-8.
-		if !utf8OK(string(us)) {
-			return primitiveErrorf("UniversalString: input is not valid UTF-8")
-		}
-
-		// Reject surrogates and code points beyond Unicode max.
-		for i := 0; i < len(us) && err == nil; i++ {
-			err = universalStringCharacterOutOfBounds(rune(us[i]))
-		}
-
-		return
-	}
 }

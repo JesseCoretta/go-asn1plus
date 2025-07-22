@@ -28,6 +28,11 @@ func TestOctetString_codecov(_ *testing.T) {
 		_ = f.newWith(OctetString{}).(box)
 	}
 
+	OctetSpec(``)
+	OctetSpec(`test`)
+	OctetSpec([]byte(`test`))
+	OctetSpec(struct{}{})
+
 	oc.IsPrimitive()
 	oc.Tag()
 	_ = oc.String()
@@ -77,28 +82,28 @@ func TestOctetString_encodingRules(t *testing.T) {
 
 func ExampleOctetString_withConstraints() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
-		func(o OctetString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(x any) (err error) {
+		o, _ := x.(OctetString)
+		for i := 0; i < len(o); i++ {
+			if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
-		func(o OctetString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(OctetString)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// First try trips on a digit violation, so caseConstraint is never reached.
 	_, err := NewOctetString(`A0B876EFFFF0`, digitConstraint, caseConstraint)

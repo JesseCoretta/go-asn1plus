@@ -14,6 +14,10 @@ func TestT61String_codecov(t *testing.T) {
 	var tt T61String
 	_ = Unmarshal(pkt, &tt)
 
+	T61Spec(`test`)
+	T61Spec([]byte(`test`))
+	T61Spec(struct{}{})
+
 	for _, valid := range []struct {
 		value  any
 		expect string
@@ -93,16 +97,16 @@ func TestT61String_encodingRules(t *testing.T) {
 }
 
 func ExampleT61String_withConstraint() {
-	caseConstraint := LiftConstraint(func(o T61String) T61String { return o },
-		func(o T61String) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(T61String)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	_, err := NewT61String(`this is a T.61 string`, caseConstraint)
 	fmt.Println(err)

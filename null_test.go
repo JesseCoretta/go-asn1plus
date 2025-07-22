@@ -66,7 +66,7 @@ func TestNull_customType(t *testing.T) {
 		func([]byte) error { return nil },
 		func(customNull) ([]byte, error) { return nil, nil },
 		func([]byte) (customNull, error) { return customNull{}, nil },
-		func(customNull) error { return nil })
+		func(any) error { return nil })
 
 	// We cheat here rather than writing a separate
 	// constructor merely for testing.

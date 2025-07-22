@@ -476,7 +476,8 @@ func TestCustomRelativeOID_withControls(t *testing.T) {
 }
 
 func ExampleNewObjectIdentifier_withConstraint() {
-	mustBeISOOrg := func(oid ObjectIdentifier) (err error) {
+	mustBeISOOrg := func(x any) (err error) {
+		oid, _ := NewObjectIdentifier(x)
 		iso, _ := NewInteger(1)
 		org, _ := NewInteger(3)
 		if !(oid[0].Eq(iso) && oid[1].Eq(org)) {
@@ -485,11 +486,7 @@ func ExampleNewObjectIdentifier_withConstraint() {
 		return
 	}
 
-	iSOConstraint := LiftConstraint(func(oid ObjectIdentifier) ObjectIdentifier {
-		return oid
-	}, mustBeISOOrg)
-
-	_, err := NewObjectIdentifier(2, 1, iSOConstraint)
+	_, err := NewObjectIdentifier(2, 1, mustBeISOOrg)
 	if err != nil {
 		fmt.Println(err)
 	}

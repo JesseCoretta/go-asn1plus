@@ -232,33 +232,33 @@ func ExampleBoolean_viaGoBool() {
 
 func ExampleOctetString_viaGoStringWithTaggedConstraint() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
-		func(o OctetString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(o any) (err error) {
+		str, _ := o.(OctetString)
+		for i := 0; i < len(str); i++ {
+			if '0' <= rune(str[i]) && rune(str[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o OctetString) OctetString { return o },
-		func(o OctetString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(o any) (err error) {
+		str, _ := o.(OctetString)
+		for i := 0; i < len(str); i++ {
+			if 'a' <= rune(str[i]) && rune(str[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Create a single constraint group and register it
 	// as a tagged function. We can put as many constraint
 	// functions in a group as we please.
-	RegisterTaggedConstraintGroup("octetStringConstraints", ConstraintGroup[OctetString]{
+	RegisterTaggedConstraintGroup("octetStringConstraints", ConstraintGroup{
 		digitConstraint,
 		caseConstraint,
 	})
@@ -325,7 +325,7 @@ func TestWrapOIDCtor(t *testing.T) {
 
 		// a[1] should be the forwarded constraint; call it to prove
 		// that wrapOIDCtor delivered it intact.
-		if c, ok := a[1].(Constraint[ObjectIdentifier]); ok {
+		if c, ok := a[1].(Constraint); ok {
 			_ = c(ObjectIdentifier{}) // ignore error, flip flag
 		}
 
@@ -373,13 +373,13 @@ func TestWrapRelOIDCtor(t *testing.T) {
 	raw := func(a ...any) (RelativeOID, error) {
 		rawInvoked = true
 		gotFirst = a[0]
-		a[1].(Constraint[RelativeOID])(RelativeOID{})
+		a[1].(Constraint)(RelativeOID{})
 		return NewRelativeOID(1, 3, 6)
 	}
 
 	wrapper := wrapRelOIDCtor[int](raw, func(i int) any { return i })
 
-	_, err := wrapper(42, func(_ RelativeOID) error { csForward = true; return nil })
+	_, err := wrapper(42, func(_ any) error { csForward = true; return nil })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestWrapTemporalCtor(t *testing.T) {
 		csTouched bool
 	)
 
-	raw := func(x any, cs ...Constraint[Temporal]) (temporalDummy, error) {
+	raw := func(x any, cs ...Constraint) (temporalDummy, error) {
 		gotTime = x.(time.Time)
 		cs[0](temporalDummy{})
 		return temporalDummy{}, nil
@@ -414,7 +414,7 @@ func TestWrapTemporalCtor(t *testing.T) {
 	wrapped := wrapTemporalCtor[temporalDummy](raw)
 
 	now := tnow()
-	_, err := wrapped(now, func(_ temporalDummy) error { csTouched = true; return nil })
+	_, err := wrapped(now, func(_ any) error { csTouched = true; return nil })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -428,10 +428,10 @@ func TestRealCtor(_ *testing.T) {
 	r(float64(9.2))
 
 	r2 := wrapTemporalStringCtor[Time](
-		func(any, ...Constraint[Temporal]) (Time, error) { return Time{}, nil },
+		func(any, ...Constraint) (Time, error) { return Time{}, nil },
 		func(string) (time.Time, error) { return time.Time{}, nil },
 	)
-	r2(time.Now().String(), func(Time) error { return nil })
+	r2(time.Now().String(), func(_ any) error { return nil })
 }
 
 func TestAdapterPF_codecov(_ *testing.T) {

@@ -36,7 +36,7 @@ var VideotexStringConstraintPhase = CodecConstraintDecoding
 NewVideotexString returns an instance of [VideotexString] alongside an
 error following an attempt to marshal x.
 */
-func NewVideotexString(x any, constraints ...Constraint[VideotexString]) (VideotexString, error) {
+func NewVideotexString(x any, constraints ...Constraint) (VideotexString, error) {
 	var (
 		raw string
 		err error
@@ -58,8 +58,7 @@ func NewVideotexString(x any, constraints ...Constraint[VideotexString]) (Videot
 	_vts := VideotexString(raw)
 	err = VideotexSpec(_vts)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[VideotexString] = constraints
-		err = group.Constrain(_vts)
+		err = ConstraintGroup(constraints).Constrain(_vts)
 	}
 
 	if err == nil {
@@ -101,7 +100,7 @@ VideotexSpec implements the formal [Constraint] specification for [VideotexStrin
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var VideotexSpec Constraint[VideotexString]
+var VideotexSpec Constraint
 
 func isVideotexRune(ch rune) bool {
 	if ch < 0 || ch > 0xFFFF { // we only built the BMP bitmap
@@ -130,23 +129,6 @@ func videotexDecoder(b []byte) (VideotexString, error) {
 var videotexBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[VideotexString](TagVideotexString,
-		VideotexStringConstraintPhase,
-		videotexDecoderVerify,
-		videotexDecoder, nil,
-		VideotexSpec)
-
-	VideotexSpec = func(o VideotexString) (err error) {
-		for _, r := range []rune(o.String()) {
-			if !isVideotexRune(r) {
-				err = primitiveErrorf("VideotexString: invalid character '", int(r), "'")
-				break
-			}
-		}
-
-		return
-	}
-
 	set := func(lo, hi rune) {
 		for r := lo; r <= hi; r++ {
 			videotexBitmap[r>>6] |= 1 << (r & 63)
@@ -169,4 +151,34 @@ func init() {
 	set(0x2700, 0x27BF) // Dingbats
 	set(0x3000, 0x303F) // CJK symbols
 	set(0x4E00, 0x9FFF) // Common CJK Unified Ideographs (for Japanese Kanji or Chinese characters)
+
+	VideotexSpec = func(vs any) (err error) {
+		var o []rune
+		switch tv := vs.(type) {
+		case string:
+			o = []rune(tv)
+		case []byte:
+			o = []rune(string(tv))
+		case Primitive:
+			o = []rune(tv.String())
+		default:
+			err = errorPrimitiveAssertionFailed(VideotexString(``))
+			return
+		}
+
+		for _, r := range o {
+			if !isVideotexRune(r) {
+				err = primitiveErrorf("VideotexString: invalid character '", int(r), "'")
+				break
+			}
+		}
+
+		return
+	}
+
+	RegisterTextAlias[VideotexString](TagVideotexString,
+		VideotexStringConstraintPhase,
+		videotexDecoderVerify,
+		videotexDecoder, nil,
+		VideotexSpec)
 }

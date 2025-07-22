@@ -108,16 +108,16 @@ func BenchmarkVideotexConstructor(b *testing.B) {
 }
 
 func ExampleVideotexString_withConstraint() {
-	caseConstraint := LiftConstraint(func(o VideotexString) VideotexString { return o },
-		func(o VideotexString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(VideotexString)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	_, err := NewVideotexString(`this is a VIDEOTEX STRING`, caseConstraint)
 	fmt.Println(err)
@@ -142,6 +142,10 @@ func TestVideotexString_codecov(_ *testing.T) {
 	vts.Tag()
 	vts.IsZero()
 	vts.IsPrimitive()
+
+	VideotexSpec([]byte{0x1, 0x2, 0x3})
+	VideotexSpec(`test`)
+	VideotexSpec(struct{}{})
 
 	badRune := uint32(0xD800)
 

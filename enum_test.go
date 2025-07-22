@@ -6,7 +6,7 @@ import (
 )
 
 func TestCustomEnumerated_withControls(t *testing.T) {
-	orig, _ := NewEnumerated(123456, func(Enumerated) error {
+	orig, _ := NewEnumerated(123456, func(any) error {
 		return nil
 	})
 	var cust enum = enum(orig) // cheat
@@ -22,8 +22,8 @@ func TestCustomEnumerated_withControls(t *testing.T) {
 		func([]byte) (enum, error) {
 			return cust, nil
 		},
-		func(enum) error { return nil },
-		func(enum) error { return nil })
+		func(any) error { return nil },
+		func(any) error { return nil })
 
 	pkt, err := Marshal(cust, With(BER))
 	if err != nil {

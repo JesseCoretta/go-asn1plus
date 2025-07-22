@@ -58,7 +58,7 @@ func (r Enumerated) IsPrimitive() bool { return true }
 /*
 NewEnumerated returns an instance of [Enumerated].
 */
-func NewEnumerated(x any, constraints ...Constraint[Enumerated]) (enum Enumerated, err error) {
+func NewEnumerated(x any, constraints ...Constraint) (enum Enumerated, err error) {
 	var e int
 	switch tv := x.(type) {
 	case int:
@@ -70,7 +70,7 @@ func NewEnumerated(x any, constraints ...Constraint[Enumerated]) (enum Enumerate
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Enumerated] = constraints
+		var group ConstraintGroup = constraints
 		err = group.Constrain(Enumerated(e))
 	}
 
@@ -111,10 +111,10 @@ func RegisterEnumeratedAlias[T ~int](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T]) {
+	spec Constraint,
+	user ...Constraint) {
 
-	allCS := ConstraintGroup[Integer]{}
+	allCS := ConstraintGroup{}
 
 	var verList []DecodeVerifier
 	if verify != nil {
@@ -122,14 +122,14 @@ func RegisterEnumeratedAlias[T ~int](
 	}
 
 	if spec != nil {
-		allCS = append(allCS, func(i Integer) error {
-			return spec(T(i.native))
+		allCS = append(allCS, func(i any) error {
+			return spec(i)
 		})
 	}
 	for _, u := range user {
 		fn := u
-		allCS = append(allCS, func(i Integer) error {
-			return fn(T(i.native))
+		allCS = append(allCS, func(i any) error {
+			return fn(i)
 		})
 	}
 

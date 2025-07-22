@@ -59,7 +59,7 @@ following an analysis of x in the context of a Teletex String, per
 
 [ITU-T Rec. T.61]: https://www.itu.int/rec/T-REC-T.61
 */
-func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error) {
+func NewT61String(x any, constraints ...Constraint) (T61String, error) {
 	var (
 		raw string
 		t61 T61String
@@ -81,8 +81,7 @@ func NewT61String(x any, constraints ...Constraint[T61String]) (T61String, error
 	_t61 := T61String(raw)
 	err = T61Spec(_t61)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[T61String] = constraints
-		err = group.Constrain(_t61)
+		err = ConstraintGroup(constraints).Constrain(_t61)
 	}
 
 	if err == nil {
@@ -98,38 +97,11 @@ T61Spec implements the formal [Constraint] specification for [T61String].
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var T61Spec Constraint[T61String]
+var T61Spec Constraint
 
 var t61Bitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[T61String](TagT61String,
-		T61StringConstraintPhase, nil, nil, nil, T61Spec)
-	T61Spec = func(o T61String) (err error) {
-		if len(o) == 0 {
-			err = primitiveErrorf("T61String is zero length")
-			return
-		}
-
-		isT61Char := func(ch rune) (is bool) {
-			if !(ch < 0 || ch > 0xFFFF) {
-				word := ch >> 6
-				bit := ch & 63
-				is = (t61Bitmap[word]>>bit)&1 != 0
-			}
-			return
-		}
-
-		for _, r := range []rune(o.String()) {
-			if !isT61Char(r) {
-				err = primitiveErrorf("T61String: invalid character '", int(r), "'")
-				break
-			}
-		}
-
-		return
-	}
-
 	set := func(lo, hi rune) {
 		for r := lo; r <= hi; r++ {
 			t61Bitmap[r>>6] |= 1 << (r & 63)
@@ -165,4 +137,46 @@ func init() {
 	set(0x2126, 0x2126)
 	set(0x013F, 0x013F)
 	set(0x014B, 0x014B)
+
+	T61Spec = func(t61 any) (err error) {
+		var o []rune
+		switch tv := t61.(type) {
+		case string:
+			o = []rune(tv)
+		case []byte:
+			o = []rune(string(tv))
+		case Primitive:
+			o = []rune(tv.String())
+		default:
+			err = errorPrimitiveAssertionFailed(T61String(``))
+			return
+		}
+
+		if len(o) == 0 {
+			err = primitiveErrorf("T61String is zero length")
+			return
+		}
+
+		isT61Char := func(ch rune) (is bool) {
+			if !(ch < 0 || ch > 0xFFFF) {
+				word := ch >> 6
+				bit := ch & 63
+				is = (t61Bitmap[word]>>bit)&1 != 0
+			}
+			return
+		}
+
+		for _, r := range o {
+			if !isT61Char(r) {
+				err = primitiveErrorf("T61String: invalid character '", int(r), "'")
+				break
+			}
+		}
+
+		return
+	}
+
+	RegisterTextAlias[T61String](TagT61String,
+		T61StringConstraintPhase,
+		nil, nil, nil, T61Spec)
 }

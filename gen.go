@@ -27,7 +27,7 @@ var GeneralStringConstraintPhase = CodecConstraintDecoding
 NewGeneralString returns an instance of [GeneralString] alongside an error
 following attempt to marshal x.
 */
-func NewGeneralString(x any, constraints ...Constraint[GeneralString]) (gen GeneralString, err error) {
+func NewGeneralString(x any, constraints ...Constraint) (gen GeneralString, err error) {
 	var s string
 	switch tv := x.(type) {
 	case string:
@@ -44,7 +44,7 @@ func NewGeneralString(x any, constraints ...Constraint[GeneralString]) (gen Gene
 	_gen := GeneralString(s)
 	err = GeneralSpec(_gen)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[GeneralString] = constraints
+		var group ConstraintGroup = constraints
 		err = group.Constrain(_gen)
 	}
 
@@ -61,7 +61,7 @@ GeneralSpec implements the formal [Constraint] specification for [GeneralString]
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var GeneralSpec Constraint[GeneralString]
+var GeneralSpec Constraint
 
 /*
 Len returns the integer byte length of the receiver instance.
@@ -92,9 +92,28 @@ func (r GeneralString) IsPrimitive() bool { return true }
 var generalStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[GeneralString](TagGeneralString,
-		GeneralStringConstraintPhase, nil, nil, nil, GeneralSpec)
-	GeneralSpec = func(o GeneralString) (err error) {
+	set := func(lo, hi rune) {
+		for r := lo; r <= hi; r++ {
+			generalStringBitmap[r>>6] |= 1 << (r & 63)
+		}
+	}
+	// 0x0000..0x007F: Basic Latin (includes control characters)
+	// 0x0080..0x009F: C1 Controls (rarely printable but part of the charset)
+	// 0x00A0..0x00FF: Latin‑1 Supplement (graphical characters)
+	set(0x0000, 0x00FF)
+
+	GeneralSpec = func(gs any) (err error) {
+		var o GeneralString
+		switch tv := gs.(type) {
+		case string:
+			o = GeneralString(tv)
+		case Primitive:
+			o = GeneralString(tv.String())
+		default:
+			err = errorPrimitiveAssertionFailed(o)
+			return
+		}
+
 		runes := []rune(o.String())
 		for i := 0; i < len(runes) && err == nil; i++ {
 			r := rune(runes[i])
@@ -110,13 +129,7 @@ func init() {
 		return
 	}
 
-	set := func(lo, hi rune) {
-		for r := lo; r <= hi; r++ {
-			generalStringBitmap[r>>6] |= 1 << (r & 63)
-		}
-	}
-	// 0x0000..0x007F: Basic Latin (includes control characters)
-	// 0x0080..0x009F: C1 Controls (rarely printable but part of the charset)
-	// 0x00A0..0x00FF: Latin‑1 Supplement (graphical characters)
-	set(0x0000, 0x00FF)
+	RegisterTextAlias[GeneralString](TagGeneralString,
+		GeneralStringConstraintPhase,
+		nil, nil, nil, GeneralSpec)
 }

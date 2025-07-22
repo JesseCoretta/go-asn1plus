@@ -450,13 +450,13 @@ func TestFloat64Components_base2OddMantissa(t *testing.T) {
 
 func ExampleReal_withConstraints() {
 	// Prohibit use of any base other than 2 or 8
-	baseConstraint := LiftConstraint(func(o Real) Real { return o },
-		func(o Real) (err error) {
-			if o.Base != 2 && o.Base != 8 {
-				err = fmt.Errorf("Constraint violation: prohibited base detected: %d", o.Base)
-			}
-			return
-		})
+	baseConstraint := func(x any) (err error) {
+		o, _ := x.(Real)
+		if o.Base != 2 && o.Base != 8 {
+			err = fmt.Errorf("Constraint violation: prohibited base detected: %d", o.Base)
+		}
+		return
+	}
 
 	// Create a Real using base10.
 	_, err := NewReal(314159, 10, -5, baseConstraint)

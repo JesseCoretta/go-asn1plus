@@ -313,6 +313,16 @@ func (r Choices) lookupDescriptorByInterface(iface reflect.Type) (desc *choiceDe
 	return
 }
 
+func unmarshalUnwrapInterfaceChoice(sub PDU, fv reflect.Value, opts *Options) (err error) {
+	if opts.Class() != 0 && fv.Kind() == reflect.Interface && opts.Choices != "" {
+		if _, err = sub.TLV(); err != nil {
+			// unwrap interface-based choices
+			err = choiceErr{err}
+		}
+	}
+	return
+}
+
 func marshalChoiceWrapper(
 	parent any,
 	pkt PDU,
@@ -321,6 +331,10 @@ func marshalChoiceWrapper(
 ) error {
 	cw := v.Interface().(Choice)
 	inner := cw.Value()
+	if inner == nil {
+		// No value? Try to get a default
+		inner = opts.Default
+	}
 
 	cho, found := GetChoices(opts.Choices)
 	if !found || cho.Len() == 0 {
@@ -334,7 +348,7 @@ func marshalChoiceWrapper(
 	innerOpts := clearChildOpts(opts)
 	innerOpts.Choices = ""
 	if err := marshalValue(refValueOf(inner), tmp, innerOpts); err != nil {
-		return err
+		return choiceErr{err}
 	}
 	innerBytes := tmp.Data()
 
@@ -365,8 +379,23 @@ func marshalChoiceWrapper(
 	return nil
 }
 
+/*
+isInterfaceChoice returns a Boolean value indicative of
+v being an interface that is NOT an actual Choice when
+combined with a non-zero list of Choices.
+
+A return value of true indicates that the user wants to
+treat a non-Choice interface as a Choice. In this case,
+use of this function is usually followed an "artificial
+Choice wrapping" of the underlying interface value.
+*/
+func isInterfaceChoice(v reflect.Value, opts *Options) bool {
+	_, is := v.Interface().(Choice)
+	return !is && v.Kind() == reflect.Interface && opts.Choices != ""
+}
+
 func isChoice(v reflect.Value, opts *Options) bool {
-	// 1) Quick bail-outs
+	// Quick bail-outs
 	if opts == nil || opts.Choices == "" {
 		return false
 	}
@@ -374,7 +403,7 @@ func isChoice(v reflect.Value, opts *Options) bool {
 		return false
 	}
 
-	// 2) If it’s an interface, peel it one level
+	// If it’s an interface, peel it one level
 	if v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return false
@@ -382,7 +411,7 @@ func isChoice(v reflect.Value, opts *Options) bool {
 		v = v.Elem()
 	}
 
-	// 3) Only the exact Choice‐alias type is a CHOICE
+	// Only the exact Choice‐alias type is a CHOICE
 	choiceType := refTypeOf(Choice(nil))
 	var ok bool
 	if v.Type() == choiceType {

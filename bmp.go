@@ -38,7 +38,7 @@ var BMPStringConstraintPhase = CodecConstraintDecoding
 NewBMPString returns an instance of [BMPString] alongside an error following
 an attempt to marshal x.
 */
-func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, err error) {
+func NewBMPString(x any, constraints ...Constraint) (bmp BMPString, err error) {
 	if tv, ok := x.(BMPString); ok {
 		if len(tv) == 0 {
 			bmp = BMPString{byte(TagBMPString), 0x00}
@@ -75,8 +75,7 @@ func NewBMPString(x any, constraints ...Constraint[BMPString]) (bmp BMPString, e
 
 	_bmp := BMPString(out)
 
-	var group ConstraintGroup[BMPString]
-	group = append(group, constraints...)
+	var group ConstraintGroup = constraints
 	if err = group.Constrain(_bmp); err == nil {
 		bmp = _bmp
 	}
@@ -105,7 +104,7 @@ BMPSpec implements the formal [Constraint] specification for [BMPString].
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var BMPSpec Constraint[BMPString]
+var BMPSpec Constraint
 
 /*
 Tag returns the integer constant [TagBMPString].
@@ -156,9 +155,20 @@ IsZero returns a Boolean value indicative of a nil receiver state.
 func (r BMPString) IsZero() bool { return r == nil }
 
 func init() {
-	RegisterTextAlias[BMPString](TagBMPString,
-		BMPStringConstraintPhase, nil, nil, nil, BMPSpec)
-	BMPSpec = func(o BMPString) (err error) {
+	BMPSpec = func(bmp any) (err error) {
+		var o BMPString
+		switch tv := bmp.(type) {
+		case string:
+			o, _ = NewBMPString(tv)
+		case BMPString:
+			o = tv // as-is
+		case Primitive:
+			o, _ = NewBMPString(tv)
+		default:
+			err = errorPrimitiveAssertionFailed(o)
+			return
+		}
+
 		if len(o) == 0 {
 			return
 		} else if len(o) == 2 {
@@ -175,4 +185,8 @@ func init() {
 
 		return
 	}
+
+	RegisterTextAlias[BMPString](TagBMPString,
+		BMPStringConstraintPhase,
+		nil, nil, nil, BMPSpec)
 }

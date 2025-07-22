@@ -66,7 +66,7 @@ func (r PrintableString) IsZero() bool { return len(r) == 0 }
 NewPrintableString returns an instance of [PrintableString] alongside
 an error following an attempt to marshal x.
 */
-func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps PrintableString, err error) {
+func NewPrintableString(x any, constraints ...Constraint) (ps PrintableString, err error) {
 	var raw string
 
 	switch tv := x.(type) {
@@ -88,8 +88,7 @@ func NewPrintableString(x any, constraints ...Constraint[PrintableString]) (ps P
 	_ps := PrintableString(raw)
 	err = PrintableSpec(_ps)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[PrintableString] = constraints
-		err = group.Constrain(PrintableString(raw))
+		err = ConstraintGroup(constraints).Constrain(_ps)
 	}
 
 	if err == nil {
@@ -105,16 +104,44 @@ PrintableSpec implements the formal [Constraint] specification for [PrintableStr
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var PrintableSpec Constraint[PrintableString]
+var PrintableSpec Constraint
 
 var printableStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 
 func init() {
-	RegisterTextAlias[PrintableString](TagPrintableString,
-		PrintableStringConstraintPhase, nil, nil, nil, PrintableSpec)
+	set := func(lo, hi rune) {
+		for r := lo; r <= hi; r++ {
+			printableStringBitmap[r>>6] |= 1 << (r & 63)
+		}
+	}
+	set(0x0020, 0x0020)
+	set(0x0027, 0x0029)
+	set(0x002B, 0x002F)
+	set(0x003A, 0x003A)
+	set(0x003F, 0x003F)
+	set(0x0030, 0x0039)
+	set(0x0041, 0x005A)
+	set(0x0061, 0x007A)
 
-	PrintableSpec = func(o PrintableString) (err error) {
-		for _, r := range []rune(o.String()) {
+	PrintableSpec = func(ps any) (err error) {
+		var o []rune
+		switch tv := ps.(type) {
+		case Primitive:
+			o = []rune(tv.String())
+		case string:
+			o = []rune(tv)
+		case []byte:
+			o = []rune(string(tv))
+		default:
+			err = errorPrimitiveAssertionFailed(PrintableString(``))
+			return
+		}
+		if len(o) == 0 {
+			err = mkerr("PrintableString is zero length")
+			return
+		}
+
+		for _, r := range o {
 			if r < 0 || r > 0xFFFF {
 				err = primitiveErrorf("PrintableString: invalid character '",
 					string(r), "' (>0xFFFF)")
@@ -132,17 +159,7 @@ func init() {
 		return
 	}
 
-	set := func(lo, hi rune) {
-		for r := lo; r <= hi; r++ {
-			printableStringBitmap[r>>6] |= 1 << (r & 63)
-		}
-	}
-	set(0x0020, 0x0020)
-	set(0x0027, 0x0029)
-	set(0x002B, 0x002F)
-	set(0x003A, 0x003A)
-	set(0x003F, 0x003F)
-	set(0x0030, 0x0039)
-	set(0x0041, 0x005A)
-	set(0x0061, 0x007A)
+	RegisterTextAlias[PrintableString](TagPrintableString,
+		PrintableStringConstraintPhase,
+		nil, nil, nil, PrintableSpec)
 }

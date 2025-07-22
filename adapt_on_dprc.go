@@ -6,7 +6,7 @@ import "time"
 
 func registerDeprecatedAdapters() {
 	RegisterAdapter[GraphicString, string](
-		func(s string, cs ...Constraint[GraphicString]) (GraphicString, error) {
+		func(s string, cs ...Constraint) (GraphicString, error) {
 			return NewGraphicString(s, cs...)
 		},
 		func(p *GraphicString) string { return string(*p) },
@@ -14,7 +14,7 @@ func registerDeprecatedAdapters() {
 	)
 
 	RegisterAdapter[VideotexString, string](
-		func(s string, cs ...Constraint[VideotexString]) (VideotexString, error) {
+		func(s string, cs ...Constraint) (VideotexString, error) {
 			return NewVideotexString(s, cs...)
 		},
 		func(p *VideotexString) string { return string(*p) },
@@ -22,7 +22,7 @@ func registerDeprecatedAdapters() {
 	)
 
 	RegisterAdapter[GeneralString, string](
-		func(s string, cs ...Constraint[GeneralString]) (GeneralString, error) {
+		func(s string, cs ...Constraint) (GeneralString, error) {
 			return NewGeneralString(s, cs...)
 		},
 		func(p *GeneralString) string { return string(*p) },
@@ -30,7 +30,7 @@ func registerDeprecatedAdapters() {
 	)
 
 	RegisterAdapter[T61String, string](
-		func(s string, cs ...Constraint[T61String]) (T61String, error) {
+		func(s string, cs ...Constraint) (T61String, error) {
 			return NewT61String(s, cs...)
 		},
 		func(p *T61String) string { return string(*p) },

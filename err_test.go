@@ -18,4 +18,19 @@ func TestExpectError(t *testing.T) {
 
 	_ = mkerrf("Hello ", 5)
 	_ = mkerrf("Hello ", struct{}{})
+
+	choiceErrorf("blarg")
+	tLVErrorf("blarg")
+	var nonNilErr error = mkerr("test")
+	nonNilErr = adapterErr{nonNilErr}
+	_ = nonNilErr.Error()
+	nonNilErr = choiceErr{nonNilErr}
+	_ = nonNilErr.Error()
+	nonNilErr = primitiveErr{nonNilErr}
+	_ = nonNilErr.Error()
+
+	errorNamedDefaultNotFound(``)
+	_ = errorUnknownConstraint(`test`)
+	mkerrf()
+	mkerrf(nil)
 }

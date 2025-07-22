@@ -9,7 +9,7 @@ OCTET STRING type.
 OctetString returns an instance of [OctetString] alongside an error
 following an attempt to marshal x.
 */
-func NewOctetString(x any, constraints ...Constraint[OctetString]) (oct OctetString, err error) {
+func NewOctetString(x any, constraints ...Constraint) (oct OctetString, err error) {
 	var str string
 
 	switch tv := x.(type) {
@@ -27,8 +27,7 @@ func NewOctetString(x any, constraints ...Constraint[OctetString]) (oct OctetStr
 	_oct := OctetString(str)
 	err = OctetSpec(_oct)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[OctetString] = constraints
-		err = group.Constrain(_oct)
+		err = ConstraintGroup(constraints).Constrain(_oct)
 	}
 
 	if err == nil {
@@ -44,7 +43,7 @@ OctetSpec implements the formal [Constraint] specification for [OctetString].
 Note that this specification is automatically executed during construction and
 need not be specified manually as a [Constraint] by the end user.
 */
-var OctetSpec Constraint[OctetString]
+var OctetSpec Constraint
 
 /*
 OctetString implements the ASN.1 OCTET STRING type (tag 4).
@@ -92,11 +91,21 @@ func (r OctetString) Len() int {
 }
 
 func init() {
-	RegisterTextAlias[OctetString](TagOctetString,
-		OctetStringConstraintPhase, nil, nil, nil, OctetSpec)
+	OctetSpec = func(oct any) (err error) {
+		var o []rune
+		switch tv := oct.(type) {
+		case []byte:
+			o = []rune(string(tv))
+		case string:
+			o = []rune(tv)
+		case Primitive:
+			o = []rune(tv.String())
+		default:
+			err = errorPrimitiveAssertionFailed(o)
+			return
+		}
 
-	OctetSpec = func(o OctetString) (err error) {
-		for _, r := range []rune(o.String()) {
+		for _, r := range o {
 			if r > 0x00FF {
 				err = primitiveErrorf("OCTET STRING: invalid character '",
 					string(r), "' (>0x00FF)")
@@ -105,4 +114,8 @@ func init() {
 		}
 		return
 	}
+
+	RegisterTextAlias[OctetString](TagOctetString,
+		OctetStringConstraintPhase,
+		nil, nil, nil, OctetSpec)
 }

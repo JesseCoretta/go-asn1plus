@@ -44,6 +44,11 @@ func TestPrintableString_codecov(t *testing.T) {
 	NewPrintableString(ps)
 	NewPrintableString(string(rune(0xFFFFF)))
 
+	PrintableSpec(``)
+	PrintableSpec(`test`)
+	PrintableSpec([]byte(`test`))
+	PrintableSpec(struct{}{})
+
 	badRune := uint32(0xD800)
 	b := []byte{
 		byte(badRune >> 24),
@@ -93,7 +98,7 @@ func TestPrintableString_codecov(t *testing.T) {
 type customPrintable PrintableString
 
 func (_ customPrintable) Tag() int          { return TagPrintableString }
-func (_ customPrintable) String() string    { return `` }
+func (r customPrintable) String() string    { return string(r) }
 func (_ customPrintable) IsPrimitive() bool { return true }
 
 func TestCustomPrintableString_withControls(t *testing.T) {
@@ -102,32 +107,31 @@ func TestCustomPrintableString_withControls(t *testing.T) {
 		// dummy decoding verifier -- nil is sufficient in most cases
 		func([]byte) error { return nil }, // verify decoder
 		// dummy decoder -- nil is sufficient in most cases
-		func(b []byte) (customPrintable, error) { return customPrintable(b), nil }, // custom decoder
+		func(b []byte) (customPrintable, error) { return customPrintable(b), nil },
 		// dummy encoder -- nil is sufficient in most cases
-		func(p customPrintable) ([]byte, error) { return []byte{0x48, 0x65, 0x6c, 0x6c, 0x6f}, nil }, // custom encoder
-		// asn1plus built-in PrintableString specification constraint
-		func(p customPrintable) error { return PrintableSpec(PrintableString(p)) },
+		func(p customPrintable) ([]byte, error) { return []byte{0x48, 0x65, 0x6c, 0x6c, 0x6f}, nil },
+		// built-in PrintableString specification constraint.
+		PrintableSpec,
 		// user-provided constraint(s) -- provide as many as
-		// desired, ordered in the most logical way. Leave
-		// empty if no custom constraints are needed.
-		LiftConstraint(func(o customPrintable) customPrintable { return o },
-			func(o customPrintable) (err error) {
-				for i := 0; i < len(o); i++ {
-					if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-						err = fmt.Errorf("Constraint violation: policy prohibits digits")
-						break
-					}
+		// desired, ordered in the most logical way.
+		func(x any) (err error) {
+			o, _ := x.(customPrintable)
+			for i := 0; i < len(o); i++ {
+				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+					err = fmt.Errorf("Constraint violation: policy prohibits digits")
+					break
 				}
-				return
-			}),
+			}
+			return
+		},
 	)
 
-	var cust customPrintable = customPrintable("Hello")
+	cust := customPrintable("Hello")
 	cust.Tag()
 	cust.IsPrimitive()
 	_ = cust.String()
 
-	pkt, err := Marshal(cust, With(BER))
+	pkt, err := Marshal(cust)
 	if err != nil {
 		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
@@ -141,28 +145,28 @@ func TestCustomPrintableString_withControls(t *testing.T) {
 
 func ExamplePrintableString_withConstraints() {
 	// Prohibit use of any digit characters
-	digitConstraint := LiftConstraint(func(o PrintableString) PrintableString { return o },
-		func(o PrintableString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
-					err = fmt.Errorf("Constraint violation: policy prohibits digits")
-					break
-				}
+	digitConstraint := func(x any) (err error) {
+		o, _ := x.(PrintableString)
+		for i := 0; i < len(o); i++ {
+			if '0' <= rune(o[i]) && rune(o[i]) <= '9' {
+				err = fmt.Errorf("Constraint violation: policy prohibits digits")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// Prohibit any lower-case ASCII letters
-	caseConstraint := LiftConstraint(func(o PrintableString) PrintableString { return o },
-		func(o PrintableString) (err error) {
-			for i := 0; i < len(o); i++ {
-				if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
-					err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
-					break
-				}
+	caseConstraint := func(x any) (err error) {
+		o, _ := x.(PrintableString)
+		for i := 0; i < len(o); i++ {
+			if 'a' <= rune(o[i]) && rune(o[i]) <= 'z' {
+				err = fmt.Errorf("Constraint violation: policy prohibits lower-case ASCII")
+				break
 			}
-			return
-		})
+		}
+		return
+	}
 
 	// First try trips on a digit violation, so caseConstraint is never reached.
 	_, err := NewPrintableString(`A0B876EFFFF0`, digitConstraint, caseConstraint)

@@ -83,7 +83,7 @@ use [NewRealPlusInfinity] and [NewRealMinusInfinity] instead of this function.
 
 Only base values of 2, 8, 10 and 16 are currently supported.
 */
-func NewReal(mantissa any, base, exponent int, constraints ...Constraint[Real]) (Real, error) {
+func NewReal(mantissa any, base, exponent int, constraints ...Constraint) (Real, error) {
 	var (
 		_r,
 		r Real
@@ -100,8 +100,7 @@ func NewReal(mantissa any, base, exponent int, constraints ...Constraint[Real]) 
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[Real] = constraints
-		err = group.Constrain(_r)
+		err = ConstraintGroup(constraints).Constrain(_r)
 	}
 
 	if err == nil {
@@ -420,7 +419,7 @@ type realCodec[T any] struct {
 	val    T
 	tag    int
 	cphase int
-	cg     ConstraintGroup[T]
+	cg     ConstraintGroup
 
 	decodeVerify []DecodeVerifier
 	encodeHook   EncodeOverride[T]
@@ -629,10 +628,10 @@ func RegisterRealAlias[T any](
 	verify DecodeVerifier,
 	encoder EncodeOverride[T],
 	decoder DecodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T],
+	spec Constraint,
+	user ...Constraint,
 ) {
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

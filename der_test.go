@@ -8,15 +8,17 @@ import (
 
 func TestDER_codecov(_ *testing.T) {
 	pkt := &DERPacket{}
+	DER.OID()
+	pkt.ID()
 	pkt.HasMoreData()
 	pkt.WriteTLV(TLV{Tag: 3, Class: 1})
 	bts := make([]byte, 4)
 	encodeBCDLengthInto(&bts, -1)
 	encodeBCDLengthInto(&bts, 501)
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x80, 0x83, 0x01, 0xe4})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x03, 0x83, 0x01, 0xe4})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x04, 0x82, 0x00, 0x80, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
-	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x02, 0x81, 0x7F, 0x83, 0x01, 0xe4, 0x1e, 0x2a})
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x80, 0x83, 0x01, 0xe4}, nil)
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0xa, 0x03, 0x83, 0x01, 0xe4}, nil)
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x04, 0x82, 0x00, 0x80, 0x83, 0x01, 0xe4, 0x1e, 0x2a}, nil)
+	tlvVerifyLengthState(&DERPacket{offset: 1}, []byte{0x02, 0x81, 0x7F, 0x83, 0x01, 0xe4, 0x1e, 0x2a}, nil)
 	writeTLV(&DERPacket{}, TLV{Length: -1}, &Options{Indefinite: true})
 	marshalCheckBadOptions(DER, &Options{Indefinite: true})
 }

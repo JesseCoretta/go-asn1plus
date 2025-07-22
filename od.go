@@ -26,7 +26,7 @@ var ObjectDescriptorConstraintPhase = CodecConstraintDecoding
 NewObjectDescriptor returns an instance of [ObjectDescriptor] alongside
 an error following an attempt to marshal x.
 */
-func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (ObjectDescriptor, error) {
+func NewObjectDescriptor(x any, constraints ...Constraint) (ObjectDescriptor, error) {
 	var (
 		str string
 		od  ObjectDescriptor
@@ -48,7 +48,7 @@ func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (Ob
 	_od := ObjectDescriptor(str)
 	err = ObjectDescriptorSpec(_od)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup[ObjectDescriptor] = constraints
+		var group ConstraintGroup = constraints
 		err = group.Constrain(_od)
 	}
 
@@ -60,12 +60,13 @@ func NewObjectDescriptor(x any, constraints ...Constraint[ObjectDescriptor]) (Ob
 }
 
 /*
-ObjectDescriptorSpec implements the formal [Constraint] specification for [ObjectDescriptor].
+ObjectDescriptorSpec implements the formal [Constraint] specification
+for [ObjectDescriptor].
 
-Note that this specification is automatically executed during construction and
-need not be specified manually as a [Constraint] by the end user.
+Note that this specification is automatically executed during construction
+and need not be specified manually as a [Constraint] by the end user.
 */
-var ObjectDescriptorSpec Constraint[ObjectDescriptor]
+var ObjectDescriptorSpec Constraint
 
 /*
 Len returns the integer length of the receiver instance.
@@ -105,12 +106,21 @@ func graphicStringDecoderVerify(b []byte) (err error) {
 }
 
 func init() {
+	ObjectDescriptorSpec = func(obj any) (err error) {
+		switch tv := obj.(type) {
+		case string:
+			err = graphicStringDecoderVerify([]byte(tv))
+		case []byte:
+			err = graphicStringDecoderVerify(tv)
+		case Primitive:
+			err = graphicStringDecoderVerify([]byte(tv.String()))
+		default:
+			err = errorPrimitiveAssertionFailed(ObjectDescriptor(``))
+		}
+		return
+	}
+
 	RegisterTextAlias[ObjectDescriptor](TagObjectDescriptor,
 		ObjectDescriptorConstraintPhase,
 		nil, nil, nil, ObjectDescriptorSpec)
-
-	ObjectDescriptorSpec = func(o ObjectDescriptor) error {
-		// ObjectDescriptor supports GRAPHIC STRING characters
-		return graphicStringDecoderVerify([]byte(o))
-	}
 }

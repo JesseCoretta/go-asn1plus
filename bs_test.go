@@ -503,7 +503,8 @@ func TestBitStringRightAlign_ShiftAndMerge(t *testing.T) {
 //   - successful acceptance of a value that meets them all
 func ExampleBitString_withConstraints() {
 	// bit-length constraint – allow 1 ... 8 bits
-	cBitLength := func(bs BitString) error {
+	cBitLength := func(x any) error {
+		bs, _ := x.(BitString)
 		if bs.BitLength < 1 || bs.BitLength > 8 {
 			return fmt.Errorf("size %d is out of bounds [1, 8]", bs.BitLength)
 		}
@@ -512,7 +513,8 @@ func ExampleBitString_withConstraints() {
 
 	// subset-of constraint – only bits 0 & 1
 	mask, _ := NewBitString("'C0'H")
-	cSubset := func(bs BitString) error {
+	cSubset := func(x any) error {
+		bs, _ := x.(BitString)
 		for i := 0; i < bs.BitLength; i++ {
 			if bs.At(i) == 1 && mask.At(i) == 0 {
 				return fmt.Errorf("constraint violation: bit %d not permitted", i)
@@ -522,7 +524,8 @@ func ExampleBitString_withConstraints() {
 	}
 
 	// even-bit rule – only even positions 1
-	cEven := func(bs BitString) error {
+	cEven := func(x any) error {
+		bs, _ := x.(BitString)
 		for i := 0; i < bs.BitLength; i++ {
 			if i%2 == 1 && bs.At(i) == 1 {
 				return fmt.Errorf("constraint violation: only even-numbered bits may be 1 (got bit %d)", i)

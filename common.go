@@ -105,6 +105,10 @@ func valueOf[T any](v any) T {
 	}
 }
 
+func ptrIsNil(v reflect.Value) bool {
+	return v.Kind() == reflect.Ptr && v.IsNil()
+}
+
 func derefTypePtr(t reflect.Type) reflect.Type {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -117,6 +121,47 @@ func derefValuePtr(v reflect.Value) reflect.Value {
 		v = v.Elem()
 	}
 	return v
+}
+
+/*
+canAssign returns an error following an attempt to verify whether src
+can be written into dest. This function is called exclusively by the
+refSetValue function.
+
+If dest is addressable in some manner, it returns nil. Otherwise it
+returns a non-nil error describing the mismatch.
+*/
+func canAssign(dest, src reflect.Value) (err error) {
+	if !dest.IsValid() {
+		err = mkerr("destination is invalid")
+	} else if !dest.CanSet() {
+		err = mkerrf("destination of type ", dest.Type(), " is not settable")
+	} else {
+		dType := dest.Type()
+		sType := src.Type()
+		if !(sType.AssignableTo(dType) || sType.ConvertibleTo(dType)) {
+			// neither direct assignment nor conversion
+			// seem to apply here ...
+			err = mkerrf("cannot assign value of type ", sType,
+				" to destination of type ", dType)
+		}
+	}
+
+	return
+}
+
+/*
+refSetValue returns an error following an attempt to write src into dest
+*/
+func refSetValue(dest, src reflect.Value) (err error) {
+	if err := canAssign(dest, src); err == nil {
+		if src.Type().AssignableTo(dest.Type()) {
+			dest.Set(src)
+		} else {
+			dest.Set(src.Convert(dest.Type()))
+		}
+	}
+	return
 }
 
 func unwrapInterface(val reflect.Value) reflect.Value {
@@ -219,10 +264,6 @@ func getTagMethod(x any) (func() int, bool) {
 func effectiveHeader(baseTag, baseClass int, o *Options) (int, int) {
 	if o == nil {
 		return baseTag, baseClass
-	}
-	// Highest priority: CHOICE helper supplying an explicit tag.
-	if o.choiceTag != nil {
-		baseTag = *o.choiceTag
 	}
 
 	// Ignore a *pure* zero-value Options{} (Tag==0 && Class==0).

@@ -132,7 +132,6 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 	subOpts := clearChildOpts(opts)
 	isCh := isChoice(v, opts)
-	//isChoice := unmarshalSetIsChoice(elemType)
 
 	for pkt.HasMoreData() {
 		var tmp reflect.Value
@@ -159,19 +158,7 @@ func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		newSlice.Index(i).Set(el)
 	}
 
-	v.Set(newSlice)
-	return
-}
-
-func unmarshalSetIsChoice(elemType reflect.Type) (isChoice bool) {
-	// Determine if the element type is (or points to) a Choice.
-	var choiceType = refTypeOf(Choice(nil))
-	if elemType.Kind() == reflect.Ptr {
-		isChoice = elemType.Elem() == choiceType
-	} else {
-		isChoice = elemType == choiceType
-	}
-
+	refSetValue(v, newSlice)
 	return
 }
 
@@ -202,27 +189,6 @@ func unmarshalSequenceAsSet(v reflect.Value) (reflect.Value, error) {
 	return v, err
 }
 
-func unmarshalSetOfChoiceHeaderLength(start int, pkt PDU) (data []byte, headerLen int) {
-	// Compute headerLen = identifier + length octets
-	data = pkt.Data()
-	if data[start+1]&indefByte != 0 {
-		headerLen = 2 + int(data[start+1]&0x7F)
-	} else {
-		headerLen = 2
-	}
-
-	return
-}
-
-func unmarshalSetOfChoiceGetTag(tlv TLV, fullWrapper []byte) (tag int) {
-	tag = int(fullWrapper[0]) & 0x1F
-	if tlv.Tag != TagSet { // override if non‐universal SET
-		tag = tlv.Tag
-	}
-
-	return
-}
-
 func setPickChoiceAlternative(
 	pkt PDU,
 	parentOpts *Options,
@@ -238,12 +204,12 @@ func setPickChoiceAlternative(
 	// If the next TLV is a universal SET, strip it and recurse
 	if tlv, pe := pkt.PeekTLV(); pe == nil &&
 		tlv.Class == ClassUniversal && tlv.Tag == TagSet {
-		if _, err = pkt.TLV(); err != nil {
-			return
+		if _, err = pkt.TLV(); err == nil {
+			sub := typ.New(tlv.Value...)
+			sub.SetOffset()
+			tag, payload, payloadPK, childOpts, err = setPickChoiceAlternative(sub, parentOpts)
 		}
-		sub := typ.New(tlv.Value...)
-		sub.SetOffset()
-		return setPickChoiceAlternative(sub, parentOpts)
+		return
 	}
 
 	// Consume the context-specific wrapper TLV ([n] EXPLICIT)

@@ -9,9 +9,12 @@ import (
 
 func TestCER_codecov(_ *testing.T) {
 	pkt := CER.New()
+	pkt.ID()
+	pkt.Dump(nil)
 	pkt.HasMoreData()
 	pkt.WriteTLV(TLV{Tag: 3, Class: 1})
 	pkt.Type().OID()
+	pkt.Free()
 	decodeCERLength([]byte{}, 10)
 	decodeCERLength([]byte{0x82, 0x01}, 0)
 	decodeCERLength([]byte{0x30, 0x00}, 0)

@@ -21,7 +21,7 @@ type textCodec[T TextLike] struct {
 	val          T
 	tag          int
 	cphase       int
-	cg           ConstraintGroup[T]
+	cg           ConstraintGroup
 	decodeVerify []DecodeVerifier
 	decodeHook   DecodeOverride[T]
 	encodeHook   EncodeOverride[T]
@@ -199,10 +199,10 @@ func RegisterTextAlias[T TextLike](
 	verify DecodeVerifier,
 	decoder DecodeOverride[T],
 	encoder EncodeOverride[T],
-	spec Constraint[T],
-	user ...Constraint[T]) {
+	spec Constraint,
+	user ...Constraint) {
 
-	all := append(ConstraintGroup[T]{spec}, user...)
+	all := append(ConstraintGroup{spec}, user...)
 
 	var verList []DecodeVerifier
 	if verify != nil {

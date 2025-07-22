@@ -21,8 +21,7 @@ func (r External) Tag() int { return TagExternal }
 
 func externalSpecial() *Options {
 	opts := implicitOptions()
-	opts.SetClass(0)
-	opts.SetTag(TagExternal)
+	opts.SetTag(TagExternal).SetClass(0)
 	return opts
 }
 
