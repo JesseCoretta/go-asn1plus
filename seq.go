@@ -19,16 +19,24 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	}
 
 	seqTag := getSequenceTag(opts) // use opts.Tag OR fallback to 16
-	auto := opts != nil && opts.Automatic
-	sub := pkt.Type().New()
 
 	typ := v.Type()
+	var extIdx int
+	if extIdx, err = findExtensibleIndex(typ, opts); err != nil {
+		return
+	}
+
+	sub := pkt.Type().New()
+	auto := opts != nil && opts.Automatic
 
 	for i := 0; i < v.NumField() && err == nil; i++ {
 		if field := typ.Field(i); field.PkgPath == "" {
 			var fOpts *Options
 			if fOpts, err = extractOptions(field, i, auto); err == nil {
-				if fOpts.ComponentsOf {
+				if i == extIdx {
+					tlvs := v.Field(i).Interface().([]TLV)
+					err = marshalSequenceExtensionField(tlvs, sub, fOpts)
+				} else if fOpts.ComponentsOf {
 					err = marshalSequenceComponentsOf(field, v.Field(i), sub, fOpts, auto)
 				} else {
 					err = marshalSequenceField(field.Name, v, v.Field(i), sub, fOpts)
@@ -41,6 +49,13 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		err = marshalSequenceWrap(sub, pkt, opts, seqTag)
 	}
 
+	return
+}
+
+func marshalSequenceExtensionField(tlvs []TLV, pkt PDU, opts *Options) (err error) {
+	for i := 0; i < len(tlvs) && err == nil; i++ {
+		err = writeTLV(pkt, tlvs[i], opts)
+	}
 	return
 }
 
@@ -205,15 +220,20 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	sub := pkt.Type().New(seqContent...)
 	sub.SetOffset(0)
 
-	// Whether automatic tagging is enabled.
-	var auto bool = opts != nil && opts.Automatic
-
 	typ := v.Type()
+	var extIdx int
+	if extIdx, err = findExtensibleIndex(typ, opts); err != nil {
+		return
+	}
+
+	auto := opts != nil && opts.Automatic
 	for i := 0; i < v.NumField() && err == nil; i++ {
 		if field := typ.Field(i); field.PkgPath == "" {
 			var fOpts *Options
 			if fOpts, err = extractOptions(field, i, auto); err == nil {
-				if fOpts.ComponentsOf {
+				if i == extIdx {
+					err = unmarshalSequenceExtensionField(v.Field(i), sub, fOpts)
+				} else if fOpts.ComponentsOf {
 					err = unmarshalSequenceComponentsOf(field, v.Field(i), sub, fOpts, auto)
 				} else {
 					err = unmarshalSequenceField(field.Name, v.Field(i), sub, fOpts)
@@ -222,6 +242,21 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		}
 	}
 
+	return
+}
+
+func unmarshalSequenceExtensionField(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	var exts []TLV
+	for pkt.HasMoreData() && err == nil {
+		var tlv TLV
+		if tlv, err = pkt.TLV(); err == nil {
+			pkt.AddOffset(tlv.Length)
+			exts = append(exts, tlv)
+		}
+	}
+	if err == nil {
+		err = refSetValue(v, refValueOf(exts))
+	}
 	return
 }
 
@@ -324,5 +359,24 @@ func unmarshalSequenceComponentsOf(
 		}
 	}
 
+	return
+}
+
+func findExtensibleIndex(typ reflect.Type, opts *Options) (idx int, err error) {
+	idx = -1
+	auto := opts != nil && opts.Automatic
+	for i := 0; i < typ.NumField(); i++ {
+		if sf := typ.Field(i); sf.PkgPath == "" {
+			var opts *Options
+			if opts, err = extractOptions(sf, i, auto); err == nil && opts.Extension {
+				if sf.Type.Kind() != reflect.Slice || sf.Type.Elem() != refTypeOf(TLV{}) {
+					err = mkerrf("extension field ", i, " must be []TLV")
+				} else {
+					idx = i
+				}
+				break
+			}
+		}
+	}
 	return
 }

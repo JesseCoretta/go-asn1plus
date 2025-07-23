@@ -137,6 +137,7 @@ var boolKeywords = map[string]struct{}{
 	"omitempty":     {},
 	"indefinite":    {},
 	"components-of": {},
+	"...":           {},
 }
 
 var classKeywords = map[string]struct{}{

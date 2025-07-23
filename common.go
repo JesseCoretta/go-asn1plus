@@ -25,6 +25,7 @@ official import aliases.
 var (
 	bcmp       func([]byte, []byte) int                   = bytes.Compare
 	bidx       func([]byte, []byte) int                   = bytes.Index
+	btseq      func([]byte, []byte) bool                  = bytes.Equal
 	itoa       func(int) string                           = strconv.Itoa
 	atoi       func(string) (int, error)                  = strconv.Atoi
 	fmtUint    func(uint64, int) string                   = strconv.FormatUint

@@ -518,7 +518,7 @@ func TestFormatHexCornerCases(t *testing.T) {
 	// itself and nothing crash.
 	tagOnly := []byte{0x1F, 0x83, 0x7F}
 	want := bytes.ToUpper([]byte(hexstr(tagOnly)))
-	if got := formatHex(tagOnly); !bytes.Equal([]byte(got), want) {
+	if got := formatHex(tagOnly); !btseq([]byte(got), want) {
 		t.Errorf("tag-only: got %q want %q", got, string(want))
 	}
 }
@@ -567,7 +567,7 @@ func TestParseBodyIndefiniteOK(t *testing.T) {
 	}
 
 	want := []byte{0x02, 0x01, 0x01}
-	if !bytes.Equal(out, want) {
+	if !btseq(out, want) {
 		t.Errorf("content mismatch: got % X  want % X", out, want)
 	}
 }
@@ -580,7 +580,7 @@ func TestParseFullBytesLenSubZeroSlice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !bytes.Equal(got, pkt) {
+	if !btseq(got, pkt) {
 		t.Errorf("wanted full packet back, got % X", got)
 	}
 }
@@ -608,7 +608,7 @@ func TestParseFullBytesIndefiniteOK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !bytes.Equal(out, stream) {
+	if !btseq(out, stream) {
 		t.Errorf("got % X want identical stream", out)
 	}
 }
@@ -662,7 +662,7 @@ func TestParseFullBytesIndefiniteWithOffset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !bytes.Equal(out, obj) {
+	if !btseq(out, obj) {
 		t.Errorf("returned slice mismatch: got % X  want % X", out, obj)
 	}
 }

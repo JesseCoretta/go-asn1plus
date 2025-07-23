@@ -2,10 +2,7 @@
 
 package asn1plus
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func TestCER_codecov(_ *testing.T) {
 	pkt := CER.New()
@@ -95,7 +92,7 @@ func TestPDU_LargeBitStringCER(t *testing.T) {
 			t.Name(), large.BitLength, alsoLarge.BitLength)
 	}
 
-	if !bytes.Equal(large.Bytes, alsoLarge.Bytes) {
+	if !btseq(large.Bytes, alsoLarge.Bytes) {
 		t.Fatalf("%s failed [CER large BitString contents cmp.]: contents differ", t.Name())
 	}
 }

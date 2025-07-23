@@ -1,7 +1,6 @@
 package asn1plus
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 )
@@ -457,7 +456,7 @@ func TestBitStringRightAlign_EarlyReturnShift8(t *testing.T) {
 	}
 
 	out := bs.RightAlign()
-	if !bytes.Equal(out, src) {
+	if !btseq(out, src) {
 		t.Fatalf("expected identical slice % X, got % X", src, out)
 	}
 }
@@ -489,7 +488,7 @@ func TestBitStringRightAlign_ShiftAndMerge(t *testing.T) {
 	want := []byte{0x02, 0xAB}
 
 	got := bs.RightAlign()
-	if !bytes.Equal(got, want) {
+	if !btseq(got, want) {
 		t.Fatalf("rightAlign mismatch: got % X, want % X", got, want)
 	}
 }

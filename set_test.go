@@ -5,6 +5,54 @@ import (
 	"testing"
 )
 
+func TestSet_Extensions(t *testing.T) {
+	type MySET struct {
+		Name       string `asn1:"utf8"`
+		Extensions []TLV  `asn1:"..."`
+	}
+
+	// A BER‐encoded SET containing:
+	//   • UTF8String "Hello"  → 0x0C 0x05 48 65 6C 6C 6F
+	//   • INTEGER 123         → 0x02 0x01 7B
+	raw := []byte{
+		0x31, 0x0A, // SET, length=10
+		0x0C, 0x05, 'H', 'e', 'l', 'l', 'o', // UTF8String "Hello"
+		0x02, 0x01, 0x7B, // INTEGER 123
+	}
+
+	pkt := BER.New(raw...)
+	pkt.SetOffset()
+
+	var s MySET
+	if err := Unmarshal(pkt, &s); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if got, want := s.Name, "Hello"; got != want {
+		t.Errorf("Name = %q; want %q", got, want)
+	}
+
+	if n := len(s.Extensions); n != 1 {
+		t.Fatalf("Extensions length = %d; want 1", n)
+	}
+	ext := s.Extensions[0]
+
+	if ext.Tag != 2 {
+		t.Errorf("Extensions[0].Tag = %d; want 2", ext.Tag)
+	}
+	if !btseq(ext.Value, []byte{0x7B}) {
+		t.Errorf("Extensions[0].Value = % X; want 7B", ext.Value)
+	}
+
+	outPkt, err := Marshal(s)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if !btseq(outPkt.Data(), raw) {
+		t.Errorf("Round-trip = % X; want % X", outPkt.Data(), raw)
+	}
+}
+
 func ExampleOctetString_setOf() {
 	values := []OctetString{
 		OctetString(`Zero`),

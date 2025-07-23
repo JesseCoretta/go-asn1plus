@@ -482,10 +482,7 @@ func TestChoice_BareSetChoiceUniversal(t *testing.T) {
 	}
 }
 
-// -----------------------------------------------------------------------------
-// 1) bare UNIVERSAL SEQUENCE  → decodeSeqChoice
 func TestChoice_SeqChoice_Direct(t *testing.T) {
-	// build a Choices registry with two SEQUENCE‐typed alts
 	seqCh := NewChoices(false)     // no auto‐tag
 	o := &Options{Explicit: false} // bare UNIVERSAL encoding
 	type Alt1 struct{ A Integer }

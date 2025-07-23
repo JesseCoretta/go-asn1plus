@@ -5,6 +5,53 @@ import (
 	"testing"
 )
 
+func TestSequence_Extensions_RoundTrip(t *testing.T) {
+	raw := []byte{
+		0x30, 0x0A,
+		0x0C, 0x05, 'H', 'e', 'l', 'l', 'o',
+		0x02, 0x01, 0x7B,
+	}
+
+	pkt := BER.New(raw...)
+	pkt.SetOffset()
+
+	//t.Logf("%#v\n", pkt)
+
+	var seq struct {
+		Name       string `asn1:"utf8"`
+		Extensions []TLV  `asn1:"..."`
+	}
+
+	if err := Unmarshal(pkt, &seq); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if seq.Name != "Hello" {
+		t.Errorf("Name = %q; want %q", seq.Name, "Hello")
+	}
+
+	if got := len(seq.Extensions); got != 1 {
+		t.Fatalf("Extensions length = %d; want 1", got)
+	}
+	ext := seq.Extensions[0]
+
+	if ext.Tag != 2 {
+		t.Errorf("Extensions[0].Tag = %d; want 2", ext.Tag)
+	}
+
+	if !btseq(ext.Value, []byte{0x7B}) {
+		t.Errorf("Extensions[0].Value = % X; want 7B", ext.Value)
+	}
+
+	outPkt, err := Marshal(seq)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if !btseq(outPkt.Data(), raw) {
+		t.Errorf("Round-trip bytes = % X; want % X", outPkt.Data(), raw)
+	}
+}
+
 func TestSequence_ComponentsOf(t *testing.T) {
 	type ComponentSequence struct {
 		Name UTF8String `asn1:"tag:1"`

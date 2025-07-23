@@ -1,7 +1,6 @@
 package asn1plus
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"testing"
@@ -35,7 +34,7 @@ func TestUniversalString_EncodingContentBER(t *testing.T) {
 	// Verify first rune "A" (0x41). In UCS-4 big-endian: 0x00 0x00 0x00 0x41.
 	expectedA := []byte{0, 0, 0, 0x41}
 	actualA := pkt.Data()[2:6]
-	if !bytes.Equal(expectedA, actualA) {
+	if !btseq(expectedA, actualA) {
 		t.Errorf("Expected first rune bytes %v, got %v", expectedA, actualA)
 	}
 }
@@ -92,7 +91,7 @@ func TestUniversalString_UCS4Conversion(t *testing.T) {
 	var expected [4]byte
 	// U+1F600 in hex: 0x0001F600
 	binary.BigEndian.PutUint32(expected[:], uint32(0x1F600))
-	if !bytes.Equal(ucs4Bytes, expected[:]) {
+	if !btseq(ucs4Bytes, expected[:]) {
 		t.Errorf("UCS-4 conversion error: expected %x, got %x", expected, ucs4Bytes)
 	}
 }

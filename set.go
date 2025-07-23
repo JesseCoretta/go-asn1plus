@@ -10,18 +10,16 @@ import (
 	"slices"
 )
 
-// isSet returns true if the target's type is a slice.
 func isSet(target any, opts *Options) (set bool) {
 	t := derefTypePtr(refTypeOf(target))
+	o := deferImplicit(opts)
+	sfx := hasSfx(t.Name(), "SET")
 	if t.Kind() == reflect.Slice {
-		var tag int = -1
-		if opts != nil {
-			tag = opts.Tag()
+		k := t.Elem().Kind()
+		if k != reflect.Uint8 && t != refTypeOf(TLV{}) {
+			set = sfx || o.Tag() == TagSet || o.Set
 		}
-		if t.Elem().Kind() != reflect.Uint8 {
-			set = hasSfx(t.Name(), "SET") || (opts != nil && tag == TagSet)
-		}
-	} else if hasSfx(t.Name(), "SET") {
+	} else if sfx {
 		set = true
 	}
 
@@ -35,11 +33,16 @@ Each element is encoded with its own implicit defaults.
 func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	v = derefValuePtr(v)
 	if v.Kind() == reflect.Struct {
+		var extIdx int
+		if extIdx, err = findExtensibleIndex(v.Type(), opts); err != nil {
+			return
+		}
+		if extIdx >= 0 {
+			return marshalSetWithExtensions(v, pkt, opts, extIdx)
+		}
 		found := false
 		for i := 0; i < v.NumField(); i++ {
-			field := v.Type().Field(i)
-			if field.PkgPath == "" {
-				// Dereference the field if needed.
+			if field := v.Type().Field(i); field.PkgPath == "" {
 				f := derefValuePtr(v.Field(i))
 				if f.Kind() == reflect.Slice {
 					v = f
@@ -93,6 +96,45 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	return
 }
 
+func marshalSetWithExtensions(
+	v reflect.Value,
+	pkt PDU,
+	opts *Options,
+	extIdx int,
+) (err error) {
+	sub := pkt.Type().New()
+	for i := 0; i < v.NumField() && err == nil; i++ {
+		if sf := v.Type().Field(i); sf.PkgPath == "" {
+			f := derefValuePtr(v.Field(i))
+			var fOpts *Options
+			if fOpts, err = extractOptions(sf, i, opts != nil && opts.Automatic); err == nil {
+				if i == extIdx {
+					raw := v.Field(i).Interface().([]TLV)
+					err = marshalSequenceExtensionField(raw, sub, fOpts)
+					continue
+				}
+				if fOpts.OmitEmpty && f.IsZero() {
+					continue
+				}
+				if fOpts.defaultEquals(f.Interface()) {
+					continue
+				}
+				fOpts.incDepth()
+				err = marshalValue(refValueOf(f.Interface()), sub, fOpts)
+			}
+		}
+	}
+
+	if err == nil {
+		content := sub.Data()
+		tag, class := effectiveHeader(TagSet, ClassUniversal, opts)
+		tlv := pkt.Type().newTLV(class, tag, len(content), true, content...)
+		pkt.Append(encodeTLV(tlv, nil)...)
+	}
+
+	return
+}
+
 /*
 unmarshalSet returns an error following an attempt to decode a SET
 from pkt into the value v. v is expected to be either a slice (e.g.
@@ -100,10 +142,16 @@ from pkt into the value v. v is expected to be either a slice (e.g.
 */
 func unmarshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
-	// Locate the underlying slice.
 	if v.Kind() == reflect.Struct {
+		var extIdx int
+		if extIdx, err = findExtensibleIndex(v.Type(), opts); err != nil {
+			return
+		}
+		if extIdx >= 0 {
+			return unmarshalSetWithExtensions(v, pkt, opts, extIdx)
+		}
 		if v, err = unmarshalSequenceAsSet(v); err != nil {
-			return err
+			return
 		}
 	} else if v.Kind() != reflect.Slice {
 		err = compositeErrorf("unmarshalSet: target value is not a slice or struct containing a slice")
@@ -236,17 +284,13 @@ func unmarshalSetOfChoice(
 	elemType reflect.Type,
 ) (reflect.Value, error) {
 
-	// pull out the tag, payload PK and child opts
 	tag, _, payloadPK, opts, err := setPickChoiceAlternative(pkt, parentOpts)
 	if err != nil {
 		return tmp, err
 	}
-
-	// decode a single choice element:
 	return setDecodeChoiceSingle(tmp, tag, payloadPK, opts, elemType)
 }
 
-// 2) new setDecodeChoiceSingle
 func setDecodeChoiceSingle(
 	tmp reflect.Value,
 	tag int,
@@ -254,7 +298,6 @@ func setDecodeChoiceSingle(
 	opts *Options,
 	elemType reflect.Type,
 ) (reflect.Value, error) {
-	// lookup registry for this SET’s CHOICE wrapper
 	choices, ok := GetChoices(opts.Choices)
 	if !ok || choices.Len() == 0 {
 		return tmp, mkerr("no CHOICE registry for SET element")
@@ -265,13 +308,11 @@ func setDecodeChoiceSingle(
 		return tmp, mkerr("no CHOICE registry for SET element")
 	}
 
-	// find the concrete Go type for this tag
 	altT, ok := cd.tagToType[tag]
 	if !ok {
 		return tmp, mkerrf("no CHOICE variant for tag ", itoa(tag))
 	}
 
-	// allocate and unmarshal inner value
 	destPtr := reflect.New(altT)
 	childOpts := *opts
 	childOpts.tag = nil
@@ -280,14 +321,70 @@ func setDecodeChoiceSingle(
 		return tmp, mkerrf("inner decode failed: ", err.Error())
 	}
 
-	// wrap in the new Choice alias
 	outChoice := NewChoice(destPtr.Elem().Interface())
-
-	// store into the tmp slot
 	if elemType.Kind() == reflect.Ptr {
 		tmp.Elem().Set(refValueOf(outChoice))
 	} else {
 		tmp.Set(refValueOf(outChoice))
 	}
 	return tmp, nil
+}
+
+func unmarshalSetWithExtensions(
+	v reflect.Value,
+	pkt PDU,
+	opts *Options,
+	extIdx int,
+) (err error) {
+	v = derefValuePtr(v)
+	auto := opts != nil && opts.Automatic
+	cur := pkt.Offset()
+	if cur < pkt.Len() {
+		raw := pkt.Data()[cur]
+		if (raw&0xC0) == 0 && (raw&0x1F) == TagSet {
+			var outer TLV
+			if outer, err = pkt.TLV(); err != nil {
+				return
+			}
+			sub := pkt.Type().New(outer.Value...)
+			sub.SetOffset()
+			pkt = sub
+		}
+	}
+
+	for i := 0; i < v.NumField(); i++ {
+		sf := v.Type().Field(i)
+		if sf.PkgPath != "" {
+			continue
+		}
+		f := v.Field(i)
+		fOpts, err2 := extractOptions(sf, i, auto)
+		if err2 != nil {
+			return err2
+		}
+
+		if i == extIdx {
+			var exts []TLV
+			for pkt.HasMoreData() {
+				var tlv TLV
+				if tlv, err = pkt.TLV(); err != nil {
+					return
+				}
+				pkt.AddOffset(tlv.Length)
+				exts = append(exts, tlv)
+			}
+			if err = refSetValue(f, reflect.ValueOf(exts)); err != nil {
+				return
+			}
+			continue
+		}
+
+		if err = unmarshalValue(pkt, f, fOpts); err != nil {
+			return compositeErrorf(
+				"unmarshalSet field ", sf.Name, ": ", err,
+			)
+		}
+	}
+
+	return nil
 }
