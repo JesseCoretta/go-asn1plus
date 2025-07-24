@@ -8,13 +8,6 @@ serve to implement ASN.1's constraints design for various types.
 import "reflect"
 
 /*
-Lengthy is qualified through any type which bears the "Len() int" method.
-*/
-type Lengthy interface {
-	Len() int
-}
-
-/*
 Constraint implements a closure function signature meant to enforce
 the constraining of a single value.
 

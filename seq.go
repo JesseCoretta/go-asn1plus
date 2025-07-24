@@ -9,10 +9,22 @@ as a struct.
 import "reflect"
 
 /*
+RawContent implements a []byte slice in the same context
+as the [encoding/asn1.RawContent] type.
+*/
+type RawContent []byte
+
+/*
 marshalSequence returns an error following an
 attempt to marshal sequence (struct) v into pkt.
 */
 func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	typ := v.Type()
+	var rawIdx int
+	if rawIdx, err = findRawContentIndex(typ); err != nil {
+		return
+	}
+
 	if isSet(v.Interface(), opts) {
 		err = marshalSet(v, pkt, opts)
 		return
@@ -20,7 +32,6 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 	seqTag := getSequenceTag(opts) // use opts.Tag OR fallback to 16
 
-	typ := v.Type()
 	var extIdx int
 	if extIdx, err = findExtensibleIndex(typ, opts); err != nil {
 		return
@@ -30,7 +41,7 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	auto := opts != nil && opts.Automatic
 
 	for i := 0; i < v.NumField() && err == nil; i++ {
-		if field := typ.Field(i); field.PkgPath == "" {
+		if field := typ.Field(i); field.PkgPath == "" && rawIdx != i {
 			var fOpts *Options
 			if fOpts, err = extractOptions(field, i, auto); err == nil {
 				if i == extIdx {
@@ -221,6 +232,16 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	sub.SetOffset(0)
 
 	typ := v.Type()
+	var rawIdx int
+	if rawIdx, err = findRawContentIndex(typ); err != nil {
+		return
+	}
+	if rawIdx == 0 {
+		if err = refSetValue(v.Field(0), refValueOf(tlv.Value)); err != nil {
+			return
+		}
+	}
+
 	var extIdx int
 	if extIdx, err = findExtensibleIndex(typ, opts); err != nil {
 		return
@@ -376,6 +397,24 @@ func findExtensibleIndex(typ reflect.Type, opts *Options) (idx int, err error) {
 				}
 				break
 			}
+		}
+	}
+	return
+}
+
+func findRawContentIndex(typ reflect.Type) (idx int, err error) {
+	idx = -1
+	if typ.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		if sf := typ.Field(i); sf.PkgPath == "" && sf.Type == rawContentType {
+			if i == 0 {
+				idx = i
+			} else {
+				err = mkerrf("RawContent may only appear as first field; found at index ", i)
+			}
+			break
 		}
 	}
 	return

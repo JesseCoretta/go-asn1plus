@@ -126,6 +126,8 @@ var (
 var (
 	ptrClassUniversal       = new(int)
 	ptrClassContextSpecific = new(int)
+	rawContentType          = refTypeOf(RawContent(nil))
+	indefEoC                = []byte{0x00, 0x00}
 )
 
 var boolKeywords = map[string]struct{}{
@@ -153,8 +155,6 @@ const (
 	plusIByte  = 0x40
 	minusIByte = 0x41
 )
-
-var indefEoC = []byte{0x00, 0x00}
 
 const hexDigits = "0123456789ABCDEF"
 

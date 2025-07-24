@@ -5,6 +5,34 @@ import (
 	"testing"
 )
 
+func ExampleRawContent() {
+	type MySequence struct {
+		RawContent        // must be first field
+		A          string `asn1:"octet"`
+		B          int
+	}
+
+	// Here we manufacture a PDU by hand
+	// just for brevity.
+	rawContent := []byte{
+		0x04, 0x01, 'X',
+		0x02, 0x01, 0x05,
+	}
+	rawSeq := append([]byte{0x30, byte(len(rawContent))}, rawContent...)
+	pkt := BER.New(rawSeq...)
+	pkt.SetOffset()
+
+	// Decode pkt into MySequence
+	var my MySequence
+	if err := Unmarshal(pkt, &my); err != nil {
+		fmt.Printf("Unmarshal failed: %v", err)
+		return
+	}
+
+	fmt.Printf("%#v\n", my.RawContent)
+	// Output: asn1plus.RawContent{0x4, 0x1, 0x58, 0x2, 0x1, 0x5}
+}
+
 func TestSequence_Extensions_RoundTrip(t *testing.T) {
 	raw := []byte{
 		0x30, 0x0A,

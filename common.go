@@ -71,6 +71,13 @@ var (
 )
 
 /*
+Lengthy is qualified through any type which bears the "Len() int" method.
+*/
+type Lengthy interface {
+	Len() int
+}
+
+/*
 sizeOfInt returns the byte size of i based on its magnitude.
 */
 func sizeOfInt(i int) int {
