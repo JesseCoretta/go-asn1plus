@@ -20,23 +20,120 @@ of this type serve two purposes.
   - Simplify package internals by having a portable storage type for parsed struct field instructions which bear the "asn1:" tag prefix
 */
 type Options struct {
-	Explicit, // If true, wrap the field in an explicit tag
-	Optional, // If true, the field is optional
-	OmitEmpty, // Whether to ignore empty slice values
-	Set, // If true, encode as SET instead of SEQUENCE (for collections); mutex of Sequence
-	Sequence, // If true, encode as SEQUENCE OF instead of SET OF; mutex of Set
-	Indefinite, // whether a field is known to be of an indefinite length
-	Automatic, // whether automatic tagging is to be applied to a SEQUENCE, SET or CHOICE(s)
-	Extension, // Future extensions recognized
-	ComponentsOf bool // For sequence embedding
-	Choices     string   // Name of key for the associated Choices of a single SEQUENCE field or other context
-	Identifier  string   // "ia5", "numeric", "utf8" etc. (for string fields)
-	Constraints []string // References to registered Constraint/ConstraintGroup instances
-	Default     any      // Manual default value (not recommended, use RegisterDefaultValue)
+	// If true, wrap the field in an explicit tag.
+	//
+	// Note that this can be enabled textually via the
+	// "explicit" keyword during field parsing.
+	Explicit bool
+
+	// If true, the field is optional.
+	//
+	// Note that this can be enabled textually via the
+	// "optional" keyword during field parsing.
+	Optional bool
+
+	// If true, the field must be nil AND a pointer type.
+	Absent bool
+
+	// If true, ignore empty values.
+	//
+	// Note that this can be enabled textually via the
+	// "omitempty" keyword during field parsing.
+	OmitEmpty bool
+
+	// If true, encode as SET OF instead of SEQUENCE OF
+	// (for collections). Mutually exclusive of Sequence.
+	//
+	// Note that this can be enabled textually via the
+	// "set" keyword during field parsing.
+	Set bool
+
+	// If true, encode as SEQUENCE OF instead of SET OF
+	// Mutually exclusive of Set.
+	//
+	// Note that this can be enabled textually via the
+	// "sequence" keyword during field parsing.
+	Sequence bool
+
+	// If true, a SEQUENCE field is known to be of an
+	// indefinite length.
+	//
+	// Note that this can be enabled textually via the
+	// "indefinite" keyword during field parsing.
+	Indefinite bool
+
+	// If true, automatic tagging is to be applied to a SEQUENCE,
+	// SET or CHOICE(s)
+	//
+	// Note that this can be enabled textually via the
+	// "automatic" keyword during field parsing.
+	Automatic bool
+
+	// If true, store extensions -- likely those which originate
+	// from so-called "future renditions" of a composite type.
+	// The associated field type MUST be []TLV and MUST be the
+	// first field (index 0), else an error will occur.
+	//
+	// Note that this can be enabled textually via the
+	// "..." keyword during field parsing.
+	Extension bool
+
+	// If true, embed field SEQUENCE in-line.
+	//
+	// Note that this can be enabled textually via the
+	// "components-of" keyword during field parsing.
+	ComponentsOf bool
+
+	// Name of key for the associated Choices of a single SEQUENCE
+	// field or other context.
+	//
+	// Please see the RegisterChoices function for details on registering
+	// Choices.
+	//
+	// Case is not significant.
+	//
+	// Note that this can be declared textually via the "choices:<name>"
+	// key:value expression during field parsing.
+	Choices string
+
+	// Primitive identifier name. Only used when an adapter-based type
+	// (e.g.: string, []byte, etc.) is used instead of the equivalent
+	// Primitive type, and only when the adapter is used in a non-default
+	// context (e.g.: "t61" vs. default "utf8").
+	//
+	// Valid values are: "bmp", "bit", "bool", "date", "datetime", "duration",
+	// "enum", "general", "gt", "graphic", "ia5", "int", "numeric", "descriptor",
+	// "oid", "octet", "printable", "real", "relativeoid", "t61", "time",
+	// "timeofday", "utc", "utf8", "universal", "videotex", "visible".
+	//
+	// Case is not significant.
+	Identifier string
+
+	// Registered constraints to apply to the SEQUENCE field. Please see the
+	// RegisterTaggedConstraint and RegisterTaggedConstraintGroup functions
+	// for details on registering such elements.
+	//
+	// If any single slice value begins with a circumflex accent ("^"), then
+	// the given constraint shall only be used during the ENCODING (Marshal)
+	// phase, while a value which begins with a dollar sign ("$") shall only
+	// be used during the DECODING (Unmarshal) phase. Lack of either results
+	// in the constraint being used during both of these phases.
+	//
+	// Case is not significant.
+	//
+	// Note that this can be declared textually via the "constraint:<name,...>"
+	// key:comma-delim-values expression during field parsing.
+	Constraints []string
+
+	// Default value to apply to the SEQUENCE field. Please see the
+	// RegisterDefaultValue function for details on registration and
+	// the LookupDefaultValue function for looking-up such elements.
+	Default any
 
 	tag, // if non-nil, indicates an alternative tag number.
 	class *int // represents the ASN.1 class: universal, application, context-specific, or private.
 	depth          int      // recursion depth
+	borrowed       bool     // options came from sync.Pool?
 	defaultKeyword string   // the discovered DEFAULT keyword for registered lookup
 	unidentified   []string // for unidentified or superfluous keywords
 }
@@ -77,7 +174,7 @@ func stringifyDefault(d any) string {
 	case Integer:
 		return v.String()
 	default:
-		return "unidentified-value"
+		return "unstringable-value"
 	}
 }
 
@@ -94,16 +191,27 @@ func (r *Options) incDepth() {
 }
 
 /*
+Header returns the class/tag header byte. This method is exported
+solely for debugging or troubleshooting convenience and generally
+need not be executed by the end user.
+*/
+func (r *Options) Header() byte {
+	tag, class := effectiveHeader(r.Tag(), r.Class(), r)
+	return emitHeader(class, tag, r.Explicit)
+}
+
+/*
 String returns the string representation of the receiver instance.
 */
 func (r Options) String() string {
 	var parts []string
 
-	addStringConfigValue(&parts, r.depth > 0, "depth:"+itoa(r.depth))
+	//addStringConfigValue(&parts, r.depth > 0, "depth:"+itoa(r.depth))
 	addStringConfigValue(&parts, r.Tag() >= 0, "tag:"+itoa(r.Tag()))
 	addStringConfigValue(&parts, validClass(r.Class()) && r.Class() > 0, lc(ClassNames[r.Class()]))
 	addStringConfigValue(&parts, r.Explicit, "explicit")
 	addStringConfigValue(&parts, r.Optional, "optional")
+	addStringConfigValue(&parts, r.Absent, "absent")
 	addStringConfigValue(&parts, r.Automatic, "automatic")
 	addStringConfigValue(&parts, r.Set, "set")
 	addStringConfigValue(&parts, r.Sequence, "sequence")
@@ -139,6 +247,9 @@ The syntax of tag is the same as [encoding/asn1], e.g.:
 
 	asn1:"application"
 	asn1:"tag:4,explicit"
+
+This function exists solely for diagnostic purposes, and generally
+need not be leveraged by the end user.
 */
 func NewOptions(tag string) (Options, error) {
 	var (
@@ -159,11 +270,14 @@ func NewOptions(tag string) (Options, error) {
 	return opts, err
 }
 
-// parseOptions parses the raw tag string (e.g. `"tag:3,optional"`)
-// and returns a fully-populated Options value.
-//
-// In hot paths we borrow an *Options from optPool, work on it, then copy
-// the final value out so the caller still receives a detached struct.
+/*
+parseOptions parses the raw tag string (e.g. `"tag:3,optional"`)
+and returns a fully-populated Options value.
+
+In hot paths, we borrow an *Options from optPool, modify it, and
+finally copy the final value out so the caller still receives a
+detached struct.
+*/
 func parseOptions(tagStr string) (opts Options, err error) {
 	po := borrowOptions()
 	*po = *implicitOptions()
@@ -229,6 +343,8 @@ func (r *Options) setBool(name string) {
 		r.OmitEmpty = true
 	case name == "optional":
 		r.Optional = true
+	case name == "absent":
+		r.Absent = true
 	case name == "...":
 		r.Extension = true
 	case name == "components-of":
@@ -332,7 +448,7 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 	if tagStr, ok := field.Tag.Lookup("asn1"); ok {
 		var parsedOpts Options
 		if parsedOpts, err = parseOptions(tagStr); err != nil {
-			err = optionsErrorf("Marshal: error parsing tag for field ",
+			err = optionsErrorf("error parsing options for field ",
 				field.Name, "(", fieldNum, "): ", err)
 			return
 		} else {
@@ -341,14 +457,8 @@ func extractOptions(field reflect.StructField, fieldNum int, automatic bool) (op
 
 		if !opts.HasTag() && automatic {
 			if opts.Explicit {
-				err = optionsErrorf("EXPLICIT and AUTOMATIC are mutually exclusive")
+				err = errorExplicitAutomatic
 				return
-			}
-			if opts.Class() == ClassUniversal {
-				// UNLESS the user chose to override
-				// the default class, here we impose
-				// CONTEXT SPECIFIC (class 2).
-				opts.SetClass(ClassContextSpecific)
 			}
 			opts.SetTag(fieldNum)
 		}
@@ -433,8 +543,10 @@ Free frees the receiver instance from memory.
 */
 func (r *Options) Free() {
 	if r != nil {
-		*r = Options{} // zero out all fields
-		optPool.Put(r) // hand it back
+		*r = Options{} // zero out all fields ...
+		if r.borrowed {
+			optPool.Put(r) // ... AND hand it back if borrowed
+		}
 	}
 }
 
@@ -452,9 +564,26 @@ func clearChildOpts(o *Options) (c *Options) {
 	return
 }
 
+/*
+shortcut opts bool helpers for reduced cyclomatics
+*/
+func optsIsAutoTag(o *Options) bool  { return o != nil && o.Automatic }
+func optsIsExplicit(o *Options) bool { return o != nil && o.Explicit }
+func optsIsAbsent(o *Options) bool   { return o != nil && o.Absent }
+func optsIsIndef(o *Options) bool    { return o != nil && o.Indefinite }
+func optsHasChoices(o *Options) bool { return o != nil && o.Choices != "" }
+func optsHasDefault(o *Options) bool { return o != nil && o.Default != nil }
+func optsIsOptional(o *Options) bool { return o != nil && o.Optional }
+func optsHasTag(o *Options) bool     { return o != nil && o.HasTag() }
+func optsIsOmit(o *Options) bool     { return o != nil && o.OmitEmpty }
+
 var optPool = sync.Pool{New: func() any { return &Options{} }}
 
-func borrowOptions() *Options { return optPool.Get().(*Options) }
+func borrowOptions() (o *Options) {
+	o = optPool.Get().(*Options)
+	o.borrowed = true
+	return
+}
 
 var (
 	overrideOptions map[reflect.Type]*Options
@@ -526,8 +655,30 @@ See also [RegisterOverrideOptions] and [UnregisterOverrideOptions].
 */
 func OverrideOptions() map[reflect.Type]*Options { return overrideOptions }
 
+func deferOverrideOptions(typ any, o *Options) (opts *Options) {
+	o = deferImplicit(o)
+	if opts, _ = lookupOverrideOptions(typ); opts == nil {
+		opts = o
+	} else {
+		debugEvent(EventTrace, newLItem(opts,
+			"override options found for "+
+				refTypeOf(typ).String()))
+	}
+	return
+}
+
 func lookupOverrideOptions(typ any) (opts *Options, err error) {
-	rtyp := refTypeOf(typ)
+	var rtyp reflect.Type
+	if refV, is := typ.(reflect.Value); is {
+		if !refV.CanInterface() {
+			err = optionsErrorf("Invalid reflect.Value for options override lookup")
+			return
+		}
+		rtyp = refV.Type()
+	} else {
+		rtyp = refTypeOf(typ)
+	}
+
 	debugEnter(newLItem(rtyp, "lup override type"))
 
 	debugTrace("opMu locking")
