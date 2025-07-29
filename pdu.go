@@ -25,8 +25,8 @@ The purpose of this type is to provide an easy-to-use abstraction
 */
 type PDU interface {
 	// ID returns a unique hexadecimal debugging identifier, or
-	// a zero string if this package was not run or build with
-	// '-tags asn1debug'.
+	// a zero string if this package was not run or built with
+	// '-tags asn1_debug'.
 	ID() string
 
 	// Type returns the encoding rule honored and implemented
@@ -193,9 +193,9 @@ func formatHex(input any) string {
 	// The first byte always exists. Tags with value < 31 are encoded in one byte;
 	// if the tag number equals 31, then the tag field is in multi-octet form.
 	tagEnd := 1
-	if data[0]&0x1F == 0x1F {
+	if data[0]&longByte == longByte {
 		// Multi-octet tag: continue until an octet with the MSB off is found.
-		for tagEnd < len(data) && data[tagEnd]&0x80 != 0 {
+		for tagEnd < len(data) && data[tagEnd]&indefByte != 0 {
 			tagEnd++
 		}
 		// Include the final octet with MSB off.
@@ -211,13 +211,14 @@ func formatHex(input any) string {
 
 	var lengthEnd int
 	firstLengthByte := data[tagEnd]
+
 	// If the first length byte is 0x80 then it's indefinite length;
 	// Or if it is < 0x80 it's the definite short-form length.
-	if firstLengthByte == 0x80 || firstLengthByte < 0x80 {
+	if firstLengthByte == indefByte || firstLengthByte < indefByte {
 		lengthEnd = tagEnd + 1
 	} else {
 		// Long form: the low 7 bits indicate the number of length octets.
-		numLengthBytes := int(firstLengthByte & 0x7F)
+		numLengthBytes := int(firstLengthByte & shortByte)
 		lengthEnd = tagEnd + 1 + numLengthBytes
 		if lengthEnd > len(data) {
 			lengthEnd = len(data)
@@ -249,7 +250,7 @@ func parseCompoundIdentifier(b []byte) (compound bool, err error) {
 	if len(b) == 0 {
 		err = errorEmptyIdentifier
 	} else {
-		compound = b[0]&0x20 != 0 // bit 6 (P/C)
+		compound = b[0]&cmpndByte != 0 // bit 6 (P/C)
 	}
 
 	return
@@ -262,10 +263,10 @@ func parseTagIdentifier(b []byte) (tag int, idLen int, err error) {
 		return
 	}
 
-	tag = int(b[0] & 0x1F) // bits 5–1
+	tag = int(b[0] & longByte) // bits 5–1
 	idLen = 1
 
-	if tag != 0x1F {
+	if tag != longByte {
 		return // low-tag-number form – finished
 	}
 
@@ -274,9 +275,9 @@ func parseTagIdentifier(b []byte) (tag int, idLen int, err error) {
 	for i := 1; i < len(b); i++ {
 		idLen++
 		ch := b[i]
-		tag = (tag << 7) | int(ch&0x7F)
+		tag = (tag << 7) | int(ch&shortByte)
 
-		if ch&0x80 == 0 { // MSB 0 ⇒ last byte
+		if ch&indefByte == 0 { // MSB 0 ⇒ last byte
 			return
 		}
 		if i == 4 { // max 5 bytes = 28 bits per § 8.1 of ITU-T rec. X.690
@@ -370,7 +371,7 @@ func findEOC(b []byte) (int, error) {
 	i := 0
 	for i < len(b) {
 		// Reached EOC for current depth?
-		if b[i] == 0x00 && i+1 < len(b) && b[i+1] == 0x00 {
+		if b[i] == zeroByte && i+1 < len(b) && b[i+1] == zeroByte {
 			if depth == 0 {
 				return i, nil
 			}
@@ -420,13 +421,13 @@ func parseLength(b []byte) (length int, lenLen int, err error) {
 	lenLen = 1
 
 	// Short-form  (bit 8 = 0)
-	if first&0x80 == 0 {
+	if first&indefByte == 0 {
 		length = int(first)
 		return
 	}
 
-	// Long- or indefinite-form  (bit 8 = 1)
-	n := int(first & 0x7F) // lower 7 bits = # of subsequent octets
+	// Long or indefinite-form  (bit 8 = 1)
+	n := int(first & shortByte) // lower 7 bits = # of subsequent octets
 
 	if n == 0 {
 		length = -1
@@ -623,6 +624,10 @@ func dumpHexLines(w io.Writer, b []byte, depth, width int) {
 // emit the [class|tag] EXPLICIT mask header
 // (0x20 bit == “constructed, explicit”)
 func emitHeader(class, tag int, expl bool) (mask byte) {
+	defer func() {
+		debugEvent(EventTrace|EventPDU,
+			newLItem(mask, "emit header"))
+	}()
 	mask = byte(class)<<6 | byte(tag)
 	if expl {
 		mask |= cmpndByte

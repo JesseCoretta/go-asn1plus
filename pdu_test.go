@@ -402,9 +402,9 @@ func TestPDU_codecov(_ *testing.T) {
 	var value *EmbeddedPDV
 	unmarshalValue(&BERPacket{}, refValueOf(value), nil)
 
-	opts.SetTag(4)
-	opts.SetClass(3)
-	marshalPrepareSpecialOptions(EmbeddedPDV{}, &opts)
+	//opts.SetTag(4)
+	//opts.SetClass(3)
+	//marshalPrepareSpecialOptions(EmbeddedPDV{}, &opts)
 
 	marshalValue(refValueOf(nil), &BERPacket{}, nil)
 	var nill *struct{}
@@ -893,7 +893,7 @@ func putTestPacket(p *testPacket) {
 func BenchmarkPDU_SequenceBER(b *testing.B) {
 	type MySequence struct {
 		Name string `asn1:"printable"`
-		Age  int    `asn1:"integer"`
+		Age  int    // defaults to integer
 		Raw  OctetString
 	}
 
