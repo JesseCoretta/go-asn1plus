@@ -19,11 +19,12 @@ marshalSequence returns an error following an
 attempt to marshal sequence (struct) v into pkt.
 */
 func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, opts, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
 	typ := v.Type()
-	var rawIdx int
-	if rawIdx, err = findRawContentIndex(typ); err != nil {
-		return
-	}
+	fields := structFields(typ)
+	rawIdx := findRawContentIndex(typ, fields)
 
 	if isSet(v.Interface(), opts) {
 		err = marshalSet(v, pkt, opts)
@@ -33,20 +34,19 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	seqTag := getSequenceTag(opts) // use opts.Tag OR fallback to 16
 
 	var extIdx int
-	if extIdx, err = findExtensibleIndex(typ, opts); err != nil {
+	if extIdx, err = findExtensibleIndex(fields, opts); err != nil {
 		return
 	}
 
 	sub := pkt.Type().New()
-	auto := opts != nil && opts.Automatic
+	auto := optsIsAutoTag(opts)
 
-	for i := 0; i < v.NumField() && err == nil; i++ {
-		if field := typ.Field(i); field.PkgPath == "" && rawIdx != i {
+	for i := 0; i < len(fields) && err == nil; i++ {
+		if field := fields[i]; field.PkgPath == "" && rawIdx != i {
 			var fOpts *Options
 			if fOpts, err = extractOptions(field, i, auto); err == nil {
 				if i == extIdx {
-					tlvs := v.Field(i).Interface().([]TLV)
-					err = marshalSequenceExtensionField(tlvs, sub, fOpts)
+					err = marshalSequenceExtensionField(v.Field(i), sub, fOpts)
 				} else if fOpts.ComponentsOf {
 					err = marshalSequenceComponentsOf(field, v.Field(i), sub, fOpts, auto)
 				} else {
@@ -63,26 +63,53 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	return
 }
 
-func marshalSequenceExtensionField(tlvs []TLV, pkt PDU, opts *Options) (err error) {
-	for i := 0; i < len(tlvs) && err == nil; i++ {
-		err = writeTLV(pkt, tlvs[i], opts)
+/*
+structFields returns slices of [reflect.StructField].
+*/
+func structFields(t reflect.Type) (fields []reflect.StructField) {
+	t = derefTypePtr(t)
+	if t.Kind() == reflect.Struct {
+		num := t.NumField()
+		fields = make([]reflect.StructField, 0, num)
+
+		for i := 0; i < num; i++ {
+			fields = append(fields, t.Field(i))
+		}
+	}
+	return fields
+}
+
+func marshalSequenceExtensionField(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, opts, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
+	tlvs, ok := v.Interface().([]TLV)
+	if !ok {
+		err = generalErrorf("Assertion error: expected []TLV, got ", v.Type())
+	} else {
+		for i := 0; i < len(tlvs) && err == nil; i++ {
+			err = writeTLV(pkt, tlvs[i], opts)
+		}
 	}
 	return
 }
 
 func marshalSequenceField(name string, v, fv reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(newLItem(name, "field"), v, fv, pkt, opts)
+	defer func() { debugExit(newLItem(err)) }()
+
 	if opts.defaultEquals(fv.Interface()) {
 		// Value matches the known default, so return early.
 		return
 	}
 
-	if (opts != nil && opts.OmitEmpty) && fv.IsZero() {
+	if optsIsOmit(opts) && fv.IsZero() {
 		// Value is zero and omitempty was declared.
 		return
 	}
 
 	// Check optional vs. missing value state
-	if err = checkSequenceFieldCriticality(name, fv, opts.Optional); err == nil {
+	if err = checkSequenceFieldCriticality(name, fv, opts); err == nil {
 		// Apply any constraints (if we're supposed to)
 		if err = applyFieldConstraints(fv.Interface(), opts.Constraints, '^'); err == nil {
 			var handled bool
@@ -106,6 +133,10 @@ func marshalSequenceComponentsOf(
 	opts *Options,
 	auto bool,
 ) (err error) {
+	debugEnter(newLItem(field.Name, "field"),
+		newLItem(auto, "auto tag"), v, sub, opts)
+	defer func() { debugExit(newLItem(err)) }()
+
 	if !field.Anonymous {
 		err = errorComponentsNotAnonymous
 		return
@@ -126,9 +157,12 @@ func marshalSequenceComponentsOf(
 }
 
 func marshalSequenceFieldChoice(v, fv reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
+	debugEnter(v, fv, pkt, opts)
+	defer func() { debugExit(newLItem(handled, "handled"), newLItem(err)) }()
+
 	if handled = isChoice(fv, opts); handled {
 		// fv is a bonafide Choice interface instance
-		err = marshalChoiceWrapper(fv, pkt, opts, fv)
+		err = marshalChoiceWrapper(v, pkt, opts, fv)
 	} else if handled = isInterfaceChoice(fv, opts); handled {
 		// User is treating a non Choice interface
 		// as a Choice. Artificially wrap fv.
@@ -139,19 +173,26 @@ func marshalSequenceFieldChoice(v, fv reflect.Value, pkt PDU, opts *Options) (ha
 }
 
 func getSequenceTag(o *Options) (seqTag int) {
+	debugEnter(o)
+
 	seqTag = TagSequence // 16
 	if o != nil {
 		switch {
 		case o.HasTag(): // caller supplied a tag
 			seqTag = o.Tag()
-		case o.Class() != ClassUniversal: // class changed ⇒ default tag 0
+		case o.Class() != ClassUniversal: // class changed: default tag 0
 			seqTag = 0
 		}
 	}
+
+	debugExit(newLItem(seqTag, "seq tag"))
 	return
 }
 
 func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
+	debugEnter(v, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
 	typ := pkt.Type()
 	sub := typ.New()
 	for i := 0; i < v.Len() && err == nil; i++ {
@@ -175,9 +216,23 @@ func marshalSequenceOfSlice(v reflect.Value, pkt PDU, _ *Options) (err error) {
 	return
 }
 
-func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool) (err error) {
-	if !optional {
-		if fv.Kind() == reflect.Invalid || fv.Interface() == nil {
+func checkSequenceFieldCriticality(name string, fv reflect.Value, opts *Options) (err error) {
+	debugEnter(newLItem(name, "field"), fv, opts)
+	defer func() { debugExit(newLItem(err)) }()
+	k := fv.Kind()
+
+	if k == reflect.Ptr {
+		if opts.Absent && !fv.IsNil() {
+			err = errorAbsentNotNilPtr
+			return
+		}
+	} else if opts.Absent {
+		err = errorAbsentNotNilPtr
+		return
+	}
+
+	if !opts.Optional {
+		if k == reflect.Invalid || fv.Interface() == nil {
 			err = compositeErrorf(errorSeqEmptyNonOptField, ": ", name)
 		}
 	}
@@ -186,6 +241,9 @@ func checkSequenceFieldCriticality(name string, fv reflect.Value, optional bool)
 }
 
 func marshalSequenceWrap(sub, pkt PDU, opts *Options, seqTag int) (err error) {
+	debugEnter(sub, pkt, opts, newLItem(seqTag, "seq tag"))
+	defer func() { debugExit(newLItem(err)) }()
+
 	sub.SetOffset(0)
 	content := sub.Data()
 
@@ -212,6 +270,8 @@ func marshalSequenceWrap(sub, pkt PDU, opts *Options, seqTag int) (err error) {
 unmarshalSequence returns an error following an attempt to write pkt into sequence (struct) v.
 */
 func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, pkt, opts)
+	defer func() { debugExit(newLItem(err)) }()
 
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
@@ -232,28 +292,28 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	sub.SetOffset(0)
 
 	typ := v.Type()
-	var rawIdx int
-	if rawIdx, err = findRawContentIndex(typ); err != nil {
-		return
-	}
-	if rawIdx == 0 {
+	fields := structFields(typ)
+
+	if rawIdx := findRawContentIndex(typ, fields); rawIdx == 0 {
 		if err = refSetValue(v.Field(0), refValueOf(tlv.Value)); err != nil {
 			return
 		}
 	}
 
 	var extIdx int
-	if extIdx, err = findExtensibleIndex(typ, opts); err != nil {
+	if extIdx, err = findExtensibleIndex(fields, opts); err != nil {
 		return
 	}
 
-	auto := opts != nil && opts.Automatic
-	for i := 0; i < v.NumField() && err == nil; i++ {
-		if field := typ.Field(i); field.PkgPath == "" {
+	auto := optsIsAutoTag(opts)
+	for i := 0; i < len(fields) && err == nil; i++ {
+		if field := fields[i]; field.PkgPath == "" {
 			var fOpts *Options
 			if fOpts, err = extractOptions(field, i, auto); err == nil {
 				if i == extIdx {
 					err = unmarshalSequenceExtensionField(v.Field(i), sub, fOpts)
+				} else if field.Type == rawContentType && i != 0 {
+					err = errorExtensionNotFieldZero
 				} else if fOpts.ComponentsOf {
 					err = unmarshalSequenceComponentsOf(field, v.Field(i), sub, fOpts, auto)
 				} else {
@@ -267,6 +327,9 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 }
 
 func unmarshalSequenceExtensionField(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, opts, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
 	var exts []TLV
 	for pkt.HasMoreData() && err == nil {
 		var tlv TLV
@@ -275,6 +338,8 @@ func unmarshalSequenceExtensionField(v reflect.Value, pkt PDU, opts *Options) (e
 			exts = append(exts, tlv)
 		}
 	}
+	debugComposite(newLItem(len(exts), "TLVs unmarshaled"))
+
 	if err == nil {
 		err = refSetValue(v, refValueOf(exts))
 	}
@@ -287,6 +352,19 @@ func unmarshalSequenceField(
 	sub PDU,
 	opts *Options,
 ) (err error) {
+	debugEnter(newLItem(name, "field"), fv, opts, sub)
+	defer func() { debugExit(newLItem(err)) }()
+
+	if fv.Kind() == reflect.Ptr {
+		if fv.IsNil() {
+			err = refSetValue(fv, refNew(fv.Type().Elem()))
+		}
+		if err == nil {
+			err = unmarshalSequenceField(name, fv.Elem(), sub, opts)
+		}
+		return
+	}
+
 	var handled bool
 	if handled, err = unmarshalSequenceFieldOptionalEmpty(sub, opts); err != nil {
 		return err
@@ -307,7 +385,7 @@ func unmarshalSequenceField(
 				err = compositeErrorf(
 					"unmarshalValue: failed for field ", name, ": ", err,
 				)
-				if berr := checkSequenceFieldCriticality(name, fv, opts.Optional); berr == nil {
+				if berr := checkSequenceFieldCriticality(name, fv, opts); berr == nil {
 					err = berr
 				}
 			}
@@ -315,8 +393,7 @@ func unmarshalSequenceField(
 
 		if err == nil {
 			err = applyFieldConstraints(
-				fv.Interface(), opts.Constraints, '$',
-			)
+				fv.Interface(), opts.Constraints, '$')
 		}
 	}
 
@@ -327,34 +404,65 @@ func unmarshalSequenceFieldOptionalEmpty(
 	sub PDU,
 	opts *Options,
 ) (handled bool, err error) {
-	if opts == nil || !opts.OmitEmpty {
-		return false, nil
+
+	debugEnter(opts, sub)
+	defer func() { debugExit(err) }()
+
+	abs := optsIsAbsent(opts)
+	mask := EventComposite | EventTrace
+
+	// skip non-OPTIONAL/non-ABSENT
+	if !optsIsOptional(opts) && !(abs || optsHasDefault(opts)) {
+		debugEvent(mask,
+			newLItem(handled, "handled"),
+			newLItem("skip non-ABSENT/non-OPTIONAL"))
+		return
 	}
 
-	if sub.Len()-sub.Offset() == 0 {
-		return true, nil
+	// always skip ABSENT
+	if abs {
+		handled = true
+		debugEvent(mask,
+			newLItem(handled, "handled"),
+			newLItem("skip ABSENT"))
+		return
 	}
 
-	tlv, peekErr := sub.PeekTLV()
-	if peekErr != nil {
-		// peek-failure means “no TLV here” → skip
-		return true, nil
+	// skip empty OPTIONAL
+	if !sub.HasMoreData() {
+		handled = true
+		debugEvent(mask,
+			newLItem(handled, "handled"),
+			newLItem("skip OPTIONAL (no more data)"))
+		return
 	}
 
-	expClass, expTag, err := getTLVResolveOverride(
-		/* original class */ opts.Class(),
-		/* original tag   */ opts.Tag(),
-		/* compound?      */ false,
-		opts,
-	)
-	if err != nil {
-		return false, err
+	var tlv TLV
+	// OPTIONAL: peek to see if this field is actually in the data
+	if tlv, err = sub.PeekTLV(); err != nil {
+		handled = true
+		debugEvent(mask,
+			newLItem(handled, "handled"),
+			newLItem("skip OPTIONAL (peek error)"))
+		return
 	}
 
-	if tlv.Class != expClass || tlv.Tag != expTag {
-		return true, nil
+	// Match options Class/Tag to TLV Class/Tag when
+	// any data remains.
+	if tlv.matchClassAndTag(opts.Class(), opts.Tag()) {
+		debugEvent(mask,
+			newLItem(handled, "handled"),
+			newLItem("parse OPTIONAL: class/tag matched"))
+		return
 	}
-	return false, nil
+
+	handled = true
+	debugEvent(mask,
+		newLItem(handled, "handled"),
+		newLItem("skip OPTIONAL (next tag is",
+			tlv.Class, "/", tlv.Tag, ")"))
+
+	return
 }
 
 func unmarshalSequenceComponentsOf(
@@ -364,6 +472,9 @@ func unmarshalSequenceComponentsOf(
 	opts *Options,
 	auto bool,
 ) (err error) {
+	debugEnter(field, v, opts, newLItem(auto, "auto tag"), sub)
+	defer func() { newLItem(err) }()
+
 	if !field.Anonymous {
 		err = errorComponentsNotAnonymous
 		return
@@ -383,15 +494,18 @@ func unmarshalSequenceComponentsOf(
 	return
 }
 
-func findExtensibleIndex(typ reflect.Type, opts *Options) (idx int, err error) {
+func findExtensibleIndex(fields []reflect.StructField, opts *Options) (idx int, err error) {
+	debugEnter(opts)
+	defer func() { debugExit(newLItem(err)) }()
+
 	idx = -1
-	auto := opts != nil && opts.Automatic
-	for i := 0; i < typ.NumField(); i++ {
-		if sf := typ.Field(i); sf.PkgPath == "" {
+	auto := optsIsAutoTag(opts)
+	for i := 0; i < len(fields); i++ {
+		if sf := fields[i]; sf.PkgPath == "" {
 			var opts *Options
 			if opts, err = extractOptions(sf, i, auto); err == nil && opts.Extension {
-				if sf.Type.Kind() != reflect.Slice || sf.Type.Elem() != refTypeOf(TLV{}) {
-					err = mkerrf("extension field ", i, " must be []TLV")
+				if sf.Type.Kind() != reflect.Slice || sf.Type.Elem() != tLVType {
+					err = compositeErrorf("extension field ", i, " must be []TLV")
 				} else {
 					idx = i
 				}
@@ -399,23 +513,25 @@ func findExtensibleIndex(typ reflect.Type, opts *Options) (idx int, err error) {
 			}
 		}
 	}
+
+	debugEvent(EventComposite|EventTrace,
+		newLItem(idx, "extensible index"))
+
 	return
 }
 
-func findRawContentIndex(typ reflect.Type) (idx int, err error) {
+func findRawContentIndex(typ reflect.Type, fields []reflect.StructField) (idx int) {
+	debugEnter(typ)
+
 	idx = -1
-	if typ.Kind() != reflect.Struct {
-		return
-	}
-	for i := 0; i < typ.NumField(); i++ {
-		if sf := typ.Field(i); sf.PkgPath == "" && sf.Type == rawContentType {
-			if i == 0 {
-				idx = i
-			} else {
-				err = mkerrf("RawContent may only appear as first field; found at index ", i)
-			}
-			break
+	if typ.Kind() == reflect.Struct && len(fields) > 0 {
+		if sf := fields[0]; sf.PkgPath == "" && sf.Type == rawContentType {
+			idx = 0
 		}
 	}
+
+	debugEvent(EventComposite|EventTrace,
+		newLItem(idx, "raw content index"))
+
 	return
 }
