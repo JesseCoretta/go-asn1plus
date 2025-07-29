@@ -42,7 +42,7 @@ func TestText_codecov(t *testing.T) {
 		10,
 		4,
 		func(r rune, dst []byte, pos int) (bw, cu int, err error) {
-			return 0, 0, mkerr("error")
+			return 0, 0, codecErrorf("error")
 		},
 	)
 }
