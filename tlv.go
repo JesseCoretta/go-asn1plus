@@ -5,8 +5,6 @@ tlv.go contains all types, methods and functions for the
 Type-Length-Value type.
 */
 
-import "bytes"
-
 func tlvString(tlv TLV) (str string) {
 	str = "{invalid TLV}"
 	var value []string
@@ -15,7 +13,7 @@ func tlvString(tlv TLV) (str string) {
 		value = append(value, itoa(int(data[i])))
 	}
 
-	switch tlv.Type() {
+	switch tlv.typ {
 	case BER, CER, DER:
 		str = "{Type: " + tlv.typ.String() +
 			", Class:" + itoa(tlv.Class) +
@@ -60,6 +58,9 @@ type TLV struct {
 	typ      EncodingRule
 }
 
+/*
+String returns the string representation of the receiver instance.
+*/
 func (r TLV) String() string { return tlvString(r) }
 
 /*
@@ -75,6 +76,10 @@ only be evaluated if the variadic input "length" value is true.
 */
 func (r TLV) Eq(tlv TLV, length ...bool) bool {
 	return tlvEqual(r, tlv, length...)
+}
+
+func (r TLV) matchClassAndTag(class, tag int) bool {
+	return r.Class == class && r.Tag == tag
 }
 
 func encodeTLV(t TLV, opts *Options) (out []byte) {
@@ -99,7 +104,7 @@ func encodeTLV(t TLV, opts *Options) (out []byte) {
 	b = b[:0]
 
 	id := byte(t.Class << 6)
-	if t.Compound || (opts != nil && opts.Explicit) {
+	if t.Compound || optsIsExplicit(opts) {
 		id |= cmpndByte
 	}
 
@@ -108,7 +113,7 @@ func encodeTLV(t TLV, opts *Options) (out []byte) {
 	)
 
 	tagVal := t.Tag
-	if opts != nil && opts.HasTag() {
+	if optsHasTag(opts) {
 		tagVal = opts.Tag()
 	}
 
@@ -120,10 +125,10 @@ func encodeTLV(t TLV, opts *Options) (out []byte) {
 			newLItem(id|byte(tagVal), "single-byte tag"),
 		)
 	} else {
-		b = append(b, id|0x1F)
+		b = append(b, id|longByte)
 		enc := encodeBase128Int(tagVal)
 		debugEvent(EventTrace|EventTLV,
-			newLItem(id|0x1F, "high-tag marker"),
+			newLItem(id|longByte, "high-tag marker"),
 			newLItem(enc, "base-128 tag bytes"),
 		)
 		b = append(b, enc...)
@@ -134,11 +139,10 @@ func encodeTLV(t TLV, opts *Options) (out []byte) {
 	}
 
 	b4 := len(b)
-	encodeLengthInto(t.Type(), &b, t.Length)
+	encodeLengthInto(t.typ, &b, t.Length)
 	debugTLV(
 		newLItem(t.Length, "value length"),
-		newLItem(len(b)-b4, "length field size"),
-	)
+		newLItem(len(b)-b4, "length field size"))
 
 	b = append(b, t.Value...)
 
@@ -179,14 +183,12 @@ func getTLVResolveOverride(class, tag int, compound bool, opts *Options) (int, i
 func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	debugEvent(EventEnter|EventTLV,
 		newLItem(r, "PDU"),
-		opts,
-	)
+		opts)
 
 	defer func() {
 		debugEvent(EventExit|EventTLV,
 			newLItem(tlv, "tlv"),
-			newLItem(err),
-		)
+			newLItem(err))
 	}()
 
 	if err = errorTLVNoData(r); err != nil {
@@ -225,7 +227,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	debugEvent(EventTrace|EventTLV, newLItem(compound, "compound"))
 
 	if tag, idLen, err = parseTagIdentifier(sub); err != nil {
-		err = tLVErr{mkerrf(typ, " error reading tag: ", err)}
+		err = tLVErrorf(typ, " error reading tag: ", err)
 		return
 	}
 
@@ -267,8 +269,8 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 			// definite-length
 			end := off + length
 			if end > len(d) {
-				err = tLVErr{mkerrf(errorTruncDefLen,
-					": ", end, " > ", len(d), ")")}
+				err = tLVErrorf(errorTruncDefLen,
+					": ", end, " > ", len(d), ")")
 				return
 			}
 			valueBytes = d[off:end]
@@ -279,7 +281,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 		} else {
 			// indefinite-length (BER)
 			buf := d[off:]
-			eocIdx := bytes.Index(buf, indefEoC)
+			eocIdx := bidx(buf, indefEoC)
 			if eocIdx < 0 {
 				err = errorNoEOCIndefTLV
 				return
@@ -295,7 +297,7 @@ func getTLV(r PDU, opts *Options) (tlv TLV, err error) {
 	switch typ {
 	case BER, CER, DER:
 		tlv = typ.newTLV(class, tag, length, compound, valueBytes...)
-		debugTLV(tlv)
+		debugTLV(newLItem(tlv, "new TLV"))
 	}
 
 	return
@@ -315,22 +317,22 @@ func tlvVerifyLengthState(r PDU, d []byte, opts *Options) (length, lenLen int, e
 
 	off := r.Offset()
 
-	if (opts != nil && opts.Optional) && len(d[off:]) == 0 {
+	if optsIsOptional(opts) && len(d[off:]) == 0 {
 		return
 	}
 
 	typ := r.Type()
 
 	if length, lenLen, err = parseLength(d[off:]); err != nil {
-		err = tLVErr{mkerrf(errorBadLength, ": ", err)}
+		err = tLVErrorf(errorBadLength, ": ", err)
 	} else if !typ.allowsIndefinite() && length < 0 {
-		err = tLVErr{errorIndefiniteProhibited}
+		err = tLVErrorf(errorIndefiniteProhibited)
 	} else if typ == DER {
 		// DER canonical-form checks
 		if lenLen > 1 && length < indefByte {
-			err = tLVErr{errorDERNonMinLen}
-		} else if lenLen > 2 && d[off+1] == 0x00 {
-			err = tLVErr{errorDERLeadingZeroLen}
+			err = tLVErrorf(errorDERNonMinLen)
+		} else if lenLen > 2 && d[off+1] == zeroByte {
+			err = tLVErrorf(errorDERLeadingZeroLen)
 		}
 	}
 
@@ -354,21 +356,21 @@ func writeTLV(pkt PDU, t TLV, opts *Options) (err error) {
 		ttyp       EncodingRule = t.Type()
 	)
 
-	if (opts != nil && opts.Indefinite) || t.Length < 0 {
+	if optsIsIndef(opts) || t.Length < 0 {
 		if !ptyp.allowsIndefinite() {
-			err = tLVErr{mkerrf(ptyp, " forbids indefinite length")}
+			err = tLVErrorf(ptyp, " forbids indefinite length")
 			return
 		}
 		indefBytes = indefEoC
 	} else if ptyp != ttyp {
-		err = tLVErr{mkerrf("WriteTLV: expected ", ttyp, ", got ", ptyp)}
+		err = tLVErrorf("WriteTLV: expected ", ttyp, ", got ", ptyp)
 		return
 	}
 
 	encoded := encodeTLV(t, opts)
 	pkt.Append(encoded...)
 
-	// Add end-of-contents for encoding rules that
+	// Add end-of-container for encoding rules that
 	// permit indefinite value lengths if present.
 	pkt.Append(indefBytes...)
 	pkt.SetOffset(pkt.Len())
@@ -380,20 +382,20 @@ func writeTLV(pkt PDU, t TLV, opts *Options) (err error) {
 readBase128Int returns the decoded base-128 integer,
 used for tags >= 31.
 */
-func readBase128Int(pkt PDU) (int, error) {
-	result := 0
+func readBase128Int(pkt PDU) (result int, err error) {
 	for {
 		if pkt.Offset() >= pkt.Len() {
-			return 0, errorTruncBase128
+			err = errorTruncBase128
+			break
 		}
 		b := pkt.Data()[pkt.Offset()]
 		pkt.AddOffset(1)
-		result = (result << 7) | int(b&0x7f)
+		result = (result << 7) | int(b&shortByte)
 		if b&indefByte == 0 {
 			break
 		}
 	}
-	return result, nil
+	return
 }
 
 // encodeBase128Int builds the tag field in a fixed [10]byte buffer.
@@ -401,11 +403,11 @@ func readBase128Int(pkt PDU) (int, error) {
 func encodeBase128Int(value int) []byte {
 	var buf [10]byte
 	i := len(buf) - 1
-	buf[i] = byte(value & 0x7F)
+	buf[i] = byte(value & shortByte)
 	value >>= 7
 	for value > 0 {
 		i--
-		buf[i] = byte(value&0x7F) | 0x80
+		buf[i] = byte(value&shortByte) | indefByte
 		value >>= 7
 	}
 	return buf[i:]
