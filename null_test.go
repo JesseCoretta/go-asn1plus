@@ -11,15 +11,15 @@ func TestNull_encodingRules(t *testing.T) {
 			return
 		}
 
+		want := "05 00"
+		if got := pkt.Hex(); got != want {
+			t.Errorf("%s failed [%s hex cmp.]:\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rule, want, got)
+		}
+
 		var null2 Null
 		if err = Unmarshal(pkt, &null2); err != nil {
 			t.Errorf("%s failed [%s decoding]: %v", t.Name(), rule, err)
 			return
-		}
-
-		want := "05 00"
-		if got := pkt.Hex(); got != want {
-			t.Errorf("%s failed [%s hex cmp.]:\n\twant: '%s'\n\tgot:  '%s'", t.Name(), rule, want, got)
 		}
 	}
 }
