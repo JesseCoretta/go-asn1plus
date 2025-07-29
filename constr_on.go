@@ -57,7 +57,7 @@ func From(allowed string) Constraint {
 		case Primitive:
 			s = tv.String()
 		default:
-			err = mkerr("Assertion failed for string")
+			err = generalErrorf("Assertion failed for string")
 		}
 		for i := 0; i < len(s) && err == nil; i++ {
 			if _, ok := allowedSet[rune(s[i])]; !ok {
@@ -130,7 +130,7 @@ func RecurrenceConstraint[T Temporal](period time.Duration, windowStart, windowE
 	return func(val any) (err error) {
 		tm, ok := val.(Temporal)
 		if !ok {
-			err = mkerr("Temporal assertion failed")
+			err = generalErrorf("Temporal assertion failed")
 			return
 		}
 		remainder := time.Duration(tm.Cast().UnixNano()) % period
@@ -149,7 +149,7 @@ func TimePointRangeConstraint[T Temporal](min, max T) Constraint {
 	return func(val any) (err error) {
 		tm, ok := val.(Temporal)
 		if !ok {
-			err = mkerr("Temporal assertion failed")
+			err = generalErrorf("Temporal assertion failed")
 			return
 		}
 		t := tm.Cast()
