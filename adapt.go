@@ -10,30 +10,25 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 var (
-	mu                 sync.RWMutex // locker for adapters
-	sortedAdapters     []AdapterInfo
-	sortedKeywords     []string
-	adapters           = map[[2]string]adapter{} // key: {goType, tagKeyword}
-	defaultAdapters    = map[string][]adapter{}  // key: goType
-	primitiveTypeNames = make(map[Primitive]string)
-	adaptersVer        int64
-)
-
-var (
-	kwFastMu sync.RWMutex
-	kwFastV  int64
-	kwFast   map[string]struct{}
-)
-
-// cached results + guards for ListAdapters()
-var (
-	listCacheMu   sync.RWMutex
-	listCacheVer  int64
-	listCacheData []AdapterInfo
+	mu              sync.RWMutex
+	adapters        = map[[2]string]adapter{} // key: {goType, tagKeyword}
+	defaultAdapters = map[string][]adapter{}  // key: goType
+	adaptersVer     int64
+	kwFastMu        sync.RWMutex
+	kwFastV         int64
+	kwFast          map[string]struct{}
+	listCacheMu     sync.RWMutex
+	listCacheVer    int64
+	listCacheData   []AdapterInfo
+	kwCacheVal      atomic.Value
+	rebuildKwMu     sync.Mutex
+	master          = map[reflect.Type]factories{}
+	aiPool          = sync.Pool{
+		New: func() any { return make([]AdapterInfo, 0, 64) },
+	}
 )
 
 type adapterKwCache struct {
@@ -41,21 +36,8 @@ type adapterKwCache struct {
 	keys []string
 }
 
-var (
-	kwCacheVal  atomic.Value
-	rebuildKwMu sync.Mutex
-)
-
-var aiPool = sync.Pool{
-	New: func() any { return make([]AdapterInfo, 0, 64) },
-}
-
 func getAiSlice() []AdapterInfo  { return aiPool.Get().([]AdapterInfo)[:0] }
 func putAiSlice(s []AdapterInfo) { aiPool.Put(s[:0]) } // use with defer
-
-// parseFn converts the external string into a time.Time
-// (RFC 3339, ASN.1 canonical, by layout ... .
-type parseFn func(string) (time.Time, error)
 
 /*
 lookupAdapter returns an instance of adapter alongside an error, following
@@ -96,8 +78,8 @@ func chainAdapters(candidates []adapter) (adapt adapter) {
 	}()
 
 	return adapter{
-		newCodec: candidates[0].newCodec, // any of them is fine
-		toGo:     candidates[0].toGo,     // we’ll only call this after success
+		newCodec: candidates[0].newCodec,
+		toGo:     candidates[0].toGo,
 		fromGo: func(g any, prim Primitive, opts *Options) (err error) {
 			debugEvent(EventEnter|EventAdapter, g, prim, opts)
 			defer func() {
@@ -190,6 +172,7 @@ func adapterKeywords() (out []string) {
 	debugEvent(EventTrace|EventAdapter,
 		newLItem(c.ver, "cached kw ver"),
 		newLItem(len(c.keys), "cached kw keys"))
+
 	if c.ver == cur {
 		// lock‐free load
 		debugAdapter(newLItem(c.keys, "fast‐path keys"))
@@ -234,16 +217,14 @@ func adapterKeywords() (out []string) {
 
 		debugEvent(EventTrace|EventAdapter,
 			newLItem(cur, "storing new kw version"),
-			newLItem(len(out), "storing new kw"),
-		)
+			newLItem(len(out), "storing new kw"))
 		kwCacheVal.Store(adapterKwCache{ver: cur, keys: out})
 		debugAdapter("cache updated")
 	} else {
 		debugAdapter(
 			"kw cache already rebuilt by peer",
 			newLItem(c.ver, "kw cache version"),
-			newLItem(len(c.keys), "peer‐built kw"),
-		)
+			newLItem(len(c.keys), "peer‐built kw"))
 		out = c.keys
 	}
 
@@ -319,16 +300,16 @@ func ListAdapters() []AdapterInfo {
 
 /*
 RegisterAdapter binds a pair of types—an ASN.1 primitive `T` and a
-“plain-old” Go type `GoT`—to one or more textual keywords.
+Go type `GoT` to one or more textual keywords.
 
 Once registered, Marshal / Unmarshal will automatically convert
 between the two representations whenever:
 
-  - the Go value’s dynamic type is `GoT`, **and**
-  - the caller supplied the keyword via
-  - a struct tag:       `asn1:"<keyword>"`
-  - With(Options{Identifier: "<keyword>"}).
-  - or the keyword is the empty string "" *and* no identifier was provided (default adapter for that Go type).
+  - The Go value’s dynamic type is `GoT`, **and**
+  - The caller supplied the keyword via
+  - A struct tag: `asn1:"<keyword>"`
+  - With(Options{Identifier: "<keyword>"})
+  - The keyword is the empty string "" *and* no identifier was provided (default adapter for GoT).
 
 Typical use-cases
 
@@ -355,8 +336,8 @@ Example (untested)
 
 	// Interop adapter: Go value is []int (encoding/asn1 style), and ASN.1 value is OBJECT IDENTIFIER.
 	//
-	//   1. constructor  ([]int → ObjectIdentifier)
-	//   2. projector    (*ObjectIdentifier → []int)
+	//   1. constructor  ([]int -> ObjectIdentifier)
+	//   2. projector    (*ObjectIdentifier -> []int)
 	//   3. keywords     (no default "", user must ask for it)
 	asn1plus.RegisterAdapter[asn1plus.ObjectIdentifier, []int](
 	    // constructor
@@ -374,7 +355,7 @@ Example (untested)
 	    // projector
 	    func(oid *asn1plus.ObjectIdentifier) []int {
 	        // Split the dotted string back into integers:
-	        // "1.2.840.113549" → []int{1,2,840,113549}
+	        // "1.2.840.113549" -> []int{1,2,840,113549}
 	        parts := strings.Split(oid.String(), ".")
 	        out   := make([]int, len(parts))
 	        for i, p := range parts {
@@ -421,12 +402,11 @@ func RegisterAdapter[T any, GoT any](
 	}
 
 	fromGo := func(g any, prim Primitive, opts *Options) (err error) {
-		cs, err := collectConstraint(opts.Constraints)
-		if err == nil {
+		var cs ConstraintGroup
+		if cs, err = collectConstraint(opts.Constraints); err == nil {
 			if goVal, ok := g.(GoT); !ok {
 				err = adapterErrorf("adapter: expected ",
-					refTypeOf(*new(GoT)).String(),
-					" got ", refTypeOf(g).String())
+					refTypeOf(*new(GoT)), " got ", refTypeOf(g))
 			} else {
 				var val T
 				if val, err = ctor(goVal, cs...); err == nil {
@@ -465,10 +445,10 @@ UnregisterAdapter removes previously registered adapters for the GoT-T binding.
 
 For instance:
 
-	// remove only the "oid" adapter for ObjectIdentifier→string
+	// remove only the "oid" adapter for ObjectIdentifier to string
 	UnregisterAdapter[ObjectIdentifier,string]("oid")
 
-	// remove *all* adapters for ObjectIdentifier→string
+	// remove *all* adapters for ObjectIdentifier to string
 	UnregisterAdapter[ObjectIdentifier,string]()
 */
 func UnregisterAdapter[T any, GoT any](aliases ...string) {
@@ -477,21 +457,21 @@ func UnregisterAdapter[T any, GoT any](aliases ...string) {
 
 	// Identify the Go‐type name and Primitive pointer type
 	goTypeName := refTypeOf((*GoT)(nil)).Elem().String()
-	primPtrType := reflect.TypeOf((*T)(nil))
+	primPtrType := refTypeOf((*T)(nil))
 
-	// Build alias set; empty means “remove all for T→GoT”
+	// Build alias set; empty means “remove all for T to GoT”
 	removeAll := len(aliases) == 0
 	aliasSet := make(map[string]bool, len(aliases))
 	for _, a := range aliases {
 		aliasSet[lc(a)] = true
 	}
 
-	// 1) Remove matching entries from the keyed adapters map
+	// Remove matching entries from the keyed adapters map
 	for key, ad := range adapters {
 		if key[0] != goTypeName {
 			continue
 		}
-		if reflect.TypeOf(ad.newCodec()) != primPtrType {
+		if refTypeOf(ad.newCodec()) != primPtrType {
 			continue
 		}
 		if removeAll || aliasSet[key[1]] {
@@ -499,12 +479,12 @@ func UnregisterAdapter[T any, GoT any](aliases ...string) {
 		}
 	}
 
-	// 2) Remove from defaultAdapters slice if we’re removing all
+	// Remove from defaultAdapters slice if we’re removing all
 	if removeAll {
 		if slice, ok := defaultAdapters[goTypeName]; ok {
 			var kept []adapter
 			for _, ad := range slice {
-				if reflect.TypeOf(ad.newCodec()) != primPtrType {
+				if refTypeOf(ad.newCodec()) != primPtrType {
 					kept = append(kept, ad)
 				}
 			}
@@ -538,9 +518,8 @@ func isAdapterKeyword(token string) (is bool) {
 	if cur == kwFastV {
 		_, is = kwFast[token]
 		return
-	}
-
-	if cur != kwFastV { // rebuild once
+	} else {
+		// rebuild once
 		m := make(map[string]struct{}, 64)
 		for _, kw := range adapterKeywords() {
 			m[kw] = struct{}{}
@@ -557,16 +536,16 @@ with ASN.1 primitives (e.g.: string -> uTF8String)
 */
 type adapter struct {
 	newCodec func() Primitive                     // factory for temp value
-	toGo     func(Primitive) any                  // codec → plain Go
-	fromGo   func(any, Primitive, *Options) error // plain Go → codec
+	toGo     func(Primitive) any                  // codec -> plain Go
+	fromGo   func(any, Primitive, *Options) error // plain Go -> codec
 }
 
 // Every concrete codec (bytesCodec[T], stringCodec[T], ...) must satisfy this.
 type box interface {
 	Primitive // Tag/IsPrimitive/read/write
 	codecRW
-	setVal(any)  // copy Go → codec
-	getVal() any // copy codec → Go
+	setVal(any)  // copy Go -> codec
+	getVal() any // copy codec -> Go
 }
 
 type codecRW interface {
@@ -580,17 +559,15 @@ type factories struct {
 	newWith  func(any) box // produce *codec seeded with value
 }
 
-var master = map[reflect.Type]factories{}
-
 // registerType puts BOTH the value type and its pointer into the table.
 func registerType(rt reflect.Type, f factories) {
 	master[rt] = f
-	master[reflect.PtrTo(rt)] = f
+	master[refPtrTo(rt)] = f
 }
 
 func unregisterType(rt reflect.Type) {
 	delete(master, rt)
-	delete(master, reflect.PtrTo(rt))
+	delete(master, refPtrTo(rt))
 }
 
 func init() {

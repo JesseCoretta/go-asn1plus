@@ -8,6 +8,123 @@ import (
 	"time"
 )
 
+func TestSet_Extensions(t *testing.T) {
+	type MySET struct {
+		Name       string `asn1:"utf8"`
+		Extensions []TLV  `asn1:"..."`
+	}
+
+	// A BER‐encoded SET containing:
+	//   • UTF8String "Hello"  → 0x0C 0x05 48 65 6C 6C 6F
+	//   • INTEGER 123         → 0x02 0x01 7B
+	raw := []byte{
+		0x31, 0x0A, // SET, length=10
+		0x0C, 0x05, 'H', 'e', 'l', 'l', 'o', // UTF8String "Hello"
+		0x02, 0x01, 0x7B, // INTEGER 123
+	}
+
+	pkt := BER.New(raw...)
+	pkt.SetOffset()
+
+	var s MySET
+	if err := Unmarshal(pkt, &s); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	} else if got, want := s.Name, "Hello"; got != want {
+		t.Fatalf("Name = %q; want %q", got, want)
+	} else if n := len(s.Extensions); n != 1 {
+		t.Fatalf("Extensions length = %d; want 1", n)
+	}
+	ext := s.Extensions[0]
+
+	if ext.Tag != 2 {
+		t.Fatalf("Extensions[0].Tag = %d; want 2", ext.Tag)
+	} else if !btseq(ext.Value, []byte{0x7B}) {
+		t.Fatalf("Extensions[0].Value = % X; want 7B", ext.Value)
+	}
+
+	outPkt, err := Marshal(s)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	} else if !btseq(outPkt.Data(), raw) {
+		t.Fatalf("Round-trip = % X; want % X", outPkt.Data(), raw)
+	}
+}
+
+func ExampleRawContent() {
+	type MySequence struct {
+		RawContent        // must be first field
+		A          string `asn1:"octet"`
+		B          int
+	}
+
+	// Here we manufacture a PDU by hand
+	// just for brevity.
+	rawContent := []byte{
+		0x04, 0x01, 'X',
+		0x02, 0x01, 0x05,
+	}
+	rawSeq := append([]byte{0x30, byte(len(rawContent))}, rawContent...)
+	pkt := BER.New(rawSeq...)
+	pkt.SetOffset()
+
+	// Decode pkt into MySequence
+	var my MySequence
+	if err := Unmarshal(pkt, &my); err != nil {
+		fmt.Printf("Unmarshal failed: %v", err)
+		return
+	}
+
+	fmt.Printf("%#v\n", my.RawContent)
+	// Output: asn1plus.RawContent{0x4, 0x1, 0x58, 0x2, 0x1, 0x5}
+}
+
+func TestSequence_Extensions_RoundTrip(t *testing.T) {
+	raw := []byte{
+		0x30, 0x0A,
+		0x0C, 0x05, 'H', 'e', 'l', 'l', 'o',
+		0x02, 0x01, 0x7B,
+	}
+
+	pkt := BER.New(raw...)
+	pkt.SetOffset()
+
+	//t.Logf("%#v\n", pkt)
+
+	var seq struct {
+		Name       string `asn1:"utf8"`
+		Extensions []TLV  `asn1:"..."`
+	}
+
+	if err := Unmarshal(pkt, &seq); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if seq.Name != "Hello" {
+		t.Errorf("Name = %q; want %q", seq.Name, "Hello")
+	}
+
+	if got := len(seq.Extensions); got != 1 {
+		t.Fatalf("Extensions length = %d; want 1", got)
+	}
+	ext := seq.Extensions[0]
+
+	if ext.Tag != 2 {
+		t.Errorf("Extensions[0].Tag = %d; want 2", ext.Tag)
+	}
+
+	if !btseq(ext.Value, []byte{0x7B}) {
+		t.Errorf("Extensions[0].Value = % X; want 7B", ext.Value)
+	}
+
+	outPkt, err := Marshal(seq)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if !btseq(outPkt.Data(), raw) {
+		t.Errorf("Round-trip bytes = % X; want % X", outPkt.Data(), raw)
+	}
+}
+
 func TestDuration_customType(t *testing.T) {
 	type CustomDur Duration
 	RegisterDurationAlias[CustomDur](TagDuration,

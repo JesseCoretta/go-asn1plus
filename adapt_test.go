@@ -22,7 +22,7 @@ func testMakeAdapter(shouldSucceed bool) adapter {
 			if shouldSucceed {
 				return nil
 			}
-			return mkerr("fail")
+			return adapterErrorf("fail")
 		},
 	}
 }

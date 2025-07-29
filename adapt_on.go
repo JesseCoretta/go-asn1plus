@@ -9,7 +9,7 @@ import (
 
 func wrapTemporalStringCtor[T Temporal](
 	raw func(any, ...Constraint) (T, error),
-	parse parseFn,
+	parse func(string) (time.Time, error),
 ) func(string, ...Constraint) (T, error) {
 
 	return func(s string, cs ...Constraint) (t T, err error) {
