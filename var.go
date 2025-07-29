@@ -4,6 +4,8 @@ package asn1plus
 var.go contains global variables and constants used throughout this package.
 */
 
+import "reflect"
+
 /*
 ASN.1 tag constants. These are defined largely for convenience so that
 [encoding/asn1] need not be imported by the caller.
@@ -100,7 +102,7 @@ var TagNames = map[int]string{
 	TagVisibleString:    "VisibleString",     // 26
 	TagGeneralString:    "GeneralString",     // 27 -- deprecated in favor of BMPString, UniversalString, UTF8String
 	TagUniversalString:  "UniversalString",   // 28
-	TagCharacterString:  "CharacterString",   // 29
+	TagCharacterString:  "CharacterString",   // 29 -- not yet implemented (see #)
 	TagBMPString:        "BMPString",         // 30
 	TagDate:             "Date",              // 31
 	TagTimeOfDay:        "TimeOfDay",         // 32
@@ -127,18 +129,23 @@ var (
 	ptrClassUniversal       = new(int)
 	ptrClassContextSpecific = new(int)
 	rawContentType          = refTypeOf(RawContent(nil))
-	indefEoC                = []byte{0x00, 0x00}
+	choicePtrType           = refTypeOf((*Choice)(nil)).Elem()
+	choiceIfaceType         = refTypeOf(Choice(nil))
+	taggedChoiceType        = refTypeOf(NewChoice(nil, 0))
+	indefEoC                = []byte{0x00, 0x00} // End-of-Container
+	tLVType                 = refTypeOf(TLV{})
 )
 
 var boolKeywords = map[string]struct{}{
-	"explicit":      {},
-	"optional":      {},
+	"absent":        {},
 	"automatic":     {},
-	"set":           {},
-	"sequence":      {},
-	"omitempty":     {},
-	"indefinite":    {},
 	"components-of": {},
+	"explicit":      {},
+	"indefinite":    {},
+	"omitempty":     {},
+	"optional":      {},
+	"sequence":      {},
+	"set":           {},
 	"...":           {},
 }
 
@@ -150,15 +157,26 @@ var classKeywords = map[string]struct{}{
 }
 
 const (
-	indefByte  = 0x80
-	cmpndByte  = 0x20
-	plusIByte  = 0x40
-	minusIByte = 0x41
+	zeroByte   = 0x00 // zero byte
+	longByte   = 0x1F // long-form tag marker
+	cmpndByte  = 0x20 // compound marker
+	plusIByte  = 0x40 // real +inf
+	minusIByte = 0x41 // real -inf
+	shortByte  = 0x7F // short-form tag marker
+	indefByte  = 0x80 // indefinite length marker
 )
+
+var marshalHandlers []func(reflect.Value, PDU, *Options) (bool, error)
 
 const hexDigits = "0123456789ABCDEF"
 
 func init() {
+	marshalHandlers = []func(reflect.Value, PDU, *Options) (bool, error){
+		marshalChoice,     // Choice (recursion) path
+		marshalPrimitive,  // ASN.1 Primitive path
+		marshalViaAdapter, // Adapter path
+	}
+
 	*ptrClassUniversal = ClassUniversal
 	*ptrClassContextSpecific = ClassContextSpecific
 
