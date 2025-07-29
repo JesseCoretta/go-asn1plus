@@ -46,7 +46,7 @@ func TestLoglevels_codecov(t *testing.T) {
 	debugPDU()
 	debugConstraint()
 	debugPerf()
-	debugSeqSet()
+	debugComposite()
 
 	li := labeledItem{}
 	_ = li.String()

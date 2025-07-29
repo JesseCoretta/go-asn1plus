@@ -291,7 +291,7 @@ func debugPDU(args ...any)        { debugEvent(EventPDU, args...) }
 func debugTLV(args ...any)        { debugEvent(EventTLV, args...) }
 func debugPerf(args ...any)       { debugEvent(EventPerf, args...) }
 func debugConstraint(args ...any) { debugEvent(EventConstraint, args...) }
-func debugSeqSet(args ...any)     { debugEvent(EventSeqSet, args...) }
+func debugComposite(args ...any)  { debugEvent(EventComposite, args...) }
 func debugPrim(args ...any)       { debugEvent(EventPrim, args...) }
 func debugChoice(args ...any)     { debugEvent(EventChoice, args...) }
 func debugAdapter(args ...any)    { debugEvent(EventAdapter, args...) }
@@ -476,9 +476,10 @@ func fmtDefaultArg(v any) (s string) {
 	s = "<Unidentified>"
 	if v != nil {
 		rt := refTypeOf(v)
-		if rt.Kind() == 25 {
+		k := rt.Kind()
+		if k == reflect.Struct {
 			s = "STRUCT (" + rt.String() + ")"
-		} else if rt.Kind() == 23 {
+		} else if k == reflect.Slice {
 			s = "SLICE (" + rt.String() + ")"
 		} else {
 			s = rt.String()
@@ -543,7 +544,7 @@ func init() {
 			int(EventInfo):       "info",
 			int(EventExit):       "exit",
 			int(EventChoice):     "choice",
-			int(EventSeqSet):     "seq/set",
+			int(EventComposite):  "composite",
 			int(EventAdapter):    "adapter",
 			int(EventTrace):      "trace",
 			int(EventPDU):        "pdu",

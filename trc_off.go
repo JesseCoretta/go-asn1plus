@@ -18,7 +18,7 @@ func debugPrim(_ ...any)                   {}
 func debugPerf(_ ...any)                   {}
 func debugChoice(_ ...any)                 {}
 func debugTrace(_ ...any)                  {}
-func debugSeqSet(_ ...any)                 {}
+func debugComposite(_ ...any)              {}
 func debugCodec(_ ...any)                  {}
 func debugPath(_ ...any) func(_ ...any)    { return func(_ ...any) {} }
 func makePacketID() string                 { return "" }
