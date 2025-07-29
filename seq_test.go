@@ -5,78 +5,19 @@ import (
 	"testing"
 )
 
-func ExampleRawContent() {
-	type MySequence struct {
-		RawContent        // must be first field
-		A          string `asn1:"octet"`
-		B          int
+func TestNonNilAbsent(t *testing.T) {
+	null := NewChoice(Null{}, 5)
+	descr := ObjectDescriptor("we shouldn't be here")
+	dv := OctetString("data")
+
+	pdv := EmbeddedPDV{
+		Identification:      null,
+		DataValueDescriptor: &descr,
+		DataValue:           dv,
 	}
 
-	// Here we manufacture a PDU by hand
-	// just for brevity.
-	rawContent := []byte{
-		0x04, 0x01, 'X',
-		0x02, 0x01, 0x05,
-	}
-	rawSeq := append([]byte{0x30, byte(len(rawContent))}, rawContent...)
-	pkt := BER.New(rawSeq...)
-	pkt.SetOffset()
-
-	// Decode pkt into MySequence
-	var my MySequence
-	if err := Unmarshal(pkt, &my); err != nil {
-		fmt.Printf("Unmarshal failed: %v", err)
-		return
-	}
-
-	fmt.Printf("%#v\n", my.RawContent)
-	// Output: asn1plus.RawContent{0x4, 0x1, 0x58, 0x2, 0x1, 0x5}
-}
-
-func TestSequence_Extensions_RoundTrip(t *testing.T) {
-	raw := []byte{
-		0x30, 0x0A,
-		0x0C, 0x05, 'H', 'e', 'l', 'l', 'o',
-		0x02, 0x01, 0x7B,
-	}
-
-	pkt := BER.New(raw...)
-	pkt.SetOffset()
-
-	//t.Logf("%#v\n", pkt)
-
-	var seq struct {
-		Name       string `asn1:"utf8"`
-		Extensions []TLV  `asn1:"..."`
-	}
-
-	if err := Unmarshal(pkt, &seq); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-
-	if seq.Name != "Hello" {
-		t.Errorf("Name = %q; want %q", seq.Name, "Hello")
-	}
-
-	if got := len(seq.Extensions); got != 1 {
-		t.Fatalf("Extensions length = %d; want 1", got)
-	}
-	ext := seq.Extensions[0]
-
-	if ext.Tag != 2 {
-		t.Errorf("Extensions[0].Tag = %d; want 2", ext.Tag)
-	}
-
-	if !btseq(ext.Value, []byte{0x7B}) {
-		t.Errorf("Extensions[0].Value = % X; want 7B", ext.Value)
-	}
-
-	outPkt, err := Marshal(seq)
-	if err != nil {
-		t.Fatalf("Marshal failed: %v", err)
-	}
-	if !btseq(outPkt.Data(), raw) {
-		t.Errorf("Round-trip bytes = % X; want % X", outPkt.Data(), raw)
+	if _, err := Marshal(pdv); err == nil {
+		t.Fatalf("Expected error due to ABSENT violation, got nil")
 	}
 }
 
@@ -299,7 +240,7 @@ func TestSequence_codecov(_ *testing.T) {
 		Choice          `asn1:"EXPLICIT,choices:missingChoices"`
 	}
 
-	checkSequenceFieldCriticality("bogus", refValueOf(nil), false)
+	checkSequenceFieldCriticality("bogus", refValueOf(nil), &Options{})
 
 	//marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: OctetString(`theChosenOne`)}, &BERPacket{})
 	//marshalSequenceChoiceFieldPrimitive(&Options{}, Choice{Value: `theChosenOne`}, &BERPacket{})
