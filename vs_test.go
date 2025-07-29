@@ -50,6 +50,8 @@ func ExampleVisibleString_bER() {
 		return
 	}
 
+	fmt.Printf("%T Hex: %s\n", pkt, pkt.Hex())
+
 	// Decode DER PDU into new VisibleString instance
 	var vs2 VisibleString
 	if err = Unmarshal(pkt, &vs2); err != nil {
@@ -58,10 +60,10 @@ func ExampleVisibleString_bER() {
 	}
 
 	// Compare string representation
-	fmt.Printf("%T values match: %t (%s)\n", vs, vs.String() == vs2.String(), vs2)
-	fmt.Printf("%T Hex: %s", pkt, pkt.Hex())
-	// Output: asn1plus.VisibleString values match: true (Jesse)
+	fmt.Printf("%T values match: %t (%s)", vs, vs.String() == vs2.String(), vs2)
+	// Output:
 	// *asn1plus.BERPacket Hex: 1A 05 4A65737365
+	// asn1plus.VisibleString values match: true (Jesse)
 }
 
 func TestVisibleString_codecov(t *testing.T) {

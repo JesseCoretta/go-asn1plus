@@ -65,7 +65,7 @@ func ExampleUTF8String_withConstraint() {
 		str, _ := val.(UTF8String)
 		for _, char := range []rune(str) {
 			if '0' <= char && char <= '9' {
-				err = mkerr("Constraint violation: invalid ASN.1 UTF-8 codepoints found")
+				err = fmt.Errorf("Constraint violation: invalid ASN.1 UTF-8 codepoints found")
 				break
 			}
 		}
@@ -79,7 +79,7 @@ func TestNewUTF8String_constraint(t *testing.T) {
 	validator := func(x any) error {
 		u, _ := x.(UTF8String)
 		if !(utf8.ValidString(u.String()) && !strings.Contains(u.String(), "@")) {
-			return mkerr("UTF-8 constraint violation")
+			return primitiveErrorf("UTF-8 constraint violation")
 		}
 		return nil
 	}
