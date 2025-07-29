@@ -137,7 +137,7 @@ func init() {
 			return
 		}
 		if len(o) == 0 {
-			err = mkerr("PrintableString is zero length")
+			err = primitiveErrorf("PrintableString is zero length")
 			return
 		}
 

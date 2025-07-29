@@ -133,7 +133,7 @@ func (r Real) Big() *big.Float {
 	}
 	baseInt := big.NewInt(int64(r.Base))
 	// Compute baseInt^(|Exponent|) exactly as a big.Int.
-	powerInt := new(big.Int).Exp(baseInt, big.NewInt(int64(absExp)), nil)
+	powerInt := newBigInt(0).Exp(baseInt, big.NewInt(int64(absExp)), nil)
 	// Convert that integer factor to a big.Float.
 	factor := new(big.Float).SetInt(powerInt)
 
@@ -348,7 +348,7 @@ func float64Components(f float64, base int) (mant *big.Int, exp int, err error) 
 
 		// Shift mantissa left by the remaining 0…3 bits.
 		if rem != 0 {
-			m2 = new(big.Int).Lsh(m2, uint(rem))
+			m2 = newBigInt(0).Lsh(m2, uint(rem))
 		}
 
 		mant, exp = m2, exp16
@@ -389,7 +389,7 @@ func float64Base2or8Components(f float64, base int) (mant *big.Int, exp int) {
 		}
 	} else {
 		b8 := big.NewInt(8)
-		for new(big.Int).Mod(m, b8).Sign() == 0 {
+		for newBigInt(0).Mod(m, b8).Sign() == 0 {
 			m.Div(m, b8)
 			exp++
 		}
