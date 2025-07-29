@@ -25,7 +25,7 @@ func (r DERPacket) Type() EncodingRule { return DER }
 /*
 ID returns the unique string identifier associated with the receiver instance.
 
-Note that if this package is not compiled or run with "-tags asn1debug", this
+Note that if this package is not compiled or run with "-tags asn1_debug", this
 method will always return a zero string.
 */
 func (r DERPacket) ID() string { return r.id }
@@ -54,14 +54,14 @@ to extract all but the outermost header information (omit class, tag, etc.) up t
 including the next payload.
 */
 func (r DERPacket) Bytes() ([]byte, error) {
-	return parseBody(r.Data(), r.Offset(), r.Type())
+	return parseBody(r.Data(), r.Offset(), DER)
 }
 
 /*
 FullBytes returns a byte slice representing data[:offset].
 */
 func (r DERPacket) FullBytes() ([]byte, error) {
-	return parseFullBytes(r.Data(), r.Offset(), r.Type())
+	return parseFullBytes(r.Data(), r.Offset(), DER)
 }
 
 /*
