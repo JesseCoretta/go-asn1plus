@@ -32,6 +32,7 @@ This package has no dependence upon the `encoding/asn1` package, as this package
  - Full ASN.1 primitive type support -- twenty six (26) types are implemented, such as `OctetString`, `Time`, `Real` and many others (including legacy/deprecated types)
  - `SET` and `SEQUENCE` support
  - Constraints -- Flexible ASN.1 constraint logic has been implemented for maximum control
+ - Choice support, with custom interface registration bindings to concrete types
  - Intuitive, easy to use
  - Well documented, containing many useful examples
 
