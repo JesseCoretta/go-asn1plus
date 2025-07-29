@@ -32,7 +32,7 @@ func (_ invalidChoice) isChoice()  {}
 func (_ invalidChoice) Tag() int   { return -1 }
 func (_ invalidChoice) Value() any { return errorNilReceiver }
 
-func (r wrappedChoice) isChoice()  {}
+func (_ wrappedChoice) isChoice()  {}
 func (r wrappedChoice) Tag() int   { return r.tag }
 func (r wrappedChoice) Value() any { return r.inner }
 
@@ -184,9 +184,7 @@ func (r Choices) Register(
 		newLItem(tag, "choice tag"),
 		newLItem(explicit, "choice explicit"))
 
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
 	// always group alternatives under the Choice
 	// interface if none was specified
@@ -194,7 +192,7 @@ func (r Choices) Register(
 	if ifacePtr != nil {
 		key = refTypeOf(ifacePtr).Elem()
 	} else if r.auto {
-		key = refTypeOf((*Choice)(nil)).Elem()
+		key = choicePtrType
 	} else {
 		key = derefTypePtr(refTypeOf(concrete))
 	}
@@ -327,28 +325,36 @@ func marshalChoiceWrapper(
 	parent any,
 	pkt PDU,
 	opts *Options,
-	v reflect.Value, // holds a Choice instance
-) error {
+	v reflect.Value,
+) (err error) {
+	debugEnter(newLItem(parent, "parent"), opts, v, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
 	cw := v.Interface().(Choice)
 	inner := cw.Value()
 	if inner == nil {
 		// No value? Try to get a default
 		inner = opts.Default
+		debugEvent(EventChoice|EventTrace, "use registered default value")
 	}
+	debugEvent(EventChoice|EventTrace, newLItem(inner, "value"))
 
 	cho, found := GetChoices(opts.Choices)
 	if !found || cho.Len() == 0 {
-		return errorNoChoicesAvailable
+		err = errorNoChoicesAvailable
+		return
 	}
 
 	typ := pkt.Type()
 
-	// marshal the inner TLV (universal tag) into a temp PDU
+	// marshal the inner TLV (UNIVERSAL
+	// class) into a temp PDU
 	tmp := typ.New()
 	innerOpts := clearChildOpts(opts)
 	innerOpts.Choices = ""
-	if err := marshalValue(refValueOf(inner), tmp, innerOpts); err != nil {
-		return choiceErr{err}
+	if err = marshalValue(refValueOf(inner), tmp, innerOpts); err != nil {
+		err = choiceErr{err}
+		return
 	}
 	innerBytes := tmp.Data()
 
@@ -358,16 +364,21 @@ func marshalChoiceWrapper(
 	explicit := true              // always explicit for choice
 
 	if tag < 0 {
-		// no override → look up registry by concrete type
+		// no override -> look up registry by concrete type
 		t := derefTypePtr(refTypeOf(inner))
 		_, desc, ok := cho.lookupDescriptorByConcrete(t)
 		if !ok {
-			return choiceErrorf("marshalChoiceWrapper: no alternative for ", t.String())
+			err = choiceErrorf("marshalChoiceWrapper: no alternative for ", t)
+			return
 		}
 		tag = desc.typeToTag[t]
 		class = desc.class[tag]
 		explicit = desc.explicit[tag]
 	}
+
+	debugEvent(EventTrace|EventChoice,
+		newLItem([]int{class, tag}, "class/tag"),
+		newLItem(explicit, "explicit"))
 
 	pkt.Append(emitHeader(class, tag, explicit))
 	buf := getBuf()
@@ -376,7 +387,7 @@ func marshalChoiceWrapper(
 	putBuf(buf)
 	pkt.Append(innerBytes...)
 
-	return nil
+	return
 }
 
 /*
@@ -394,39 +405,32 @@ func isInterfaceChoice(v reflect.Value, opts *Options) bool {
 	return !is && v.Kind() == reflect.Interface && opts.Choices != ""
 }
 
-func isChoice(v reflect.Value, opts *Options) bool {
-	// Quick bail-outs
-	if opts == nil || opts.Choices == "" {
-		return false
-	}
-	if !v.IsValid() {
-		return false
+func isChoice(v reflect.Value, opts *Options) (ok bool) {
+	debugEnter(v, opts)
+	defer func() { debugExit(newLItem(ok, "isChoice")) }()
+
+	if deferImplicit(opts).Choices == "" || !v.IsValid() {
+		debugEvent(EventChoice, "isChoice: empty choices or invalid value")
+		return
 	}
 
-	// If it’s an interface, peel it one level
+	// If it’s an interface (and NOT a concrete
+	// instance), peel it one level.
 	if v.Kind() == reflect.Interface {
 		if v.IsNil() {
-			return false
+			debugEvent(EventChoice, "interface is nil")
+			return
 		}
 		v = v.Elem()
 	}
 
 	// Only the exact Choice‐alias type is a CHOICE
-	choiceType := refTypeOf(Choice(nil))
-	var ok bool
-	if v.Type() == choiceType {
+	if v.Type() == choiceIfaceType {
 		_, ok = v.Interface().(Choice)
 	}
 
-	return ok
+	return
 }
-
-var (
-	// the Choice interface alias itself
-	choiceIfaceType = refTypeOf(Choice(nil))
-	// the anonymous struct returned by TaggedChoice
-	taggedChoiceType = refTypeOf(NewChoice(nil, 0))
-)
 
 func init() {
 	choicesRegistry = make(map[string]Choices)

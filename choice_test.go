@@ -182,21 +182,20 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 	syntaxes := Syntaxes{abstract, transfer}
 
 	pdv := EmbeddedPDV{
-		Identification:      NewChoice(syntaxes, 0),
-		DataValueDescriptor: ObjectDescriptor("test"),
-		DataValue:           OctetString("blarg"),
+		Identification: NewChoice(syntaxes, 0),
+		DataValue:      OctetString("blarg"),
 	}
 
 	hexes := map[EncodingRule]string{
-		BER: "6B 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-		CER: "6B 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-		DER: "6B 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
+		BER: "6B 1D A01430120607510201020102010607500200020002000405626C617267",
+		CER: "6B 1D A01430120607510201020102010607500200020002000405626C617267",
+		DER: "6B 1D A01430120607510201020102010607500200020002000405626C617267",
 	}
 
 	for _, rule := range encodingRules {
 		pkt, err := Marshal(pdv, With(rule))
 		if err != nil {
-			t.Fatalf("%s failed [%s encode]: %v", t.Name(), rule, err)
+			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
 
 		want := hexes[rule]
@@ -207,7 +206,7 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 
 		var newPDV EmbeddedPDV
 		if err = Unmarshal(pkt, &newPDV); err != nil {
-			t.Fatalf("%s failed [%s decode]: %v", t.Name(), rule, err)
+			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
 		}
 
 		if newPDV.Identification.Value() == nil {
@@ -225,10 +224,8 @@ func TestEmbeddedPDV_encodingRulesChoiceSyntaxes(t *testing.T) {
 			t.Fatalf("Unexpected alternative type in identification: got %T", id)
 		}
 
-		if string(newPDV.DataValueDescriptor) != "test" {
-			t.Fatalf("DataValueDescriptor mismatch")
-		} else if string(newPDV.DataValue) != "blarg" {
-			t.Fatalf("DataValue mismatch")
+		if got := string(newPDV.DataValue); got != "blarg" {
+			t.Fatalf("DataValue mismatch;\n\twant: blarg, got %s", got)
 		}
 	}
 }
@@ -237,9 +234,8 @@ func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 	oid, _ := NewObjectIdentifier(2, 1, 2, 1, 2, 1, 2, 1)
 
 	pdv := EmbeddedPDV{
-		Identification:      NewChoice(oid, 4),
-		DataValueDescriptor: ObjectDescriptor("test"),
-		DataValue:           OctetString("blarg"),
+		Identification: NewChoice(oid, 4),
+		DataValue:      OctetString("blarg"),
 	}
 
 	for _, rule := range encodingRules {
@@ -273,10 +269,7 @@ func TestEmbeddedPDV_encodingRulesChoiceOID(t *testing.T) {
 				t.Name(), rule, id)
 		}
 
-		if string(newPDV.DataValueDescriptor) != "test" {
-			t.Fatalf("%s failed [%s DataValueDescriptor mismatch]: want test, got %v",
-				t.Name(), rule, newPDV.DataValueDescriptor)
-		} else if string(newPDV.DataValue) != "blarg" {
+		if string(newPDV.DataValue) != "blarg" {
 			t.Fatalf("%s failed [%s DataValue mismatch]: want blarg, got %v",
 				t.Name(), rule, newPDV.DataValue)
 		}
@@ -427,15 +420,17 @@ func TestChoice_DefaultInterfaceDecode(t *testing.T) {
 }
 
 func TestChoice_BareSetChoiceUniversal(t *testing.T) {
-	setuniv := NewChoices(false)   // no auto‐tag
-	o := &Options{Explicit: false} // bare UNIVERSAL SET OF
+	setuniv := NewChoices(false) // no auto‐tag
+	o := Options{Choices: "setuniv"}
 	type Alt1 struct{ A Integer }
 	type Alt2 struct {
 		A Integer
 		B Integer
 	}
-	setuniv.Register(nil, Alt1{}, o.SetTag(0))
-	setuniv.Register(nil, Alt2{}, o.SetTag(1))
+
+	setuniv.Register(nil, Alt1{}, o.SetTag(0).SetClass(0))
+	setuniv.Register(nil, Alt2{}, o.SetTag(1).SetClass(0))
+
 	RegisterChoices("setuniv", setuniv)
 	defer UnregisterChoices("setuniv")
 
@@ -448,7 +443,6 @@ func TestChoice_BareSetChoiceUniversal(t *testing.T) {
 
 	wantAlt := Alt2{A: five, B: nine}
 	w := Wrapper{C: NewChoice(wantAlt, 1)}
-	opts := Options{Choices: "setuniv"}
 
 	hexes := map[EncodingRule]string{
 		BER: "30 0A A1083006020105020109",
@@ -457,34 +451,34 @@ func TestChoice_BareSetChoiceUniversal(t *testing.T) {
 	}
 
 	for _, rule := range encodingRules {
-		pkt, err := Marshal(w, With(rule, opts))
+		pkt, err := Marshal(w, With(rule, o))
 		if err != nil {
 			t.Fatalf("%s failed [%s encoding]: %v", t.Name(), rule, err)
 		}
+
 		got := pkt.Hex()
 		want := hexes[rule]
+
 		if got != want {
 			t.Fatalf("%s failed [%s encoding mismatch]:\n\twant: %q\n\tgot:  %q",
 				t.Name(), rule, want, got)
 		}
 
 		var w2 Wrapper
-		if err := Unmarshal(pkt, &w2, With(rule, opts)); err != nil {
+		if err = Unmarshal(pkt, &w2, With(o)); err != nil {
 			t.Fatalf("%s failed [%s decoding]: %v", t.Name(), rule, err)
 		}
-		alt2, ok := w2.C.Value().(Alt2)
-		if !ok {
-			t.Fatalf("%s: got %T, want Alt2", t.Name(), w2.C.Value)
-		}
-		if alt2.A.Big().Cmp(five.Big()) != 0 || alt2.B.Big().Cmp(nine.Big()) != 0 {
-			t.Errorf("%s: wrong fields %+v", t.Name(), alt2)
+		if alt2, ok := w2.C.Value().(Alt2); !ok {
+			t.Fatalf("%s: got %T, want Alt2", t.Name(), w2.C.Value())
+		} else if alt2.A.Ne(5) || alt2.B.Ne(9) {
+			t.Fatalf("%s: wrong fields %+v", t.Name(), alt2)
 		}
 	}
 }
 
 func TestChoice_SeqChoice_Direct(t *testing.T) {
-	seqCh := NewChoices(false)     // no auto‐tag
-	o := &Options{Explicit: false} // bare UNIVERSAL encoding
+	seqCh := NewChoices(false)
+	o := &Options{}
 	type Alt1 struct{ A Integer }
 	type Alt2 struct {
 		A Integer
@@ -529,7 +523,7 @@ func TestChoice_SeqChoice_Direct(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s: decoded type %T, want Alt2", t.Name(), out.Value())
 		}
-		if alt2.A.Big().Cmp(one.Big()) != 0 || alt2.B.Big().Cmp(two.Big()) != 0 {
+		if alt2.A.Ne(1) || alt2.B.Ne(2) {
 			t.Fatalf("%s: wrong fields %+v", t.Name(), alt2)
 		}
 	}
