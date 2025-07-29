@@ -177,7 +177,7 @@ func init() {
 			}
 		} else {
 			if o[0] != byte(TagBMPString) {
-				err = mkerr("Invalid ASN.1 tag")
+				err = primitiveErrorf("BMPString: Invalid ASN.1 tag")
 			} else if int(o[1])*2 != len(o[2:]) {
 				err = primitiveErrorf("BMPString: input string encoded length does not match length octet")
 			}

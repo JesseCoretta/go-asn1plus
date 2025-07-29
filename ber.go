@@ -37,7 +37,7 @@ func (r BERPacket) Type() EncodingRule { return BER }
 /*
 ID returns the unique string identifier associated with the receiver instance.
 
-Note that if this package is not compiled or run with "-tags asn1debug", this
+Note that if this package is not compiled or run with "-tags asn1_debug", this
 method will always return a zero string.
 */
 func (r BERPacket) ID() string { return r.id }
@@ -113,7 +113,7 @@ func (r BERPacket) Data() []byte { return r.data }
 Append appends data to the receiver instance.
 */
 func (r *BERPacket) Append(data ...byte) {
-	id := newLItem(r.id, r.Type(), "PDU")
+	id := newLItem(r.id, BER, "PDU")
 	debugEnter(data)
 	defer func() { debugExit() }()
 
@@ -143,8 +143,8 @@ func (r *BERPacket) Append(data ...byte) {
 	}
 
 	r.data = append(r.data, data...)
-	debugEvent(EventTrace|EventPDU,
-		id, newLItem(r.data, "after append"))
+	debugEvent(EventTrace|EventPDU, id,
+		newLItem(r.data, "after append"))
 }
 
 /*
@@ -206,7 +206,7 @@ func (r *BERPacket) PeekTLV() (TLV, error) {
 	debugEnter(r)
 	defer func() { debugExit(tlv, newLItem(err)) }()
 
-	sub := r.Type().New(r.Data()...)
+	sub := BER.New(r.Data()...)
 	sub.(*BERPacket).id = r.id
 	sub.SetOffset(r.Offset())
 	tlv, err = getTLV(sub, nil)
@@ -231,7 +231,7 @@ func newBERPacket(src ...byte) (pkt PDU) {
 
 	b := bcdPktPool.Get().(*BERPacket)
 	b.id = makePacketID()
-	debugTrace(b.id, "New"+b.Type().String()+"PDU")
+	debugTrace(b.id, "New BER PDU")
 
 	cl, sl := cap(b.data), len(src)
 	debugTrace(newLItem(b, "from pool"), newLItem([]int{cl, sl}, "cap/len"))
@@ -256,7 +256,7 @@ func newBERPacket(src ...byte) (pkt PDU) {
 
 func encodeBERLengthInto(dst *[]byte, n int) {
 	if n == -1 { // indefinite
-		*dst = append(*dst, 0x80)
+		*dst = append(*dst, indefByte)
 		debugCodec(newLItem(*dst, BER, "INDEFINITE-LENGTH"))
 		return
 	}
@@ -287,7 +287,7 @@ func encodeBCDLengthInto(dst *[]byte, n int) {
 	byteCount := len(tmp) - i
 	debugCodec(newLItem(byteCount, "octets"))
 
-	*dst = append(*dst, 0x80|byte(len(tmp)-i))
+	*dst = append(*dst, indefByte|byte(len(tmp)-i))
 	*dst = append(*dst, tmp[i:]...)
 
 	debugCodec(newLItem(tmp[i:byteCount+i], "encoded length"))
