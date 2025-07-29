@@ -103,20 +103,20 @@ func TestRealSpecial_encodingRules(t *testing.T) {
 				t.Fatalf("%s failed [%s encode infinity]: %v", t.Name(), rule, err)
 			}
 
-			var rDecoded Real
-			if err = Unmarshal(pkt, &rDecoded); err != nil {
-				t.Fatalf("%s[%s] failed [%s decode infinity]: %v", t.Name(), posOrNeg(idx), rule, err)
-			}
-
 			// Check that the content octet is 0x40.
 			if idx == 0 {
-				if data := pkt.Data(); data[2] != 0x40 {
+				if data := pkt.Data(); data[2] != plusIByte {
 					t.Fatalf("Expected PLUS-INFINITY content 0x40, got 0x%02x", data[2])
 				}
 			} else {
-				if data := pkt.Data(); data[2] != 0x41 {
+				if data := pkt.Data(); data[2] != minusIByte {
 					t.Fatalf("Expected MINUS-INFINITY content 0x41, got 0x%02x", data[2])
 				}
+			}
+
+			var rDecoded Real
+			if err = Unmarshal(pkt, &rDecoded); err != nil {
+				t.Fatalf("%s[%s] failed [%s decode infinity]: %v", t.Name(), posOrNeg(idx), rule, err)
 			}
 		}
 	}
@@ -140,11 +140,11 @@ func TestRealZeroEncoding(t *testing.T) {
 		t.Fatalf("Error encoding zero REAL: %v", err)
 	}
 	// Zero is encoded with a content length of zero (i.e. two bytes: tag and length).
-	if pkt.Offset() != 2 {
-		t.Errorf("Expected 2 bytes for zero REAL, got %d", pkt.Offset())
+	if off := pkt.Offset(); off != 2 {
+		t.Errorf("Expected 2 bytes for zero REAL, got %d", off)
 	}
-	if pkt.Data()[1] != 0 {
-		t.Errorf("Expected length byte 0 for zero REAL, got %d", pkt.Data()[1])
+	if data := pkt.Data(); data[1] != 0 {
+		t.Errorf("Expected length byte 0 for zero REAL, got %d", data[1])
 	}
 }
 
@@ -241,7 +241,7 @@ func TestReal_codecov(_ *testing.T) {
 
 	byteToInfinity(0x02)
 
-	encodeMantissa(new(big.Int))
+	encodeMantissa(newBigInt(0))
 	float64Components(float64(3.1415900000), 10)
 	float64Components(float64(3.1415900000), 16)
 
@@ -291,15 +291,11 @@ func TestCustomReal_withControls(t *testing.T) {
 
 	RegisterRealAlias[customReal](TagReal,
 		RealConstraintPhase,
-		func([]byte) error {
-			return nil
-		},
+		func([]byte) error { return nil },
 		func(customReal) ([]byte, error) {
 			return []byte{0x9, 0x5, 0xc1, 0x3, 0x12, 0xd6, 0x87}, nil
 		},
-		func([]byte) (customReal, error) {
-			return cust, nil
-		},
+		func([]byte) (customReal, error) { return cust, nil },
 		nil)
 
 	pkt, err := Marshal(cust, With(BER))
@@ -333,8 +329,8 @@ func reconstruct(mant *big.Int, base int, exp int) float64 {
 	}
 
 	// Choose a precision high enough for *every* float64:
-	//   – never less than 64 bits
-	//   – plus extra to accommodate the scaling factor
+	//  - never less than 64 bits
+	//  - plus extra to accommodate the scaling factor
 	bitLen := mant.BitLen()
 	scaler := map[int]int{2: 1, 8: 3, 10: 4}[base]
 	prec := uint(bitLen + abs(exp)*scaler + 4)
@@ -347,7 +343,7 @@ func reconstruct(mant *big.Int, base int, exp int) float64 {
 
 	if exp != 0 {
 		baseInt := big.NewInt(int64(base))
-		powInt := new(big.Int).Exp(baseInt, big.NewInt(int64(abs(exp))), nil)
+		powInt := newBigInt(0).Exp(baseInt, big.NewInt(int64(abs(exp))), nil)
 		be := new(big.Float).SetPrec(prec).SetInt(powInt)
 
 		if exp > 0 {
@@ -378,7 +374,7 @@ func TestFloat64Components_roundTrip(t *testing.T) {
 	}
 
 	for _, f := range fin {
-		for _, b := range []int{2, 8, 10} {
+		for _, b := range []int{2, 8, 10, 16} {
 			cases = append(cases, tuple{f, b})
 		}
 	}
@@ -392,7 +388,7 @@ func TestFloat64Components_roundTrip(t *testing.T) {
 		// mantissa must not be divisible by base (normalised) unless zero
 		if tc.f != 0 && tc.base != 10 { // base-10 normalisation is trailing zeros
 			b := big.NewInt(int64(tc.base))
-			if new(big.Int).Mod(m, b).Sign() == 0 {
+			if newBigInt(0).Mod(m, b).Sign() == 0 {
 				t.Fatalf("mantissa %s still divisible by %d for %v", m, tc.base, tc.f)
 			}
 		}
