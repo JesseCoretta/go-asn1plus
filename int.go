@@ -251,7 +251,7 @@ func (r Integer) cmpUint64(u uint64) int {
 	if !r.big && u <= math.MaxInt64 {
 		return r.cmpInt64(int64(u))
 	}
-	b := new(big.Int).SetUint64(u)
+	b := newBigInt(0).SetUint64(u)
 	return r.Big().Cmp(b)
 }
 
@@ -268,7 +268,7 @@ func bEToInt64(b []byte) int64 {
 		panic("bigEndianToInt64: buffer length must be ≤ 8")
 	}
 
-	pad := byte(0x00)
+	pad := zeroByte
 	if n > 0 && b[0]&0x80 != 0 {
 		pad = 0xFF
 	}
@@ -299,7 +299,7 @@ func bEFitsInt64(b []byte) bool {
 		return true
 	}
 	high := b[n-8]
-	var ext byte = 0x00
+	var ext byte = zeroByte
 	if high&0x80 != 0 {
 		ext = 0xFF
 	}
@@ -359,7 +359,7 @@ func decodeIntegerContent(encoded []byte) (val *big.Int) {
 	if len(encoded) > 0 && encoded[0]&0x80 != 0 {
 		// Compute 2^(len(encoded)*8) and subtract it.
 		bitLen := uint(len(encoded) * 8)
-		twoPow := new(big.Int).Lsh(newBigInt(1), bitLen)
+		twoPow := newBigInt(0).Lsh(newBigInt(1), bitLen)
 		val.Sub(val, twoPow)
 	}
 
@@ -372,28 +372,28 @@ func encodeIntegerContent(i *big.Int) (data []byte) {
 		b := i.Bytes()
 		if len(b) == 0 {
 			// Special case: 0 is encoded as a single 0x00 byte.
-			b = []byte{0x00}
+			b = []byte{zeroByte}
 		}
 		// If the MSB of the first byte is 1, prepend a 0x00 byte to indicate positive.
 		if b[0]&0x80 != 0 {
-			b = append([]byte{0x00}, b...)
+			b = append([]byte{zeroByte}, b...)
 		}
 		data = b
 	} else {
 		// For negative integers, we calculate the minimal two's complement representation.
 		// First, determine the minimum number of octets n needed.
-		abs := new(big.Int).Abs(i)
+		abs := newBigInt(0).Abs(i)
 		n := (abs.BitLen() + 7) / 8
 
 		// For negative numbers, n must be chosen so that i >= - (1 << (8*n - 1)).
-		min := new(big.Int).Lsh(newBigInt(1), uint(8*n-1))
+		min := newBigInt(0).Lsh(newBigInt(1), uint(8*n-1))
 		min.Neg(min)
 		if i.Cmp(min) < 0 {
 			n++ // increase length if i is too small for n octets.
 		}
 		// Compute 2^(8*n) and add i (note: i is negative), giving the two's complement.
-		mod := new(big.Int).Lsh(newBigInt(1), uint(8*n))
-		value := new(big.Int).Add(mod, i)
+		mod := newBigInt(0).Lsh(newBigInt(1), uint(8*n))
+		value := newBigInt(0).Add(mod, i)
 		b := value.Bytes()
 		data = b
 	}
@@ -407,7 +407,7 @@ encodeNativeInt returns the minimal two's complement encoding for an int value.
 func encodeNativeInt(value int) []byte {
 	// If the value is zero, return single zero.
 	if value == 0 {
-		return []byte{0x00}
+		return []byte{zeroByte}
 	}
 
 	v := int64(value)
