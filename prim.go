@@ -59,7 +59,7 @@ type Primitive interface {
 
 func primitiveCheckExplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	typ := pkt.Type()
-	if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() || !tlv.Compound {
+	if !tlv.matchClassAndTag(opts.Class(), opts.Tag()) || !tlv.Compound {
 		err = primitiveErrorf("invalid explicit ", TagNames[tag], " header in ",
 			typ, " packet; received TLV: ", tlv)
 		return
@@ -95,30 +95,37 @@ func primitiveCheckImplicitRead(tag int, pkt PDU, tlv TLV, opts *Options) (data 
 
 	if overlay {
 		if opts.HasClass() && tlv.Class != opts.Class() {
-			return nil, primitiveErrorf("Class mismatch for implicit tag")
+			err = primitiveErrorf("Class mismatch for implicit tag")
 		}
 		if opts.HasTag() && tlv.Tag != opts.Tag() {
-			return nil, primitiveErrorf("Tag mismatch for implicit tag")
+			err = primitiveErrorf("Tag mismatch for implicit tag")
 		}
 		// no constructed check: implicit may keep compound bit unchanged
 	} else {
 		/* no overlay: expect universal header */
-		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
-			return nil, primitiveErrorf("Invalid ", TagNames[tag], " header in ",
+		if !tlv.matchClassAndTag(ClassUniversal, tag) || tlv.Compound {
+			err = primitiveErrorf("Invalid ", TagNames[tag], " header in ",
 				pkt.Type(), " packet; received TLV: ", tlv)
 		}
 	}
 
-	full := tlv.Value
-	if tlv.Length >= 0 && len(full) > tlv.Length {
-		full = full[:tlv.Length]
+	if err == nil {
+		full := tlv.Value
+		if tlv.Length >= 0 && len(full) > tlv.Length {
+			full = full[:tlv.Length]
+		}
+		data = full
 	}
-	return full, nil
+
+	return
 }
 
 func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
-	if tlv.Length < 0 || (opts != nil && opts.Indefinite) {
-		return nil, primitiveErrorf("prohibited: indefinite length on primitive")
+	if deferImplicit(opts).Absent {
+		return
+	} else if tlv.Length < 0 || optsIsIndef(opts) {
+		err = primitiveErrorf("prohibited: indefinite length on primitive")
+		return
 	}
 
 	canBeEmpty := tag == TagOctetString || tag == TagNull
@@ -131,8 +138,8 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 		//
 		// TODO: revisit this approach.
 		if typ.allowsIndefinite() && pkt.Data()[1] == indefByte {
-			if data[len(data)-1] == 0x00 &&
-				data[len(data)-2] == 0x00 {
+			if data[len(data)-1] == zeroByte &&
+				data[len(data)-2] == zeroByte {
 				data = data[:len(data)-2]
 			}
 		}
@@ -148,7 +155,7 @@ func primitiveCheckRead(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, 
 
 func primitiveCheckReadOverride(tag int, pkt PDU, tlv TLV, opts *Options) (data []byte, err error) {
 	// If a tagging override was provided, handle it.
-	if opts != nil && opts.HasTag() {
+	if optsHasTag(opts) {
 		if opts.Explicit {
 			data, err = primitiveCheckExplicitRead(tag, pkt, tlv, opts)
 		} else {
@@ -157,7 +164,7 @@ func primitiveCheckReadOverride(tag int, pkt PDU, tlv TLV, opts *Options) (data 
 		}
 	} else {
 		// No tagging override: treat as UNIVERSAL.
-		if tlv.Class != ClassUniversal || tlv.Tag != tag || tlv.Compound {
+		if !tlv.matchClassAndTag(ClassUniversal, tag) || tlv.Compound {
 			err = primitiveErrorf("invalid ", TagNames[tag], " header in ",
 				pkt.Type(), " packet; received TLV: ", tlv)
 			return
@@ -198,7 +205,7 @@ func isPrimitive(target any) (primitive bool) {
 
 			// Check both the value and pointer type.
 			primitiveInterface := refTypeOf((*Primitive)(nil)).Elem()
-			primitive = t.Implements(primitiveInterface) || reflect.PtrTo(t).Implements(primitiveInterface)
+			primitive = t.Implements(primitiveInterface) || refPtrTo(t).Implements(primitiveInterface)
 		}
 	}
 
