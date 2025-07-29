@@ -25,7 +25,7 @@ func (r CERPacket) Type() EncodingRule { return CER }
 /*
 ID returns the unique string identifier associated with the receiver instance.
 
-Note that if this package is not compiled or run with "-tags asn1debug", this
+Note that if this package is not compiled or run with "-tags asn1_debug", this
 method will always return a zero string.
 */
 func (r CERPacket) ID() string { return r.id }
@@ -54,14 +54,14 @@ to extract all but the outermost header information (omit class, tag, etc.) up t
 including the next payload.
 */
 func (r CERPacket) Bytes() ([]byte, error) {
-	return parseBody(r.Data(), r.Offset(), r.Type())
+	return parseBody(r.Data(), r.Offset(), CER)
 }
 
 /*
 FullBytes returns a byte slice representing data[:offset].
 */
 func (r CERPacket) FullBytes() ([]byte, error) {
-	return parseFullBytes(r.Data(), r.Offset(), r.Type())
+	return parseFullBytes(r.Data(), r.Offset(), CER)
 }
 
 /*
@@ -162,7 +162,7 @@ func decodeCERLength(data []byte, offset int) (length int, bytesRead int, err er
 	}()
 
 	if nlb := offset >= len(data); nlb {
-		err = mkerr("CER length decode: offset>=len(data), no length byte available")
+		err = codecErrorf("CER length decode: offset>=len(data), no length byte available")
 		return 0, 0, err
 	}
 
@@ -170,17 +170,17 @@ func decodeCERLength(data []byte, offset int) (length int, bytesRead int, err er
 	debugCodec(newLItem(fmtUint(uint64(first), 2), "first byte"))
 	offset++
 	bytesRead = 1
-	if first&0x80 == 0 {
+	if first&indefByte == 0 {
 		// Short form: one byte length.
 		debugCodec(newLItem(length, "short form result"))
 		return int(first), bytesRead, nil
 	}
 
 	// Long form: the lower 7 bits tell us how many octets follow.
-	numOctets := int(first & 0x7F)
+	numOctets := int(first & shortByte)
 	debugCodec(numOctets, "long form octets")
 	if offset+numOctets > len(data) {
-		err = mkerrf("insufficient length bytes: need ", itoa(numOctets))
+		err = codecErrorf("insufficient length bytes: need ", itoa(numOctets))
 		debugCodec(newLItem(err))
 		return 0, 0, err
 	}
@@ -212,7 +212,7 @@ func cerSegmentedBitStringReadLoop(sub PDU) (lastUnused byte, full []byte, err e
 			}
 
 			if len(seg.Value) == 0 {
-				err = mkerr("inner BIT STRING segment too short")
+				err = primitiveErrorf("BIT STRING: inner segment too short")
 				return
 			}
 			lastUnused = seg.Value[0]
@@ -234,10 +234,10 @@ func cerSegmentedBitStringRead[T any](
 		outer.Tag != TagBitString ||
 		!outer.Compound ||
 		outer.Length != -1 {
-		return mkerr("cerSegmentedBitStringRead: not CER indefinite BIT STRING")
+		return primitiveErrorf("BIT STRING: cerSegmentedBitStringRead: not CER indefinite")
 	}
 
-	sub := pkt.Type().New(outer.Value...)
+	sub := CER.New(outer.Value...)
 	sub.SetOffset(0)
 
 	var lastUnused byte
@@ -292,7 +292,7 @@ func cerSegmentedBitStringWrite[T any](
 			overallUnused = 8 - remBits
 		}
 
-		hdr := []byte{byte(TagBitString) | 0x20, 0x80}
+		hdr := []byte{byte(TagBitString) | cmpndByte, indefByte}
 		pkt.Append(hdr...)
 		n += len(hdr)
 
@@ -310,7 +310,7 @@ func cerSegmentedBitStringWrite[T any](
 			val[0] = byte(segUnused)
 			copy(val[1:], data[off:end])
 
-			prim := pkt.Type().newTLV(
+			prim := CER.newTLV(
 				ClassUniversal, TagBitString,
 				len(val), false,
 				val...,
@@ -320,7 +320,7 @@ func cerSegmentedBitStringWrite[T any](
 			n += len(enc)
 		}
 
-		pkt.Append(0x00, 0x00)
+		pkt.Append(indefEoC...)
 		n += 2
 	}
 
@@ -347,7 +347,7 @@ func cerSegmentedOctetStringWrite[T TextLike](
 		}
 
 		// outer header: OCTET STRING|constructed, indefinite
-		hdr := []byte{byte(TagOctetString) | 0x20, 0x80}
+		hdr := []byte{byte(TagOctetString) | cmpndByte, indefByte}
 		pkt.Append(hdr...)
 		written += len(hdr)
 
@@ -357,7 +357,7 @@ func cerSegmentedOctetStringWrite[T TextLike](
 			if end > len(wire) {
 				end = len(wire)
 			}
-			prim := pkt.Type().newTLV(
+			prim := CER.newTLV(
 				ClassUniversal,
 				TagOctetString,
 				end-off, false,
@@ -369,7 +369,7 @@ func cerSegmentedOctetStringWrite[T TextLike](
 		}
 
 		// EOC
-		pkt.Append(0x00, 0x00)
+		pkt.Append(indefEoC...)
 		written += 2
 	}
 
@@ -381,7 +381,7 @@ func cerOctetStringReadBadTLV(outer TLV) (err error) {
 		outer.Tag != TagOctetString ||
 		!outer.Compound ||
 		outer.Length != -1 {
-		err = mkerr("cerSegmentedOctetStringRead: not CER indefinite OCTET STRING")
+		err = primitiveErrorf("OCTET STRING: cerSegmentedOctetStringRead: not CER indefinite")
 	}
 
 	return
@@ -398,7 +398,7 @@ func cerSegmentedOctetStringRead[T TextLike](
 		return
 	}
 
-	sub := pkt.Type().New(outer.Value...)
+	sub := CER.New(outer.Value...)
 	sub.SetOffset(0)
 
 	var full []byte
