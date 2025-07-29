@@ -28,50 +28,12 @@ func Marshal(x any, with ...EncodingOption) (pkt PDU, err error) {
 		o(cfg)
 	}
 
-	li := newLItem(err)
 	debugEnter(x, cfg.rule, cfg.opts)
-	defer func() {
-		debugExit(pkt, &li)
-	}()
+	defer func() { debugExit(pkt, newLItem(err)) }()
 
 	if err = marshalCheckBadOptions(cfg.rule, cfg.opts); err == nil {
-		cfg.opts = marshalPrepareSpecialOptions(x, cfg.opts)
 		pkt = cfg.rule.New()
 		err = marshalValue(refValueOf(x), pkt, cfg.opts)
-	}
-
-	return
-}
-
-/*
-marshalSpecial returns the input instance of *[Options], but modified
-to contain special encoding directives for certain types defined within
-this package (such as EmbeddedPDV) to honor official ASN.1 schema
-definitions described in ITU-T recommendations, RFCs, et al.
-
-Essentially, this is a quick way to prevent a special constructed type
-from being wrongly encoded as an ordinary SEQUENCE.
-*/
-func marshalPrepareSpecialOptions(v any, o *Options) (opts *Options) {
-	debugEnter(v, o)
-	defer func() {
-		debugExit(opts)
-	}()
-
-	var override *Options
-
-	var match bool
-	if override, match = embeddedPDVOrExternalSpecial(v); !match {
-		opts = o
-		return
-	}
-
-	if o == nil {
-		opts = override
-	} else {
-		o.SetClass(override.Class())
-		o.SetTag(override.Tag())
-		opts = o
 	}
 
 	return
@@ -83,13 +45,11 @@ unsupported options statements just prior to the marshaling process.
 */
 func marshalCheckBadOptions(rule EncodingRule, o *Options) (err error) {
 	debugEnter(rule, o)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
 	if o != nil {
 		if !rule.allowsIndefinite() && o.Indefinite {
-			err = mkerrf("Use of INDEFINITE-LENGTH is incompatible with encoding rule ", rule.String())
+			err = errorIndefiniteProhibited
 		}
 	}
 
@@ -98,80 +58,92 @@ func marshalCheckBadOptions(rule EncodingRule, o *Options) (err error) {
 
 func marshalValue(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	debugEnter(v, pkt, opts)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
 	// Guard against zero reflect.Value
 	if !v.IsValid() {
-		return mkerr("marshalValue: invalid or nil value")
+		if !optsIsAbsent(opts) {
+			err = errorNilValue
+		}
+		return
+	}
+	k := v.Kind()
+	canIf := v.CanInterface()
+
+	var iface any
+	if canIf {
+		iface = v.Interface()
 	}
 
-	oopts, _ := lookupOverrideOptions(v.Interface())
-	if oopts != nil {
-		opts = oopts
-		debugEvent(EventTrace, newLItem(opts, "override options"))
-	}
+	// Defer to override options, if present.
+	opts = deferOverrideOptions(v, opts)
 
 	// Handle pointers first
-	if v.Kind() == reflect.Ptr {
-		return marshalValue(v.Elem(), pkt, opts)
+	if k == reflect.Ptr {
+		err = marshalValue(v.Elem(), pkt, opts)
+		return
 	}
 
 	//  Detect Choice on interface *before* unwrapping
-	if v.Kind() == reflect.Interface {
-		if !v.IsNil() && v.CanInterface() {
-			if _, ok := v.Interface().(Choice); ok {
-				// ensure opts isn’t nil, so marshalChoiceWrapper never sees nil opts
-				return marshalChoiceWrapper(nil, pkt, deferImplicit(opts), v)
+	if k == reflect.Interface {
+		if !v.IsNil() && canIf {
+			if _, ok := iface.(Choice); ok {
+				err = marshalChoiceWrapper(nil, pkt, deferImplicit(opts), v)
+				return
 			}
 		}
 		// not a Choice interface, so peel and recurse
-		return marshalValue(v.Elem(), pkt, opts)
+		err = marshalValue(v.Elem(), pkt, opts)
+		return
 	}
 
 	// Detect Choice on concrete value
-	if v.CanInterface() {
-		if _, ok := v.Interface().(Choice); ok {
-			opts = deferImplicit(opts)
-			return marshalChoiceWrapper(nil, pkt, opts, v)
-		}
-	}
-
-	// Wrap any concrete type registered in any interface-family
-	var handled bool
-
-	if handled, err = marshalInterfaceChoice(v, pkt, opts); handled {
-		return
-	}
-
-	switch {
-	case v.Kind() == reflect.Invalid:
-		err = codecErrorf("Nil value passed to Marshal")
-		return
-	case ptrIsNil(v):
-		err = codecErrorf("Marshal: input must be non-nil")
-		return
-	}
-	v = derefValuePtr(v)
-
-	for _, funk := range []func(reflect.Value, PDU, *Options) (bool, error){
-		marshalChoice,     // Choice (recursion) path
-		marshalPrimitive,  // ASN.1 Primitive path
-		marshalViaAdapter, // Adapter path
-	} {
-		if handled, err = funk(v, pkt, opts); handled {
+	if canIf {
+		if _, ok := iface.(Choice); ok {
+			err = marshalChoiceWrapper(nil, pkt, deferImplicit(opts), v)
 			return
 		}
 	}
 
-	err = marshalComposite(v, pkt, opts)
-	pkt.SetOffset(0)
+	var handled bool
+	// Wrap any concrete type registered in any interface-family. If
+	// unhandled, fallback to marshalBasic as a last-ditch effort.
+	if handled, err = marshalInterfaceChoice(v, pkt, opts); !handled {
+		err = marshalBasic(k, v, pkt, opts)
+	}
 
 	return
 }
 
-// CHOICE unwrap
+func marshalBasic(
+	k reflect.Kind,
+	v reflect.Value,
+	pkt PDU,
+	opts *Options,
+) (err error) {
+
+	switch {
+	case k == reflect.Invalid:
+		err = codecErrorf("Nil value passed to Marshal")
+	case ptrIsNil(v):
+		err = codecErrorf("Marshal: input must be non-nil")
+	default:
+		v = derefValuePtr(v)
+
+		var handled bool
+		for _, handler := range marshalHandlers {
+			if handled, err = handler(v, pkt, opts); handled {
+				return
+			}
+		}
+
+		err = marshalComposite(v, pkt, opts)
+		pkt.SetOffset(0)
+	}
+
+	return
+}
+
 func marshalChoice(v reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
 	if handled = isChoice(v, opts); handled {
 		err = marshalChoiceWrapper(nil, pkt, opts, v)
@@ -180,26 +152,36 @@ func marshalChoice(v reflect.Value, pkt PDU, opts *Options) (handled bool, err e
 }
 
 func marshalComposite(v reflect.Value, pkt PDU, opts *Options) (err error) {
-	switch v.Kind() {
+	opts = deferImplicit(opts)
+	var ovr bool
+	if o, _ := lookupOverrideOptions(v.Interface()); o != nil {
+		ovr = true
+		opts = o
+	}
+	opts.incDepth()
+	k := v.Kind()
+	switch k {
 	case reflect.Slice:
-		opts.incDepth()
-		if opts != nil && opts.Sequence {
+		if opts.Sequence {
 			err = marshalSequenceOfSlice(v, pkt, opts)
 		} else {
 			err = marshalSet(v, pkt, opts)
 		}
 	case reflect.Struct:
-		opts.incDepth()
+		if opts.HasTag() && (!opts.HasClass() || opts.Class() == ClassUniversal) && !ovr {
+			opts.tag = nil
+		}
 		err = marshalSequence(v, pkt, opts)
 	default:
-		err = mkerrf("marshalValue: unsupported type ", v.Kind().String())
+		err = compositeErrorf("marshalValue: unsupported type ",
+			v.Kind().String())
 	}
 
 	return
 }
 
 func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
-	if opts != nil && opts.Choices != "" {
+	if optsHasChoices(opts) {
 		typ := pkt.Type()
 		reg, _ := GetChoices(opts.Choices)
 
@@ -213,7 +195,8 @@ func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bo
 			tmp := typ.New()
 			tmp.SetOffset(0)
 
-			switch v.Kind() {
+			k := v.Kind()
+			switch k {
 			case reflect.Slice:
 				if opts.Sequence {
 					err = marshalSequenceOfSlice(v, tmp, opts)
@@ -228,8 +211,8 @@ func marshalInterfaceChoice(v reflect.Value, pkt PDU, opts *Options) (handled bo
 			}
 
 			if err == nil {
-				ntlv := typ.newTLV(cls, tag, tmp.Len(), exp, tmp.Data()...)
-				pkt.WriteTLV(ntlv)
+				tlv := typ.newTLV(cls, tag, tmp.Len(), exp, tmp.Data()...)
+				err = pkt.WriteTLV(tlv)
 			}
 		}
 	}
@@ -269,7 +252,8 @@ func marshalViaAdapter(v reflect.Value, pkt PDU, opts *Options) (handled bool, e
 func marshalPrimitive(v reflect.Value, pkt PDU, opts *Options) (handled bool, err error) {
 	debugEnter(v, opts, pkt)
 	defer func() {
-		debugExit(newLItem(handled, "primitive handled"), newLItem(err))
+		debugExit(newLItem(handled, "primitive handled"),
+			newLItem(err))
 	}()
 
 	if !isPrimitive(v.Interface()) {
@@ -296,7 +280,7 @@ func marshalPrimitive(v reflect.Value, pkt PDU, opts *Options) (handled bool, er
 			_, err = bx.write(pkt, opts)
 		}
 	} else {
-		err = mkerr("no codec found for primitive")
+		err = codecErrorf("no codec found for primitive")
 	}
 
 	return
@@ -304,9 +288,7 @@ func marshalPrimitive(v reflect.Value, pkt PDU, opts *Options) (handled bool, er
 
 func wrapMarshalExplicit(pkt PDU, prim codecRW, opts *Options) (err error) {
 	debugEnter(prim, opts, pkt)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
 	typ := pkt.Type()
 	tmp := typ.New()
@@ -346,13 +328,12 @@ func Unmarshal(pkt PDU, x any, with ...EncodingOption) error {
 	var err error
 
 	debugEnter(x, with, pkt)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
+	defer pkt.Free()
 
 	// Validate that target x is a non-nil pointer.
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		err = mkerr("Unmarshal: target must be a non-nil pointer")
+		err = codecErrorf("Unmarshal: target must be a non-nil pointer")
 		return err
 	}
 
@@ -363,12 +344,7 @@ func Unmarshal(pkt PDU, x any, with ...EncodingOption) error {
 		o(cfg)
 	}
 
-	if cfg.opts != nil {
-		err = unmarshalValue(pkt, rv.Elem(), cfg.opts)
-	} else {
-		err = unmarshalValue(pkt, rv.Elem(), nil)
-	}
-
+	err = unmarshalValue(pkt, rv.Elem(), cfg.opts)
 	return err
 }
 
@@ -380,9 +356,20 @@ This function is called by the top-level Unmarshal function, as well as certain 
 level functions via recursion.
 */
 func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
-	oopts, _ := lookupOverrideOptions(v.Interface())
-	if oopts != nil {
-		opts = oopts
+	debugEnter(v, opts, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
+	if !v.IsValid() {
+		err = codecErrorf("unmarshalValue: invalid reflect.Value")
+		return
+	}
+	k := v.Kind()
+
+	opts = deferOverrideOptions(v, opts)
+
+	if k == reflect.Ptr {
+		err = unmarshalPointer(v, pkt, opts)
+		return
 	}
 
 	if isInterfaceChoice(v, opts) {
@@ -391,18 +378,10 @@ func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
 	}
 
 	debugEnter(v, opts, pkt)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			err = mkerr("unmarshalValue: input pointer is nil")
-			return
-		}
-		v = v.Elem()
-	} else if v.Kind() == reflect.Invalid {
-		err = mkerr("unmarshalValue: input pointer is invalid")
+	if k == reflect.Invalid {
+		err = codecErrorf("unmarshalValue: input pointer is invalid")
 		return
 	}
 
@@ -429,7 +408,7 @@ func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
 
 		goVal := refValueOf(ad.toGo(codec))
 		if !goVal.Type().AssignableTo(v.Type()) {
-			err = mkerrf("type mismatch decoding ", kw)
+			err = codecErrorf("type mismatch decoding ", kw)
 		} else {
 			err = refSetValue(v, goVal)
 		}
@@ -441,7 +420,7 @@ func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
 		return
 	}
 
-	switch v.Kind() {
+	switch k {
 	case reflect.Slice:
 		if opts.Sequence {
 			err = unmarshalSequenceBranch(v, pkt, opts)
@@ -451,59 +430,81 @@ func unmarshalValue(pkt PDU, v reflect.Value, opts *Options) (err error) {
 	case reflect.Struct:
 		err = unmarshalSequence(v, pkt, opts)
 	default:
-		err = mkerrf("unmarshalValue: unsupported type ", v.Kind().String())
+		err = codecErrorf("unmarshalValue: unsupported type ", k.String())
 	}
 	return
 }
 
-func unmarshalChoice(v reflect.Value, pkt PDU, opts *Options) error {
+func unmarshalPointer(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	if v.IsNil() {
+		err = refSetValue(v, refNew(v.Type().Elem()))
+	}
+	if err == nil {
+		err = unmarshalValue(pkt, v.Elem(), opts)
+	}
+	return
+}
+
+func unmarshalChoice(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, opts, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
 	// strip the [n] EXPLICIT header
-	tag, _, sub, chopts, err := setPickChoiceAlternative(pkt, opts)
-	if err != nil {
-		return err
+	var (
+		tag    int
+		sub    PDU
+		chopts *Options
+	)
+
+	if tag, _, sub, chopts, err = setPickChoiceAlternative(pkt, opts); err != nil {
+		return
 	}
 
 	// lookup the descriptor by wire‐tag
 	reg, _ := GetChoices(opts.Choices)
 	_, cd, ok := reg.lookupDescriptorByTag(tag)
 	if !ok {
-		return mkerrf("CHOICE tag not registered: ", itoa(tag))
+		err = choiceErrorf("alternative tag ", tag, " not registered")
+		return
 	}
 
 	// decode into the concrete Go value
-	inner := reflect.New(cd.tagToType[tag]).Elem()
+	inner := refNew(cd.tagToType[tag]).Elem()
 	if err = unmarshalValue(sub, inner, chopts); err != nil {
-		return mkerrf(
-			"decodeCtxChoice[", cd.tagToType[tag].String(),
-			"]: ", err.Error(),
-		)
+		err = codecErrorf("decodeCtxChoice[",
+			cd.tagToType[tag].String(), "]: ", err)
+		return
 	}
 
 	// ALWAYS wrap back into the Choice interface
-	choiceType := refTypeOf((*Choice)(nil)).Elem()
-	if v.Type() == choiceType {
+	if v.Type() == choicePtrType {
 		ch := refValueOf(NewChoice(inner.Interface(), tag))
 		err = refSetValue(v, ch)
 	} else {
 		err = refSetValue(v, inner)
 	}
-	return err
+
+	return
 }
 
 func unmarshalSequenceBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
+	debugEnter(v, opts, pkt)
+	defer func() { debugExit(newLItem(err)) }()
+
 	var tlv TLV
 	if tlv, err = pkt.TLV(); err != nil {
-		err = mkerrf("unmarshalSequenceBranch: no SEQUENCE header: ", err.Error())
+		err = compositeErrorf("unmarshalSequenceBranch: no SEQUENCE header: ", err)
 		return
 	}
-	if tlv.Class != ClassUniversal || tlv.Tag != TagSequence {
-		err = mkerrf("expected SEQUENCE (16); got ", itoa(tlv.Class), "/", itoa(tlv.Tag))
+	if !tlv.matchClassAndTag(ClassUniversal, TagSequence) {
+		err = compositeErrorf("expected UNIVERSAL SEQUENCE (16); got class ",
+			tlv.Class, " / tag ", tlv.Tag)
 		return
 	}
 	start := pkt.Offset()
 	end := start + tlv.Length
 	if end > pkt.Len() {
-		err = mkerr("unmarshalSequenceBranch: truncated content")
+		err = compositeErrorf("unmarshalSequenceBranch: truncated content")
 		return
 	}
 
@@ -521,10 +522,10 @@ func unmarshalSequenceBranch(v reflect.Value, pkt PDU, opts *Options) (err error
 		// create a zero‐value element
 		elem := refNew(elemType).Elem()
 		if err = unmarshalValue(sub, elem, &elemOpts); err != nil {
-			err = mkerrf("unmarshalSequenceBranch: element decode failed: ", err.Error())
+			err = compositeErrorf("unmarshalSequenceBranch: element decode failed: ", err)
 			return
 		}
-		if err = refSetValue(v, reflect.Append(v, elem)); err != nil {
+		if err = refSetValue(v, refAppend(v, elem)); err != nil {
 			return
 		}
 	}
@@ -539,18 +540,19 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	typ := pkt.Type()
 
 	// If this slice is actually SET OF CHOICE
-	if opts != nil && opts.Choices != "" {
+	if optsHasChoices(opts) {
+		rtyp := v.Type()
 		reg, ok := GetChoices(opts.Choices)
 		if !ok {
-			err = mkerrf("no CHOICE registry ", opts.Choices)
+			err = compositeErrorf("no CHOICE registry ", opts.Choices)
 			return
 		}
 
 		// look up the *choiceDescriptor* registered for OctetString
-		elemType := v.Type().Elem()
+		elemType := rtyp.Elem()
 		cd, ok := reg.reg[elemType] // <- use the type as key
 		if !ok {
-			return mkerrf("unmarshalSetBranch: no descriptor for type ", elemType.String())
+			return compositeErrorf("unmarshalSetBranch: no descriptor for type ", elemType)
 		}
 
 		// consume the SET‐OF wrapper
@@ -562,7 +564,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 		sub := typ.New(outer.Value...)
 		sub.SetOffset(0)
 
-		result := refMkSl(v.Type(), 0, 0)
+		result := refMkSl(rtyp, 0, 0)
 
 		// for each [n] EXPLICIT element
 		for sub.HasMoreData() {
@@ -575,7 +577,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			// find the Go type for that tag
 			childType, found := cd.tagToType[tag]
 			if !found {
-				err = mkerrf("CHOICE tag ", itoa(tag), " not registered")
+				err = compositeErrorf("CHOICE tag ", tag, " not registered")
 				return
 			}
 
@@ -586,7 +588,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 			}
 
 			// convert and append
-			result = reflect.Append(result, innerVal.Convert(elemType))
+			result = refAppend(result, innerVal.Convert(elemType))
 		}
 
 		err = refSetValue(v, result)
@@ -613,9 +615,7 @@ func unmarshalSetBranch(v reflect.Value, pkt PDU, opts *Options) (err error) {
 
 func unmarshalPrimitive(pkt PDU, v reflect.Value, opts *Options) (err error) {
 	debugEnter(v, opts, pkt)
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
 	var tlv TLV
 	var start int
@@ -630,7 +630,7 @@ func unmarshalPrimitive(pkt PDU, v reflect.Value, opts *Options) (err error) {
 				err = refSetValue(v, refValueOf(bx.getVal()))
 			}
 		} else {
-			err = mkerr("no codec for primitive")
+			err = primitiveErrorf("no codec for primitive")
 		}
 	}
 
@@ -642,19 +642,13 @@ func unmarshalPrimitive(pkt PDU, v reflect.Value, opts *Options) (err error) {
 
 func unmarshalHandleTag(kw string, pkt PDU, tlv *TLV, opts *Options) (err error) {
 	debugEnter(newLItem(kw, "keyword", tlv, opts, pkt))
-	defer func() {
-		debugExit(newLItem(err))
-	}()
+	defer func() { debugExit(newLItem(err)) }()
 
-	opts = deferImplicit(opts)
-	if opts.HasTag() {
-		if tlv.Class != opts.Class() || tlv.Tag != opts.Tag() {
-			err = mkerrf("identifier mismatch decoding ", kw)
+	if opts = deferImplicit(opts); opts.HasTag() {
+		if !tlv.matchClassAndTag(opts.Class(), opts.Tag()) {
+			err = codecErrorf("identifier mismatch decoding ", kw)
 		} else if opts.Explicit {
-			inner := pkt.Type().New()
-			// TODO: determine why this is necessary (else, breaks
-			// "TestSequence_FieldsExplicit" via New(tlv.Value...))
-			inner.Append(tlv.Value...)
+			inner := pkt.Type().New(tlv.Value...)
 			var innerTLV TLV
 			if innerTLV, err = inner.TLV(); err == nil {
 				*tlv = innerTLV
