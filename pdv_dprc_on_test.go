@@ -10,15 +10,14 @@ func TestExternal_encodingRulesChoiceSyntaxes(t *testing.T) {
 	syntaxes := Syntaxes{abstract, transfer}
 
 	pdv := External{
-		Identification:      NewChoice(syntaxes, 0),
-		DataValueDescriptor: ObjectDescriptor("test"),
-		DataValue:           OctetString("blarg"),
+		Identification: NewChoice(syntaxes, 0),
+		DataValue:      OctetString("blarg"),
 	}
 
 	hexes := map[EncodingRule]string{
-		BER: "28 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-		CER: "28 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
-		DER: "28 23 A01430120607510201020102010607500200020002000704746573740405626C617267",
+		BER: "28 1D A01430120607510201020102010607500200020002000405626C617267",
+		CER: "28 1D A01430120607510201020102010607500200020002000405626C617267",
+		DER: "28 1D A01430120607510201020102010607500200020002000405626C617267",
 	}
 
 	for _, rule := range encodingRules {
@@ -53,9 +52,7 @@ func TestExternal_encodingRulesChoiceSyntaxes(t *testing.T) {
 			t.Fatalf("Unexpected alternative type in identification: got %T", id)
 		}
 
-		if string(newPDV.DataValueDescriptor) != "test" {
-			t.Fatalf("DataValueDescriptor mismatch")
-		} else if string(newPDV.DataValue) != "blarg" {
+		if string(newPDV.DataValue) != "blarg" {
 			t.Fatalf("DataValue mismatch")
 		}
 	}

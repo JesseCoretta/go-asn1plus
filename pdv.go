@@ -84,27 +84,16 @@ across different protocols.
 [ITU-T Rec. X.680]: https://www.itu.int/rec/T-REC-X.680
 */
 type EmbeddedPDV struct {
-	Identification      Choice           `asn1:"choices:identification"`
-	DataValueDescriptor ObjectDescriptor `asn1:"optional"`
+	Identification      Choice            `asn1:"choices:identification"`
+	DataValueDescriptor *ObjectDescriptor `asn1:"optional,absent"`
 	DataValue           OctetString
-	//Extensions          []Packet
+	Extensions          []TLV `asn1:"..."`
 }
 
 /*
 Tag returns the integer constant [TagEmbeddedPDV].
 */
 func (r EmbeddedPDV) Tag() int { return TagEmbeddedPDV }
-
-func (_ EmbeddedPDV) IdentificationChoices() Choices {
-	return identification
-}
-
-func embeddedPDVSpecial() *Options {
-	opts := &Options{}
-	opts.SetClass(1)
-	opts.SetTag(TagEmbeddedPDV)
-	return opts
-}
 
 func init() {
 	// Initialize an EmbeddedPDV/External Identification
@@ -119,4 +108,8 @@ func init() {
 	identification.Register(nil, ObjectIdentifier{}, o.SetTag(4))
 	identification.Register(nil, Null{}, o.SetTag(5))
 	RegisterChoices("identification", identification)
+
+	pdvOpts := &Options{}
+	pdvOpts.SetTag(TagEmbeddedPDV).SetClass(1)
+	RegisterOverrideOptions(EmbeddedPDV{}, pdvOpts)
 }
