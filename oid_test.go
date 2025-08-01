@@ -9,8 +9,8 @@ import (
 
 /*
 This example demonstrates the creation of a new [ObjectIdentifierValue]
-instance using parsed text input, followed by a calls for various forms
-of string representation.
+instance using parsed text input, followed by calls for name form string
+representation.
 */
 func ExampleObjectIdentifierValue() {
 	raw := `{ iso(1) identified-organization(3) 6 1 4 1 56521 }`
