@@ -7,8 +7,8 @@ for debugging when this package was built or run with the
 */
 
 /*
-EventType describes a specific kind of [Tracer] event. see the
-[EventType] constants for a full list and descriptions.
+EventType describes a specific kind of debugging event. See
+the [EventType] constants for a full list and descriptions.
 
 Note that this type and all of its constants are only meaningful
 if/when this package was run or built with the "-tags asn1_debug"

@@ -830,6 +830,8 @@ In addition to string and []byte, this method accepts a [time.Duration]
 instance as input.
 
 Instances of this type DO NOT qualify the [Temporal] interface.
+
+[ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 */
 func NewDuration(x any, constraints ...Constraint) (Duration, error) {
 	var s string
