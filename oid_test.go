@@ -40,6 +40,40 @@ func ExampleObjectIdentifierValue() {
 	// NANF: identified-organization(3)
 }
 
+/*
+This example demonstrates the creation of a new instance of [ObjectIdentifierValue]
+using the following:
+
+  - a receiver instance of [ObjectIdentifier]
+  - a number of X.680 name form values equal to the length of the receiver
+*/
+func ExampleObjectIdentifier_ObjectIdentifierValue() {
+
+	// Make OID for 1.3.6.1.4.1.56521
+	oid, _ := NewObjectIdentifier(1, 3, 6, 1, 4, 1, 56521) // OID len: 7
+
+	// Feed name forms to create a new ObjectIdentifierValue.
+	// Note that the number of inputs MUST match the integer
+	// length of the receiver OID. For number forms which do
+	// not bear a name, use a zero string ("").
+	oiv, err := oid.ObjectIdentifierValue(
+		"iso",
+		"identified-organization",
+		"dod",
+		"internet",
+		"private",
+		"enterprise",
+		"")
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(oiv)
+	// Output: {iso(1) identified-organization(3) dod(6) internet(1) private(4) enterprise(1) 56521}
+}
+
 func TestObjectIdentifier_customType(t *testing.T) {
 	type CustomOID ObjectIdentifier
 	RegisterOIDAlias[CustomOID](TagOID,
@@ -159,6 +193,54 @@ func TestObjectIdentifier_InStruct(t *testing.T) {
 			t.Fatalf("%s failed [%s decoding]: %v\n", t.Name(), rule, err)
 		}
 	}
+}
+
+func TestObjectIdentifierValue_codecov(_ *testing.T) {
+	_, _ = NewObjectIdentifierValue(``)
+	_, _ = NewObjectIdentifierValue([]string{"iso(1)", "identified-organization(3)"})
+	_, _ = NewObjectIdentifierValue(struct{}{})
+	_, _ = NewNameAndNumberForm(``)
+	_, _ = NewNameAndNumberForm(`__`)
+	_, _ = NewNameAndNumberForm(`(__`)
+	_, _ = NewNameAndNumberForm(`__)`)
+	_, _ = NewNameAndNumberForm(`9(9)`)
+	_, _ = NewNameAndNumberForm(`9(x)`)
+	nf, _ := NewInteger(1)
+
+	oiv := ObjectIdentifierValue{
+		NameAndNumberForm{},
+		NameAndNumberForm{},
+	}
+	oiv.Len()
+	oiv.ObjectIdentifier()
+
+	oiv = ObjectIdentifierValue{
+		NameAndNumberForm{
+			nameForm:   "iso",
+			numberForm: nf,
+			parsed:     true,
+		},
+	}
+
+	oiv[0].NameForm()
+	oiv[0].NumberForm()
+
+	oiv.Index(-1)
+	oiv.Index(0)
+	oiv.Index(2)
+	oiv.ObjectIdentifier()
+
+	isNameForm(``)
+	isNameForm(`a--bogus`)
+	isNameForm(`A-bogus`)
+	isNameForm(`a-#bogus`)
+
+	oid := cerOID // any OID would do
+	oid.ObjectIdentifierValue()
+	oid.ObjectIdentifierValue("")
+	oid.ObjectIdentifierValue("_bogus(1)")
+	oid.ObjectIdentifierValue("iso(1)", "Identified-Organization(3)", "dod(6)", "internet(1)")
+
 }
 
 func TestObjectIdentifier_codecov(_ *testing.T) {

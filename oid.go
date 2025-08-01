@@ -17,6 +17,8 @@ import (
 /*
 ObjectIdentifierValue implements a type containing any number of
 [NameAndNumberForm] instances.
+
+Note that instances of this type are not intended to be encoded.
 */
 type ObjectIdentifierValue []NameAndNumberForm
 
@@ -259,6 +261,62 @@ the [CodecConstraintEncoding], [CodecConstraintDecoding] and
 [CodecConstraintBoth] constants for possible settings.
 */
 var ObjectIdentifierConstraintPhase = CodecConstraintDecoding
+
+/*
+ObjectIdentifierValue returns an instance of [ObjectIdentifierValue]
+alongside an error following an attempt to craft a series of individual
+[NameAndNumberForm] instances using the number forms derived from the
+receiver instance and the input string nameForms value.
+
+The input nameForms value MUST be of an identical length to the receiver
+instance. A zero slice indicates the associated number form has no name
+form. A non-zero instance is processed for X.680 name form validity.
+*/
+func (r ObjectIdentifier) ObjectIdentifierValue(nameForms ...string) (
+	ObjectIdentifierValue,
+	error,
+) {
+	var (
+		L1  int = len(r)
+		L2  int = len(nameForms)
+		err error
+		_oiv,
+		oiv ObjectIdentifierValue
+	)
+
+	if L2 == 0 {
+		err = primitiveErrorf("No nameForms input for ObjectIdentifierValue")
+		return oiv, err
+	} else if L1 != L2 {
+		err = generalErrorf("ObjectIdentifierValue: nameForms length mismatch, want ",
+			L1, ", got ", L2)
+		return oiv, err
+	}
+
+	for i := 0; i < len(nameForms) && err == nil; i++ {
+		nf := nameForms[i]
+		if nf == "" {
+			_oiv = append(_oiv, NameAndNumberForm{
+				numberForm: r[i],
+				parsed:     true,
+			})
+		} else if !isNameForm(nf) {
+			err = errorBadNameForm
+		} else {
+			_oiv = append(_oiv, NameAndNumberForm{
+				nameForm:   nf,
+				numberForm: r[i],
+				parsed:     true,
+			})
+		}
+	}
+
+	if err == nil {
+		oiv = _oiv
+	}
+
+	return oiv, err
+}
 
 /*
 String returns the string representation of the receiver instance.
