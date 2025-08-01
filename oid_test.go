@@ -591,11 +591,12 @@ func TestCustomRelativeOID_withControls(t *testing.T) {
 }
 
 func ExampleNewObjectIdentifier_withConstraint() {
+	iso, _ := NewInteger(1)
+	org, _ := NewInteger(3)
+
 	mustBeISOOrg := func(x any) (err error) {
 		oid, _ := NewObjectIdentifier(x)
-		iso, _ := NewInteger(1)
-		org, _ := NewInteger(3)
-		if !(oid[0].Eq(iso) && oid[1].Eq(org)) {
+		if oid[0].Ne(iso) || oid[1].Ne(org) {
 			err = fmt.Errorf("Constraint violation: OID must be an ISO Org OID (must begin with 1.3)")
 		}
 		return
