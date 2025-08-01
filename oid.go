@@ -15,6 +15,236 @@ import (
 )
 
 /*
+ObjectIdentifierValue implements a type containing any number of
+[NameAndNumberForm] instances.
+*/
+type ObjectIdentifierValue []NameAndNumberForm
+
+/*
+ObjectIdentifier returns an instance of [ObjectIdentifier] alongside
+an error following an attempt to extract all number form components
+from the receiver instance to form an equivalent numeric OID. Note
+that only minimal validity checking is performed.
+*/
+func (r ObjectIdentifierValue) ObjectIdentifier() (ObjectIdentifier, error) {
+	var (
+		oid,
+		_oid ObjectIdentifier
+		err error
+	)
+
+	L := len(r)
+
+	if L < 2 {
+		// OIV must be 2+ nanfs
+		err = errorMinOIDArcs
+		return oid, err
+	}
+
+	for i := 0; i < L && err == nil; i++ {
+		if nanf := r[i]; !nanf.parsed {
+			err = generalErrorf("Invalid NameAndNumberForm instance for ObjectIdentifier")
+		} else {
+			_oid = append(_oid, nanf.numberForm)
+		}
+	}
+
+	if err == nil {
+		oid = _oid
+	}
+
+	return oid, err
+}
+
+/*
+Len returns the integer length of the receiver instance.
+*/
+func (r ObjectIdentifierValue) Len() int { return len(r) }
+
+/*
+Index returns the Nth [NameAndNumberForm] index from the receiver alongside
+a Boolean value indicative of success. This method supports the use of negative
+indices.
+*/
+func (r ObjectIdentifierValue) Index(idx int) (NameAndNumberForm, bool) {
+	var (
+		ok   bool
+		nanf NameAndNumberForm
+	)
+	if L := len(r); L > 0 {
+		if idx < 0 {
+			nanf = r[0]
+			if x := L + idx; x >= 0 {
+				nanf = r[x]
+			}
+		} else if idx > L {
+			nanf = r[L-1]
+		} else if idx < L {
+			nanf = r[idx]
+		}
+		ok = nanf.parsed
+	}
+
+	return nanf, ok
+}
+
+/*
+String returns the string representation of the receiver instance.
+*/
+func (r ObjectIdentifierValue) String() string {
+	var x []string
+	for i := 0; i < len(r); i++ {
+		x = append(x, r[i].String())
+	}
+	return `{` + join(x, ` `) + `}`
+}
+
+/*
+NewObjectIdentifierValue returns an instance of [ObjectIdentifierValue]
+alongside an error following an attempt to marshal x. x may be a string
+or []string instance.
+*/
+func NewObjectIdentifierValue(x any) (ObjectIdentifierValue, error) {
+	var (
+		oiv ObjectIdentifierValue
+		nfs []string
+		err error
+	)
+
+	switch tv := x.(type) {
+	case string:
+		nfs = strfld(condenseWHSP(trimR(trimL(tv, `{`), `}`)))
+	case []string:
+		nfs = tv
+	default:
+		err = generalErrorf("Unsupported ", x, " input type for ObjectIdentifierValue")
+		return oiv, err
+	}
+
+	// prepare temporary instance
+	var _oiv ObjectIdentifierValue
+	for i := 0; i < len(nfs) && err == nil; i++ {
+		var nanf NameAndNumberForm
+		if nanf, err = NewNameAndNumberForm(nfs[i]); err == nil {
+			_oiv = append(_oiv, nanf)
+		}
+	}
+
+	if err == nil {
+		oiv = _oiv
+	}
+	return oiv, err
+}
+
+/*
+NameAndNumberForm implements the ITU-T rec. X.680 "name and number form".
+Instances of this type are created using [NewNameAndNumberForm], though
+generally the end user need not initialize instances of this type directly.
+*/
+type NameAndNumberForm struct {
+	nameForm   string  // e.g.: "iso"; optional, must conform to X.680 name form notation
+	numberForm Integer // number form type; always required, never negative
+	parsed     bool    // avoid ambiguity with zero instances
+}
+
+/*
+NumberForm returns the underlying name form string instance, if specified.
+A zero string is returned otherwise.
+*/
+func (r NameAndNumberForm) NameForm() string {
+	var nf string
+	if r.parsed {
+		nf = r.nameForm
+	}
+	return nf
+}
+
+/*
+NumberForm returns the underlying number form [Integer] instance.
+As the number form syntax prohibits negative numbers, if the value
+is -1 this indicates the receiver is in an aberrant state, or was
+not created properly using the [NewNameAndNumberForm] constructor.
+*/
+func (r NameAndNumberForm) NumberForm() Integer {
+	var nf Integer
+	nf.native = int64(-1) // default, bogus
+	if r.parsed {
+		nf = r.numberForm
+	}
+	return nf
+}
+
+/*
+String returns the string representation of the receiver instance.
+*/
+func (r NameAndNumberForm) String() string {
+	var n string
+	if r.parsed {
+		n = r.numberForm.String()
+		if len(r.nameForm) > 0 {
+			n = r.nameForm + `(` + n + `)`
+		}
+	}
+	return n
+}
+
+func NewNameAndNumberForm(x string) (NameAndNumberForm, error) {
+	var (
+		r   NameAndNumberForm
+		err error
+	)
+
+	// Don't waste time on bogus values.
+	if len(x) == 0 {
+		err = errorZeroLengthNameAndNumberForm
+		return r, err
+	} else if x[len(x)-1] != ')' {
+		// if there was no closing paren, this COULD
+		// mean there is only a number form (with no
+		// name). If this is the case, parse as an
+		// integer by itself, else throw an error.
+		var n Integer
+		if n, err = NewInteger(x); err != nil {
+			err = errorNameAndNumberFormParen
+		} else {
+			r = NameAndNumberForm{
+				numberForm: n,
+				parsed:     true,
+			}
+		}
+		return r, err
+	}
+
+	// index the rune for '(', indicating the
+	// identifier (nameForm) has ended, and the
+	// numberForm is beginning.
+	idx := idxr(x, '(')
+	if idx == -1 {
+		err = errorNameAndNumberFormParen
+		return r, err
+	}
+
+	var n Integer
+	if n, err = NewInteger(x[idx+1 : len(x)-1]); err == nil {
+		// Parse/verify what appears to be the
+		// identifier string value.
+		if id := x[:idx]; !isNameForm(id) {
+			err = errorBadNameForm
+		} else {
+			r = NameAndNumberForm{
+				nameForm:   id,
+				numberForm: n,
+				parsed:     true,
+			}
+		}
+	} else {
+		err = errorNameAndNumberFormNoInteger
+	}
+
+	return r, err
+}
+
+/*
 ObjectIdentifier implements an unbounded ASN.1 OBJECT IDENTIFIER (tag 6),
 which is convertible to both type [encoding/asn1.ObjectIdentifier] and
 [crypto/x509.OID] types. See the [ObjectIdentifier.IntSlice] and
@@ -352,6 +582,57 @@ func isValidOIDPrefix(id string) bool {
 		return false
 	} else if !(0 <= sub && sub <= 39) && root != 2 {
 		return false
+	}
+
+	return true
+}
+
+/*
+isNameForm returns a Boolean value indicative of
+x being a legal X.680 name form.
+*/
+func isNameForm(val string) bool {
+	if len(val) == 0 {
+		return false
+	}
+
+	if !ilc(rune(val[0])) {
+		// must begin with a lower alpha.
+		return false
+	}
+
+	isAlnum := func(r rune) bool {
+		return ilc(r) || iuc(r) || isDigit(r)
+	}
+
+	if !isAlnum(rune(val[len(val)-1])) {
+		// can only end in alnum.
+		return false
+	}
+
+	// watch hyphens to avoid contiguous use.
+	// A value of true at any point means the
+	// PREVIOUS char was a hyphen.
+	var lastHyphen bool
+
+	// iterate all characters in val (except for the
+	// first and final chars already checked above),
+	// checking each one for "descr" validity.
+	for i := 1; i < len(val)-1; i++ {
+		ch := rune(val[i])
+		switch {
+		case isAlnum(ch):
+			lastHyphen = false
+		case ch == '-':
+			if lastHyphen {
+				// cannot use consecutive hyphens
+				return false
+			}
+			lastHyphen = true
+		default:
+			// invalid character (none of [a-zA-Z0-9\-])
+			return false
+		}
 	}
 
 	return true

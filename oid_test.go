@@ -7,6 +7,39 @@ import (
 	"testing"
 )
 
+/*
+This example demonstrates the creation of a new [ObjectIdentifierValue]
+instance using parsed text input, followed by a calls for various forms
+of string representation.
+*/
+func ExampleObjectIdentifierValue() {
+	raw := `{ iso(1) identified-organization(3) 6 1 4 1 56521 }`
+	oiv, err := NewObjectIdentifierValue(raw)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var oid ObjectIdentifier
+	oid, err = oiv.ObjectIdentifier()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("OIV: %s\n", oiv)
+	fmt.Printf("OID: %s\n", oid)
+
+	if slice, ok := oiv.Index(1); ok {
+		fmt.Printf("NANF: %s\n", slice)
+	}
+
+	// Output:
+	// OIV: {iso(1) identified-organization(3) 6 1 4 1 56521}
+	// OID: 1.3.6.1.4.1.56521
+	// NANF: identified-organization(3)
+}
+
 func TestObjectIdentifier_customType(t *testing.T) {
 	type CustomOID ObjectIdentifier
 	RegisterOIDAlias[CustomOID](TagOID,

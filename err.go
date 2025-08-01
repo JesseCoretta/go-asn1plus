@@ -93,6 +93,16 @@ var (
 )
 
 /*
+general/meta errors
+*/
+var (
+	errorNameAndNumberFormNoInteger  = generalErr{mkerr("OBJECT IDENTIFIER VALUE: nameAndNumberForm missing numerical component")}
+	errorBadNameForm                 = generalErr{mkerr("OBJECT IDENTIFIER VALUE: name form syntax must conform to: LOWER *[ [-] +[ UPPER / LOWER / DIGIT ] ]")}
+	errorNameAndNumberFormParen      = generalErr{mkerr("OBJECT IDENTIFIER VALUE: missing opening and/or closing parenthesis in nameAndNumberForm")}
+	errorZeroLengthNameAndNumberForm = generalErr{mkerr("OBJECT IDENTIFIER VALUE: zero length nameAndNumberForm")}
+)
+
+/*
 types which implement the error interface.
 */
 type (

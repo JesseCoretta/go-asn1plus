@@ -48,6 +48,7 @@ var (
 	hasSfx     func(string, string) bool                           = strings.HasSuffix
 	trimPfx    func(string, string) string                         = strings.TrimPrefix
 	trimL      func(string, string) string                         = strings.TrimLeft
+	trimR      func(string, string) string                         = strings.TrimRight
 	trimS      func(string) string                                 = strings.TrimSpace
 	trim       func(string, string) string                         = strings.Trim
 	cntns      func(string, string) bool                           = strings.Contains
@@ -55,8 +56,12 @@ var (
 	streq      func(string, string) bool                           = strings.EqualFold
 	streqf     func(string, string) bool                           = strings.EqualFold
 	strrpt     func(string, int) string                            = strings.Repeat
+	strfld     func(string) []string                               = strings.Fields
 	isCtrl     func(rune) bool                                     = unicode.IsControl
 	isPrint    func(rune) bool                                     = unicode.IsPrint
+	ilc        func(rune) bool                                     = unicode.IsLower
+	iuc        func(rune) bool                                     = unicode.IsUpper
+	isDigit    func(rune) bool                                     = unicode.IsDigit
 	utf16Enc   func([]rune) []uint16                               = utf16.Encode
 	utf8OK     func(string) bool                                   = utf8.ValidString
 	hexstr     func([]byte) string                                 = hex.EncodeToString
@@ -295,4 +300,32 @@ func effectiveHeader(baseTag, baseClass int, o *Options) (int, int) {
 		baseClass = o.Class()
 	}
 	return baseTag, baseClass
+}
+
+/*
+condense any consecutive combinations of SPACE, HORIZONTAL
+TAB or NEW LINE with a single SPACE rune.
+*/
+func condenseWHSP(b string) string {
+	b = trimS(b)
+	a := newStrBuilder()
+
+	var last bool
+	for i := 0; i < len(b); i++ {
+		c := rune(b[i])
+		switch c {
+		case ' ', '\n', '\t':
+			if !last {
+				last = true
+				a.WriteRune(' ')
+			}
+		default:
+			if last {
+				last = false
+			}
+			a.WriteRune(c)
+		}
+	}
+
+	return a.String()
 }
