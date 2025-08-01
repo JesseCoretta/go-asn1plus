@@ -299,10 +299,10 @@ func ListAdapters() []AdapterInfo {
 }
 
 /*
-RegisterAdapter binds a pair of types—an ASN.1 primitive `T` and a
+RegisterAdapter binds a pair of types—an ASN.1 [Primitive] `T` and a
 Go type `GoT` to one or more textual keywords.
 
-Once registered, Marshal / Unmarshal will automatically convert
+Once registered, [Marshal] and [Unmarshal] will automatically convert
 between the two representations whenever:
 
   - The Go value’s dynamic type is `GoT`, **and**
@@ -313,19 +313,19 @@ between the two representations whenever:
 
 Typical use-cases
 
-  - An application introduces a custom ASN.1 ENUMERATED that marshals from a first-class Go `enum` type.
-  - You want `[]byte` to encode as a proprietary OCTET STRING subtype under the keyword "blob".
-  - You need to plug an alternative NumericString implementation into the pipeline without forking the library.
+  - An application introduces a custom ASN.1 [Enumerated] that marshals from a first-class Go `enum` type.
+  - You want `[]byte` to encode as a proprietary [OctetString] subtype under the keyword "blob".
+  - You need to plug an alternative [NumericString] implementation into the pipeline without forking the library.
 
 Generic parameters
 
-  - T:  Any type *whose pointer* implements the asn1plus.Primitive interface (all built-in primitives already satisfy this).
+  - T:  Any type *whose pointer* implements the [Primitive] interface (all built-in primitives already satisfy this).
   - GoT: The Go-side type you want to expose to callers; often `string`, `[]byte`, or a domain-specific struct.
 
 Arguments
 
   - ctor   A function that constructs a `T` from a `GoT` and an optional list of constraints
-  - asGo   Converts *T back into GoT.  Only used by Unmarshal
+  - asGo   Converts *T back into GoT.  Only used by [Unmarshal]
   - aliases  One or more keywords.  Use the empty string "" to mark this adapter as the fallback for the Go type
 
 # Concurrency
@@ -368,8 +368,11 @@ Example (untested)
 	    "oid", "objectidentifier", // no ""; only used when explicitly requested
 	)
 
-See the bottom of adapt.go for a complete look at the (actively used) built-in
-adapter registrations for further insight.
+See the bottom of adapt_on.go for a complete look at the (actively used) built-in
+"prefab" adapter registrations for further insight.
+
+Built-in "prefab" registrations can be disabled using the `-tags asn1_no_adapter_pf`
+build tag.
 */
 func RegisterAdapter[T any, GoT any](
 	ctor func(GoT, ...Constraint) (T, error),
