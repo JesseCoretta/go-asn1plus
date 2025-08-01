@@ -20,7 +20,6 @@ type Constraint func(any) error
 ConstraintGroup implements a wrapper of slices of [Constraint]. Slice instances
 are added (and, thus, evaluated) in the order in which they are provided.
 */
-//type ConstraintGroup[T any] []Constraint[T]
 type ConstraintGroup []Constraint
 
 /*
