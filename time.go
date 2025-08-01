@@ -812,7 +812,7 @@ var DurationConstraintPhase = CodecConstraintDecoding
 
 /*
 NewDuration returns an instance of [Duration] alongside an error
-following an attempt to marshal s as an [ISO 8601] duration.
+following an attempt to marshal x as an [ISO 8601] duration.
 
 The input must begin with a "P" (Period). The date portion (Y, M,
 D) and, if present, the time portion (following a "T") are parsed
