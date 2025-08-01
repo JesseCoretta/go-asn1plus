@@ -198,7 +198,7 @@ func (r *BERPacket) Free() {
 
 /*
 PeekTLV returns [TLV] alongside an error. This method is similar to the standard
-[PDU.TLV] method, except this method does not advance the offset.
+PDU TLV method, except this method does not advance the offset.
 */
 func (r *BERPacket) PeekTLV() (TLV, error) {
 	var tlv TLV
@@ -220,7 +220,7 @@ to read the next [BER] tag/length header.
 func (r *BERPacket) TLV() (TLV, error) { return getTLV(r, nil) }
 
 /*
-WriteTLV returns an int following an attempt to write a [BER] tag/length
+WriteTLV returns an error following an attempt to write a [BER] tag/length
 header to the receiver buffer.
 */
 func (r *BERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }

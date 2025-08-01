@@ -123,9 +123,9 @@ If no variadic input is provided,, the offset position index is set to zero (0).
 func (r *DERPacket) SetOffset(offset ...int) { r.offset = setPacketOffset(r, offset...) }
 
 /*
-AddOffset increments or decrements the current offset according to n. Though negative input is
-permitted, the product of offset + n must not be negative itself, nor may it exceed the receiver's
-buffer length.
+AddOffset increments or decrements the current offset according to n. Though
+negative input is permitted, the product of offset + n must not be negative
+itself, nor may it exceed the receiver's buffer length.
 */
 func (r *DERPacket) AddOffset(n int) { r.offset = incPacketOffset(r, n) }
 
@@ -136,7 +136,7 @@ func (r *DERPacket) Free() { (*BERPacket)(r).Free() }
 
 /*
 PeekTLV returns [TLV] alongside an error. This method is similar to the standard
-[PDU.TLV] method, except this method does not advance the offset.
+TLV method, except this method does not advance the offset.
 */
 func (r *DERPacket) PeekTLV() (TLV, error) { return (*BERPacket)(r).PeekTLV() }
 
@@ -147,7 +147,7 @@ to read the next [DER] tag/length header.
 func (r *DERPacket) TLV() (TLV, error) { return getTLV(r, nil) }
 
 /*
-WriteTLV returns an int following an attempt to write a [DER] tag/length
+WriteTLV returns an error following an attempt to write a [DER] tag/length
 header to the receiver buffer.
 */
 func (r *DERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }

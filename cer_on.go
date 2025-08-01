@@ -136,7 +136,7 @@ func (r *CERPacket) Free() { (*BERPacket)(r).Free() }
 
 /*
 PeekTLV returns [TLV] alongside an error. This method is similar to the standard
-[PDU.TLV] method, except this method does not advance the offset.
+TLV method, except this method does not advance the offset.
 */
 func (r *CERPacket) PeekTLV() (TLV, error) { return (*BERPacket)(r).PeekTLV() }
 
@@ -147,7 +147,7 @@ to read the next [CER] tag/length header.
 func (r *CERPacket) TLV() (TLV, error) { return getTLV(r, nil) }
 
 /*
-WriteTLV returns an int following an attempt to write a [CER] tag/length
+WriteTLV returns an error following an attempt to write a [CER] tag/length
 header to the receiver buffer.
 */
 func (r *CERPacket) WriteTLV(tlv TLV) error { return writeTLV(r, tlv, nil) }
