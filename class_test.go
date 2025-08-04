@@ -7,8 +7,8 @@ import (
 
 /*
 This example demonstrates the instantiation of an instance of the X.501
-ATTRIBUTE class. The resultant instance represents the official common
-name attribute type (cn, 2.5.4.3).
+ATTRIBUTE class. The resultant instance represents the official 'name'
+attribute type (name, 2.5.4.41) as defined in section 2.18 of RFC 4519.
 */
 func ExampleClassInstance_fromTemplate() {
 	// panicky field constructor for convenience.
@@ -19,12 +19,17 @@ func ExampleClassInstance_fromTemplate() {
 		return cf
 	}
 
-	// For the sake of simplicity, these are
-	// just dummy types.
+	// For brevity, these are just oversimplified types.
 	type (
-		AttributeType  any
-		Row            = map[string]any
-		MatchingRule   struct{}
+		AttributeType any
+		MatchingRule  struct {
+			OID    string
+			Name   []string
+			Syntax string
+		}
+		LDAPSyntax struct {
+			OID string
+		}
 		AttributeUsage int
 	)
 
@@ -33,17 +38,17 @@ func ExampleClassInstance_fromTemplate() {
 	// error here simply for brevity.
 
 	tmpl, _ := NewClass("ATTRIBUTE",
-		must(ClassObjectField.NewField("&derivation", (*Row)(nil), true)),
+		must(ClassObjectField.NewField("&derivation", (*AttributeType)(nil), true)),
 		must(ClassTypeField.NewField("&Type", (*AttributeType)(nil), true)),
-		must(ClassObjectField.NewField("&equality-match", MatchingRule{}, true)),
-		must(ClassObjectField.NewField("&ordering-match", MatchingRule{}, true)),
-		must(ClassObjectField.NewField("&substrings-match", MatchingRule{}, true)),
+		must(ClassObjectField.NewField("&equality-match", (*MatchingRule)(nil), true)),
+		must(ClassObjectField.NewField("&ordering-match", (*MatchingRule)(nil), true)),
+		must(ClassObjectField.NewField("&substrings-match", (*MatchingRule)(nil), true)),
 		must(ClassValueField.NewField("&single-valued", false, true)),
 		must(ClassValueField.NewField("&collective", false, true)),
 		must(ClassValueField.NewField("&dummy", false, true)),
 		must(ClassValueField.NewField("&no-user-modification", false, true)),
 		must(ClassValueField.NewField("&usage", AttributeUsage(0), true)),
-		must(ClassValueField.NewField("&ldapSyntax", ObjectIdentifier{}, true)),
+		must(ClassValueField.NewField("&ldapSyntax", (*LDAPSyntax)(nil), true)),
 		must(ClassValueField.NewField("&ldapName", []string{}, true)),
 		must(ClassValueField.NewField("&ldapDesc", "", true)),
 		must(ClassValueField.NewField("&obsolete", false, true)),
@@ -52,12 +57,47 @@ func ExampleClassInstance_fromTemplate() {
 
 	// OPTIONAL: we can define parsers for individual
 	// fields of ClassInstance when we initialize cn
-	// later on.
+	// later on. This is a very watered-down example,
+	// and a real-life implementation would probably
+	// involve lookups which return proper instances
+	// of *MatchingRule, et al, based on input as
+	// opposed to "manual crafting" as we do below.
 
 	// Wrap the standard OID constructor for the "&id"
 	// and "&ldapSyntax" fields checker
 	oidParser := func(x any) (any, error) {
 		return NewObjectIdentifier(x)
+	}
+
+	// syntax handler for "&ldapSyntax"
+	ldapSyntax := func(x any) (any, error) {
+		ls := &LDAPSyntax{}
+		oid, err := NewObjectIdentifier(x)
+		if err == nil {
+			ls.OID = oid.String()
+			// other fields omitted for brevity,
+			// as in real-life they would be
+			// populated by a schema lookup
+			// of the indicated oid.
+		}
+		return ls, err
+	}
+
+	// matchingRule handler for &equality-match,
+	// &ordering-match and &substrings-match.
+	matchingRule := func(x any) (any, error) {
+		mr := &MatchingRule{}
+		oid, err := NewObjectIdentifier(x)
+		if err != nil {
+			// user may have entered a NAME. In
+			// real-life, we'd likely want to
+			// resolve it to a numeric OID, so
+			// let's pretend thats what we do
+			// here :)
+		}
+		mr.OID = oid.String()
+		// omitted other fields, just for brevity.
+		return mr, err
 	}
 
 	// name(s) handler for "&ldapName"
@@ -76,28 +116,32 @@ func ExampleClassInstance_fromTemplate() {
 	}
 
 	// Now we can register as many individual attributes
-	// as we wish. Here, we simply register the "cn" type.
-	// Again, the error is shadowed for brevity.
+	// as we wish. Here, we simply register the "name"
+	// attribute type (2.5.4.41). Again, the error is
+	// shadowed here for brevity.
 
-	CN, _ := tmpl.New(
+	Name, _ := tmpl.New(
 		map[string]any{
-			"&id":         "2.5.4.3",
-			"&ldapName":   "cn",
-			"&ldapDesc":   "common name",
-			"&ldapSyntax": "1.3.6.1.4.1.1466.115.121.1.15",
+			"&id":               "2.5.4.41",
+			"&ldapName":         "name",
+			"&equality-match":   "2.5.13.2",                      // caseIgnoreMatch
+			"&substrings-match": "2.5.13.4",                      // caseIgnoreSubstringsMatch
+			"&ldapSyntax":       "1.3.6.1.4.1.1466.115.121.1.15", // directoryString
 		},
 		tmpl.FieldHandler("&id", oidParser),
 		tmpl.FieldHandler("&ldapName", nameParser),
-		tmpl.FieldHandler("&ldapSyntax", oidParser),
+		tmpl.FieldHandler("&equality-match", matchingRule),
+		tmpl.FieldHandler("&substrings-match", matchingRule),
+		tmpl.FieldHandler("&ldapSyntax", ldapSyntax),
 	)
 
 	// Grab the values of interest. Once again, we shadow
 	// error for brevity.
-	name, _ := CN.Field(`ldapName`)
-	oid, _ := CN.Field(`id`)
+	name, _ := Name.Field(`ldapName`)
+	oid, _ := Name.Field(`id`)
 
 	fmt.Printf("%s (%s)", name.([]string)[0], oid.(ObjectIdentifier))
-	// Output: cn (2.5.4.3)
+	// Output: name (2.5.4.41)
 }
 
 func ExampleClass_objectClass() {
@@ -113,16 +157,18 @@ func ExampleClass_objectClass() {
 	// just dummy types.
 	type (
 		AttributeType   any
-		Row             = map[string]any
-		RowSet          []*Row
-		ObjectClassKind int
+		ObjectClass     any
+		Mandatory       = map[int]*AttributeType
+		Optional        = map[int]*AttributeType
+		SuperClasses    = map[int]*ObjectClass
+		ObjectClassKind int // 0 = structural, 1 = auxiliary, 2 = abstract
 	)
 
 	obj, err := NewClass("OBJECT-CLASS",
-		must(ClassObjectField.NewField("&Superclasses", RowSet(nil), true)),
+		must(ClassObjectField.NewField("&superClasses", SuperClasses{}, true)),
 		must(ClassValueField.NewField("&kind", ObjectClassKind(0), true)),
-		must(ClassTypeField.NewField("&MandatoryAttributes", (*AttributeType)(nil), true)),
-		must(ClassTypeField.NewField("&OptionalAttributes", (*AttributeType)(nil), true)),
+		must(ClassTypeField.NewField("&mandatoryAttributes", Mandatory{}, true)),
+		must(ClassTypeField.NewField("&optionalAttributes", Optional{}, true)),
 		must(ClassValueField.NewField("&ldapName", []string{}, true)),
 		must(ClassValueField.NewField("&ldapDesc", "", true)),
 		must(ClassValueField.NewField("&id", ObjectIdentifier{}, false)),
@@ -135,51 +181,6 @@ func ExampleClass_objectClass() {
 	fmt.Println(obj.Name, len(obj.Fields))
 	// Output:
 	// OBJECT-CLASS 7
-}
-
-func ExampleClass_attributeType() {
-	// panicky field constructor for convenience.
-	must := func(cf ClassField, err error) ClassField {
-		if err != nil {
-			panic(err)
-		}
-		return cf
-	}
-
-	// For the sake of simplicity, these are
-	// just dummy types.
-	type (
-		AttributeType  any
-		Row            = map[string]any
-		MatchingRule   struct{}
-		AttributeUsage int
-	)
-
-	attr, err := NewClass("ATTRIBUTE",
-		must(ClassObjectField.NewField("&derivation", (*Row)(nil), true)),
-		must(ClassTypeField.NewField("&Type", (*AttributeType)(nil), true)),
-		must(ClassObjectField.NewField("&equality-match", MatchingRule{}, true)),
-		must(ClassObjectField.NewField("&ordering-match", MatchingRule{}, true)),
-		must(ClassObjectField.NewField("&substrings-match", MatchingRule{}, true)),
-		must(ClassValueField.NewField("&single-valued", false, true)),
-		must(ClassValueField.NewField("&collective", false, true)),
-		must(ClassValueField.NewField("&dummy", false, true)),
-		must(ClassValueField.NewField("&no-user-modification", false, true)),
-		must(ClassValueField.NewField("&usage", AttributeUsage(0), true)),
-		must(ClassValueField.NewField("&ldapSyntax", ObjectIdentifier{}, true)),
-		must(ClassValueField.NewField("&ldapName", []string{}, true)),
-		must(ClassValueField.NewField("&ldapDesc", "", true)),
-		must(ClassValueField.NewField("&obsolete", false, true)),
-		must(ClassValueField.NewField("&id", ObjectIdentifier{}, false)),
-	)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Println(attr.Name, len(attr.Fields))
-	// Output:
-	// ATTRIBUTE 15
 }
 
 func TestClass(t *testing.T) {
