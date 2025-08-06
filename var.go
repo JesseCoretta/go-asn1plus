@@ -84,7 +84,7 @@ var TagNames = map[int]string{
 	TagObjectDescriptor: "OBJECT DESCRIPTOR", //  7
 	TagExternal:         "EXTERNAL",          //  8 -- replaced by EmbeddedPDV
 	TagReal:             "REAL",              //  9
-	TagEnum:             "ENUM",              // 10
+	TagEnum:             "ENUMERATED",        // 10
 	TagEmbeddedPDV:      "EMBEDDED PDV",      // 11
 	TagUTF8String:       "UTF8String",        // 12
 	TagRelativeOID:      "RelativeOID",       // 13
