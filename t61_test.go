@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func TestMustNewT61String_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewT61String(struct{}{})
+}
+
 func TestT61String_codecov(t *testing.T) {
 	t61, _ := NewT61String("HELLO")
 	t61.Tag()

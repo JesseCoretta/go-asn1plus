@@ -97,19 +97,23 @@ instead.
 
 NewUTCTime returns an instance of [UTCTime] alongside an error following an attempt
 to marshal x.
+
+See also [MustNewUTCTime].
 */
-func NewUTCTime(x any, constraints ...Constraint) (utc UTCTime, err error) {
+func NewUTCTime(x any, constraints ...Constraint) (UTCTime, error) {
 	var (
 		format string = `0601021504` // kept for legacy fallback
 		sec    string = `05`
 		diff   string = `-0700`
 		raw    string
-		_utc   UTCTime
+		err    error
+		utc,
+		_utc UTCTime
 	)
 
 	switch tv := x.(type) {
 	case string:
-		raw = tv // keep the Z / ±hhmm intact for fast path
+		raw = tv // keep the Z and UTC offset intact for fast path
 	default:
 		err = errorBadTypeForConstructor("UTC TIME", x)
 	}
@@ -137,6 +141,18 @@ func NewUTCTime(x any, constraints ...Constraint) (utc UTCTime, err error) {
 		utc = _utc
 	}
 	return utc, err
+}
+
+/*
+MustNewUTCTime returns an instance of [UTCTime] and panics if [NewUTCTime]
+returned an error during processing of x.
+*/
+func MustNewUTCTime(x any, constraints ...Constraint) UTCTime {
+	b, err := NewUTCTime(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func utcDigit(b byte) bool     { return '0' <= b && b <= '9' }

@@ -15,11 +15,13 @@ import (
 /*
 Integer implements the unbounded ASN.1 INTEGER type (tag 2). Note
 that *[big.Int] is used internally ONLY if the number overflows int64.
+
+A zero instance of this type equates to int64(0).
 */
 type Integer struct {
 	big    bool
-	native int64    // Stores native integer values
-	bigInt *big.Int // Stores big.Int values when necessary
+	native int64    // Stores native integer values when possible
+	bigInt *big.Int // Stores big.Int values only when necessary
 }
 
 /*
@@ -31,24 +33,41 @@ and [CodecConstraintBoth] constants for possible settings.
 var IntegerConstraintPhase = CodecConstraintDecoding
 
 /*
-NewInteger returns an instance of [Integer] supporting any signed
-magnitude.
+NewInteger returns an instance of [Integer] alongside an error
+following an attempt to marshal x as an ASN.1 INTEGER.
 
 Input types may be int, int32, int64, uint64, string, []byte or
 *[math/big.Int]. In the case of []byte, the value is expected to
 be the Big Endian representation of the desired integer.
 
+Any signed magnitude is permitted. Effective integers which overflow
+int64 are stored as *[big.Int].
+
 When the input value is NOT a string and when NO constraints are
 utilized, it is safe to shadow the return error.
+
+See also [MustNewInteger].
 */
-func NewInteger[T any](v T, constraints ...Constraint) (i Integer, err error) {
-	if i, err = assertInteger(v); err == nil {
+func NewInteger[T any](x T, constraints ...Constraint) (i Integer, err error) {
+	if i, err = assertInteger(x); err == nil {
 		if len(constraints) > 0 {
 			err = ConstraintGroup(constraints).Constrain(i)
 		}
 	}
 
 	return
+}
+
+/*
+MustNewInteger returns an instance of [Integer] and panics if [NewInteger]
+returned an error during processing of x.
+*/
+func MustNewInteger[T any](x T, constraints ...Constraint) Integer {
+	i, err := NewInteger(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return i
 }
 
 func assertInteger[T any](v T) (i Integer, err error) {

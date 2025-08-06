@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func TestMustNewVideotexString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewVideotexString(struct{}{})
+}
+
 func TestVideotexString_encodingRules(t *testing.T) {
 	for _, value := range []any{
 		// Simple ASCII

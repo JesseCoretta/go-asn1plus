@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+func TestMustNewReal_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewReal(struct{}{}, 10, -5)
+}
+
 func ExampleReal_String() {
 	r, err := NewReal(314159, 10, -5)
 	if err != nil {

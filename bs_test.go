@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewBitString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewBitString(struct{}{})
+}
+
 func TestBitString(t *testing.T) {
 	for idx, want := range []string{
 		`'10100101'B`,

@@ -37,6 +37,8 @@ var BMPStringConstraintPhase = CodecConstraintDecoding
 /*
 NewBMPString returns an instance of [BMPString] alongside an error following
 an attempt to marshal x.
+
+See also [MustNewBMPString].
 */
 func NewBMPString(x any, constraints ...Constraint) (bmp BMPString, err error) {
 	if tv, ok := x.(BMPString); ok {
@@ -80,6 +82,18 @@ func NewBMPString(x any, constraints ...Constraint) (bmp BMPString, err error) {
 		bmp = _bmp
 	}
 	return
+}
+
+/*
+MustNewBMPString returns an instance of [BMPString] and panics if [NewBMPString]
+returned an error during processing of x.
+*/
+func MustNewBMPString(x any, constraints ...Constraint) BMPString {
+	i, err := NewBMPString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return i
 }
 
 func buildBMP(e string) ([]byte, error) {

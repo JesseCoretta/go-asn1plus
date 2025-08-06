@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewIA5String_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewIA5String(struct{}{})
+}
+
 func TestIA5String_Range(t *testing.T) {
 	// Build a string containing runes from 0x00 to 0xFF.
 	var validRunes []rune

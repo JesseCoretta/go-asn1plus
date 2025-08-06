@@ -82,6 +82,8 @@ When creating an instance of [Real] that describes a positive or negative infini
 use [NewRealPlusInfinity] and [NewRealMinusInfinity] instead of this function.
 
 Only base values of 2, 8, 10 and 16 are currently supported.
+
+See also [MustNewReal].
 */
 func NewReal(mantissa any, base, exponent int, constraints ...Constraint) (Real, error) {
 	var (
@@ -108,6 +110,18 @@ func NewReal(mantissa any, base, exponent int, constraints ...Constraint) (Real,
 	}
 
 	return r, err
+}
+
+/*
+MustNewReal returns an instance of [Real] and panics if [NewReal] returned
+an error during processing of x.
+*/
+func MustNewReal(mantissa any, base, exponent int, constraints ...Constraint) Real {
+	b, err := NewReal(mantissa, base, exponent, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

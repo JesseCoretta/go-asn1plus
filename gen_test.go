@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func TestMustNewGeneralString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewGeneralString(struct{}{})
+}
+
 func ExampleGeneralString() {
 	vs, err := NewGeneralString("Jesse")
 	if err != nil {

@@ -52,8 +52,15 @@ func (r IA5String) IsZero() bool { return len(r) == 0 }
 /*
 IA5String returns an instance of [IA5String] alongside an error following
 an attempt to marshal x.
+
+See also [MustNewIA5String].
 */
-func NewIA5String(x any, constraints ...Constraint) (ia5 IA5String, err error) {
+func NewIA5String(x any, constraints ...Constraint) (IA5String, error) {
+	var (
+		ia5 IA5String
+		err error
+	)
+
 	var raw string
 	switch tv := x.(type) {
 	case string:
@@ -64,7 +71,7 @@ func NewIA5String(x any, constraints ...Constraint) (ia5 IA5String, err error) {
 		raw = tv.String()
 	default:
 		err = errorBadTypeForConstructor("IA5 STRING", x)
-		return
+		return ia5, err
 	}
 
 	_ia5 := IA5String(raw)
@@ -78,7 +85,20 @@ func NewIA5String(x any, constraints ...Constraint) (ia5 IA5String, err error) {
 		ia5 = _ia5
 	}
 
-	return
+	return ia5, err
+}
+
+/*
+MustNewIA5String returns an instance of [IA5String] and
+panics if [NewIA5String] returned an error during processing
+of x.
+*/
+func MustNewIA5String(x any, constraints ...Constraint) IA5String {
+	b, err := NewIA5String(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

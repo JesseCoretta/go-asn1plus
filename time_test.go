@@ -6,6 +6,60 @@ import (
 	"time"
 )
 
+func TestMustNewTime_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewTime(struct{}{})
+}
+
+func TestMustNewDateTime_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewDateTime(struct{}{})
+}
+
+func TestMustNewDate_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewDate(struct{}{})
+}
+
+func TestMustNewTimeOfDay_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewTimeOfDay(struct{}{})
+}
+
+func TestMustNewGeneralizedTime_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewGeneralizedTime(struct{}{})
+}
+
+func TestMustNewDuration_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewDuration(struct{}{})
+}
+
 func ExampleTime_withConstraint() {
 	deadlineConstraint := func(x any) (err error) {
 		o, _ := x.(Temporal)

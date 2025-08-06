@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewOctetString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewOctetString(struct{}{})
+}
+
 func TestOctetString_codecov(_ *testing.T) {
 	o, _ := NewOctetString(`test`)
 	o.Tag()

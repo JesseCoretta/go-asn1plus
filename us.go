@@ -42,6 +42,8 @@ func (r UniversalString) Len() int { return len(r) }
 /*
 NewUniversalString returns an instance of [UniversalString] alongside an
 error following an attempt to marshal x.
+
+See also [MustNewUniversalString].
 */
 func NewUniversalString(x any, constraints ...Constraint) (UniversalString, error) {
 	var (
@@ -71,6 +73,19 @@ func NewUniversalString(x any, constraints ...Constraint) (UniversalString, erro
 	}
 
 	return us, err
+}
+
+/*
+MustNewUniversalString returns an instance of [UniversalString] and
+panics if [NewUniversalString] returned an error during processing
+of x.
+*/
+func MustNewUniversalString(x any, constraints ...Constraint) UniversalString {
+	b, err := NewUniversalString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

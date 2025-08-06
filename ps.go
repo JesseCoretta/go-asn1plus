@@ -65,9 +65,15 @@ func (r PrintableString) IsZero() bool { return len(r) == 0 }
 /*
 NewPrintableString returns an instance of [PrintableString] alongside
 an error following an attempt to marshal x.
+
+See also [MustNewPrintableString].
 */
-func NewPrintableString(x any, constraints ...Constraint) (ps PrintableString, err error) {
-	var raw string
+func NewPrintableString(x any, constraints ...Constraint) (PrintableString, error) {
+	var (
+		ps  PrintableString
+		raw string
+		err error
+	)
 
 	switch tv := x.(type) {
 	case Primitive:
@@ -75,14 +81,14 @@ func NewPrintableString(x any, constraints ...Constraint) (ps PrintableString, e
 	case string:
 		if len(tv) == 0 {
 			err = primitiveErrorf("PrintableString is zero length")
-			return
+			return ps, err
 		}
 		raw = tv
 	case []byte:
 		raw = string(tv)
 	default:
 		err = errorBadTypeForConstructor("PrintableString", x)
-		return
+		return ps, err
 	}
 
 	_ps := PrintableString(raw)
@@ -95,7 +101,20 @@ func NewPrintableString(x any, constraints ...Constraint) (ps PrintableString, e
 		ps = _ps
 	}
 
-	return
+	return ps, err
+}
+
+/*
+MustNewPrintableString returns an instance of [PrintableString] and
+panics if [NewPrintableString] returned an error during processing
+of x.
+*/
+func MustNewPrintableString(x any, constraints ...Constraint) PrintableString {
+	b, err := NewPrintableString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

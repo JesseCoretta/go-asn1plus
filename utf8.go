@@ -50,11 +50,18 @@ RFC 4512].
 
 By default, the [utf8.ValidString] function is used for validation.
 
+See also [MustNewUTF8String].
+
 [ITU-T Rec. X.680]: https://www.itu.int/rec/T-REC-X.680
 [§ 1.4 of RFC 4512]: https://datatracker.ietf.org/doc/html/rfc4512#section-1.4
 */
-func NewUTF8String(x any, constraints ...Constraint) (u8 UTF8String, err error) {
-	var raw string
+func NewUTF8String(x any, constraints ...Constraint) (UTF8String, error) {
+	var (
+		raw string
+		u8  UTF8String
+		err error
+	)
+
 	switch tv := x.(type) {
 	case Primitive:
 		raw = tv.String()
@@ -64,12 +71,12 @@ func NewUTF8String(x any, constraints ...Constraint) (u8 UTF8String, err error) 
 		raw = tv
 	default:
 		err = errorBadTypeForConstructor("UTF-8 STRING", x)
-		return
+		return u8, err
 	}
 
 	if len(raw) == 0 {
 		err = errorNilInput
-		return
+		return u8, err
 	}
 
 	_u8 := UTF8String(raw)
@@ -82,7 +89,19 @@ func NewUTF8String(x any, constraints ...Constraint) (u8 UTF8String, err error) 
 		u8 = _u8
 	}
 
-	return
+	return u8, err
+}
+
+/*
+MustNewUTF8String returns an instance of [UTF8String] and panics if [NewUTF8String]
+returned an error during processing of x.
+*/
+func MustNewUTF8String(x any, constraints ...Constraint) UTF8String {
+	b, err := NewUTF8String(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

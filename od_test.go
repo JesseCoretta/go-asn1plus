@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewObjectDescriptor_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewObjectDescriptor(struct{}{})
+}
+
 func ExampleObjectDescriptor() {
 	vs, err := NewObjectDescriptor("Jesse")
 	if err != nil {

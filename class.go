@@ -363,7 +363,7 @@ The prototype value represents a concrete type to be enforced during subsequent
 The opts (*[Options]) variadic input allows for select parameters to be supplied,
 though at the time of this writing only "Optional" (bool) has any meaning.
 */
-func (k ClassFieldKind) NewField(
+func (r ClassFieldKind) NewField(
 	label string,
 	prototype any, // value that represents a fixed type, or nil if unfixed
 	opts ...*Options,
@@ -387,7 +387,7 @@ func (k ClassFieldKind) NewField(
 
 	return ClassField{
 		Label: label,
-		Kind:  k,
+		Kind:  r,
 		Type:  refTypeOf(prototype),
 		opts:  o,
 	}, nil

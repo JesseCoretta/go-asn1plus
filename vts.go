@@ -35,6 +35,8 @@ var VideotexStringConstraintPhase = CodecConstraintDecoding
 /*
 NewVideotexString returns an instance of [VideotexString] alongside an
 error following an attempt to marshal x.
+
+See also [MustNewVideotexString].
 */
 func NewVideotexString(x any, constraints ...Constraint) (VideotexString, error) {
 	var (
@@ -66,6 +68,18 @@ func NewVideotexString(x any, constraints ...Constraint) (VideotexString, error)
 	}
 
 	return vts, err
+}
+
+/*
+MustNewVideotexString returns an instance of [VideotexString] and panics
+if [NewVideotexString] returned an error during processing of x.
+*/
+func MustNewVideotexString(x any, constraints ...Constraint) VideotexString {
+	b, err := NewVideotexString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

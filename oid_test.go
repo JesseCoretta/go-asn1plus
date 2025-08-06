@@ -7,6 +7,33 @@ import (
 	"testing"
 )
 
+func TestMustNewObjectIdentifierValue_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewObjectIdentifierValue(struct{}{})
+}
+
+func TestMustNewObjectIdentifier_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewObjectIdentifier(struct{}{})
+}
+
+func TestMustNewRelativeOID_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewRelativeOID(struct{}{})
+}
+
 /*
 This example demonstrates the creation of a new [ObjectIdentifierValue]
 instance using parsed text input, followed by calls for name form string

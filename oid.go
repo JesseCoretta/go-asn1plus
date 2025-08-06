@@ -105,6 +105,8 @@ func (r ObjectIdentifierValue) String() string {
 NewObjectIdentifierValue returns an instance of [ObjectIdentifierValue]
 alongside an error following an attempt to marshal x. x may be a string
 or []string instance.
+
+See also [MustNewObjectIdentifierValue].
 */
 func NewObjectIdentifierValue(x any) (ObjectIdentifierValue, error) {
 	var (
@@ -136,6 +138,19 @@ func NewObjectIdentifierValue(x any) (ObjectIdentifierValue, error) {
 		oiv = _oiv
 	}
 	return oiv, err
+}
+
+/*
+MustNewObjectIdentifierValue returns an instance of [ObjectIdentifierValue]
+and panics if [NewObjectIdentifierValue] returned an error during processing
+of x.
+*/
+func MustNewObjectIdentifierValue(x any) ObjectIdentifierValue {
+	b, err := NewObjectIdentifierValue(x)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*
@@ -451,6 +466,19 @@ func NewObjectIdentifier(x ...any) (r ObjectIdentifier, err error) {
 	return
 }
 
+/*
+MustNewObjectIdentifier returns an instance of [ObjectIdentifier] and
+panics if [NewObjectIdentifier] returned an error during processing
+of x.
+*/
+func MustNewObjectIdentifier(x ...any) ObjectIdentifier {
+	b, err := NewObjectIdentifier(x...)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func newObjectIdentifierStr(dot string) (r ObjectIdentifier, err error) {
 	if !isNumericOID(dot) {
 		err = primitiveErrorf("OBJECT IDENTIFIER: invalid OID ", dot)
@@ -754,6 +782,19 @@ func NewRelativeOID(x ...any) (rel RelativeOID, err error) {
 
 	return
 
+}
+
+/*
+MustNewRelativeOID returns an instance of [RelativeOID] and
+panics if [NewRelativeOID] returned an error during processing
+of x.
+*/
+func MustNewRelativeOID(x ...any) RelativeOID {
+	b, err := NewRelativeOID(x...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

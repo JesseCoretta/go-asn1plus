@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewVisibleString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewVisibleString(struct{}{})
+}
+
 func ExampleVisibleString() {
 	vs, err := NewVisibleString("Jesse")
 	if err != nil {

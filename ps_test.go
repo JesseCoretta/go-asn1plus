@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewPrintableString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewPrintableString(struct{}{})
+}
+
 func TestPrintableString_encodingRules(t *testing.T) {
 	for _, input := range []any{
 		"PrintableTest",

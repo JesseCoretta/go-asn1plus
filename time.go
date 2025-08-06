@@ -70,6 +70,8 @@ var TimeConstraintPhase = CodecConstraintDecoding
 /*
 NewTime returns an instance of [Time] alongside an error following an
 attempt to marshal x.
+
+See also [MustNewTime].
 */
 func NewTime(x any, constraints ...Constraint) (Time, error) {
 	var raw string
@@ -103,6 +105,18 @@ func NewTime(x any, constraints ...Constraint) (Time, error) {
 	}
 
 	return tm, err
+}
+
+/*
+MustNewTime returns an instance of [Time] and panics if [NewTime]
+returned an error during processing of x.
+*/
+func MustNewTime(x any, constraints ...Constraint) Time {
+	b, err := NewTime(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*
@@ -272,6 +286,8 @@ var DateConstraintPhase = CodecConstraintDecoding
 /*
 NewDate returns an instance of [Date] alongside an error following an attempt
 to marshal x.
+
+See also [MustNewDate].
 */
 func NewDate(x any, constraints ...Constraint) (Date, error) {
 	var s string
@@ -305,6 +321,18 @@ func NewDate(x any, constraints ...Constraint) (Date, error) {
 	}
 
 	return d, err
+}
+
+/*
+MustNewDate returns an instance of [Date] and panics if [NewDate] returned
+an error during processing of x.
+*/
+func MustNewDate(x any, constraints ...Constraint) Date {
+	b, err := NewDate(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*
@@ -457,6 +485,8 @@ var DateTimeConstraintPhase = CodecConstraintDecoding
 /*
 NewDateTime returns an instance of [DateTime] alongside an error following an
 attempt to marshal x.
+
+See also [MustNewDateTime].
 */
 func NewDateTime(x any, constraints ...Constraint) (DateTime, error) {
 	var s string
@@ -490,6 +520,18 @@ func NewDateTime(x any, constraints ...Constraint) (DateTime, error) {
 	}
 
 	return d, err
+}
+
+/*
+MustNewDateTime returns an instance of [DateTime] and panics if [NewDateTime]
+returned an error during processing of x.
+*/
+func MustNewDateTime(x any, constraints ...Constraint) DateTime {
+	b, err := NewDateTime(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*
@@ -631,6 +673,8 @@ var TimeOfDayConstraintPhase = CodecConstraintDecoding
 /*
 NewDateTime returns an instance of [TimeOfDay] alongside an error following an
 attempt to marshal x.
+
+See also [MustNewTimeOfDay].
 */
 func NewTimeOfDay(x any, constraints ...Constraint) (TimeOfDay, error) {
 	var s string
@@ -664,6 +708,18 @@ func NewTimeOfDay(x any, constraints ...Constraint) (TimeOfDay, error) {
 	}
 
 	return d, err
+}
+
+/*
+MustNewTimeOfDay returns an instance of [TimeOfDay] and panics if [NewTimeOfDay]
+returned an error during processing of x.
+*/
+func MustNewTimeOfDay(x any, constraints ...Constraint) TimeOfDay {
+	b, err := NewTimeOfDay(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // returns a time in UTC with zero date; no allocs, ~60 ns
@@ -831,6 +887,8 @@ instance as input.
 
 Instances of this type DO NOT qualify the [Temporal] interface.
 
+See also [MustNewDuration].
+
 [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 */
 func NewDuration(x any, constraints ...Constraint) (Duration, error) {
@@ -875,6 +933,18 @@ func NewDuration(x any, constraints ...Constraint) (Duration, error) {
 	}
 
 	return r, err
+}
+
+/*
+MustNewDuration returns an instance of [Duration] and panics if [NewDuration]
+returned an error during processing of x.
+*/
+func MustNewDuration(x any, constraints ...Constraint) Duration {
+	b, err := NewDuration(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func checkDurationEmpty(r Duration, err error) error {
@@ -1257,6 +1327,8 @@ func (r GeneralizedTime) IsPrimitive() bool { return true }
 /*
 NewGeneralizedTime returns an instance of [GeneralizedTime] alongside an error
 following an attempt to marshal x.
+
+See also [MustNewGeneralizedTime].
 */
 func NewGeneralizedTime(x any, constraints ...Constraint) (gt GeneralizedTime, err error) {
 	var (
@@ -1289,6 +1361,18 @@ func NewGeneralizedTime(x any, constraints ...Constraint) (gt GeneralizedTime, e
 	}
 
 	return GeneralizedTime(t), err
+}
+
+/*
+MustNewGeneralizedTime returns an instance of [GeneralizedTime] and panics
+if [NewGeneralizedTime] returned an error during processing of x.
+*/
+func MustNewGeneralizedTime(x any, constraints ...Constraint) GeneralizedTime {
+	b, err := NewGeneralizedTime(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // Handle generalizedTime fractional component (up to six (6) digits)

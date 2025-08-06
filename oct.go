@@ -8,9 +8,15 @@ OCTET STRING type.
 /*
 OctetString returns an instance of [OctetString] alongside an error
 following an attempt to marshal x.
+
+See also [MustNewOctetString].
 */
-func NewOctetString(x any, constraints ...Constraint) (oct OctetString, err error) {
-	var str string
+func NewOctetString(x any, constraints ...Constraint) (OctetString, error) {
+	var (
+		str string
+		oct OctetString
+		err error
+	)
 
 	switch tv := x.(type) {
 	case []byte:
@@ -21,7 +27,7 @@ func NewOctetString(x any, constraints ...Constraint) (oct OctetString, err erro
 		str = tv.String()
 	default:
 		err = errorBadTypeForConstructor("OCTET STRING", x)
-		return
+		return oct, err
 	}
 
 	_oct := OctetString(str)
@@ -34,7 +40,20 @@ func NewOctetString(x any, constraints ...Constraint) (oct OctetString, err erro
 		oct = _oct
 	}
 
-	return
+	return oct, err
+}
+
+/*
+MustNewOctetString returns an instance of [OctetString] and
+panics if [NewOctetString] returned an error during processing
+of x.
+*/
+func MustNewOctetString(x any, constraints ...Constraint) OctetString {
+	b, err := NewOctetString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

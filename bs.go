@@ -29,16 +29,23 @@ var BitStringConstraintPhase = CodecConstraintDecoding
 /*
 NewBitString returns an instance of [BitString] alongside an error
 following an attempt to parse x.
+
+See also [MustNewBitString].
 */
-func NewBitString(x any, constraints ...Constraint) (bs BitString, err error) {
-	var raw []byte
+func NewBitString(x any, constraints ...Constraint) (BitString, error) {
+	var (
+		raw []byte
+		bs  BitString
+		err error
+	)
+
 	if raw, err = assertBitString(x); err != nil {
-		return
+		return bs, err
 	}
 
 	var base int
 	if raw, base, err = verifyBitStringContents(raw); err != nil {
-		return
+		return bs, err
 	}
 
 	var bitLen int
@@ -59,7 +66,19 @@ func NewBitString(x any, constraints ...Constraint) (bs BitString, err error) {
 	if err == nil {
 		bs = _bs
 	}
-	return
+	return bs, err
+}
+
+/*
+MustNewBitString returns an instance of [BitString] and panics if [NewBitString]
+returned an error during processing of x.
+*/
+func MustNewBitString(x any, constraints ...Constraint) BitString {
+	b, err := NewBitString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func parseBase2BitString(raw []byte) (bytesOut []byte, bitLen int, err error) {

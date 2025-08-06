@@ -54,9 +54,16 @@ func (r NumericString) IsZero() bool { return len(r) == 0 }
 /*
 NewNumericString returns an instance of [NumericString] alongside
 an error following an attempt to marshal x.
+
+See also [MustNewNumericString].
 */
-func NewNumericString(x any, constraints ...Constraint) (ns NumericString, err error) {
-	var raw string
+func NewNumericString(x any, constraints ...Constraint) (NumericString, error) {
+	var (
+		raw string
+		ns  NumericString
+		err error
+	)
+
 	if raw, err = convertToNumericString(x); err == nil {
 		// Validate that raw contains only digits and space.
 
@@ -71,7 +78,20 @@ func NewNumericString(x any, constraints ...Constraint) (ns NumericString, err e
 			ns = _ns
 		}
 	}
-	return
+	return ns, err
+}
+
+/*
+MustNewNumericString returns an instance of [NumericString] and
+panics if [NewNumericString] returned an error during processing
+of x.
+*/
+func MustNewNumericString(x any, constraints ...Constraint) NumericString {
+	b, err := NewNumericString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

@@ -45,6 +45,15 @@ func ExampleBMPString_roundTripBER() {
 	// Output: Values match: true (HELLO Σ)
 }
 
+func TestMustNewBMPString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewInteger(struct{}{})
+}
+
 func TestBMPString_codecov(t *testing.T) {
 
 	BMPSpec(``)

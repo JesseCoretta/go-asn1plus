@@ -56,7 +56,10 @@ qualified instances from other interfaces of a similar design.
 func (r Enumerated) IsPrimitive() bool { return true }
 
 /*
-NewEnumerated returns an instance of [Enumerated].
+NewEnumerated returns an instance of [Enumerated] alongside an error
+following an attempt to marshal x.
+
+See also [MustNewEnumerated].
 */
 func NewEnumerated(x any, constraints ...Constraint) (enum Enumerated, err error) {
 	var e int
@@ -79,6 +82,18 @@ func NewEnumerated(x any, constraints ...Constraint) (enum Enumerated, err error
 	}
 
 	return
+}
+
+/*
+MustNewEnumerated returns an instance of [Enumerated] and panics if
+[NewEnumerated] returned an error during processing of x.
+*/
+func MustNewEnumerated(x any, constraints ...Constraint) Enumerated {
+	b, err := NewEnumerated(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 type enumeratedCodec[T ~int] struct {

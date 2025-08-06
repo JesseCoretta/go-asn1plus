@@ -23,6 +23,8 @@ var VisibleStringConstraintPhase = CodecConstraintDecoding
 /*
 NewVisibleString returns an instance of [VisibleString] alongside
 an error following an attempt to marshal x.
+
+See also [MustNewVisibleString].
 */
 func NewVisibleString(x any, constraints ...Constraint) (VisibleString, error) {
 	var (
@@ -54,6 +56,19 @@ func NewVisibleString(x any, constraints ...Constraint) (VisibleString, error) {
 	}
 
 	return vs, err
+}
+
+/*
+MustNewVisibleString returns an instance of [VisibleString] and
+panics if [NewVisibleString] returned an error during processing
+of x.
+*/
+func MustNewVisibleString(x any, constraints ...Constraint) VisibleString {
+	b, err := NewVisibleString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

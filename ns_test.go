@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewNumericString_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewNumericString(struct{}{})
+}
+
 func TestConvertToNumericString(t *testing.T) {
 	tests := []struct {
 		name      string

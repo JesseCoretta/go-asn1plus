@@ -68,8 +68,15 @@ func (r Boolean) IsPrimitive() bool { return true }
 /*
 NewBoolean returns an instance of [Boolean] alongside an error following
 an attempt to marshal x.
+
+See also [MustNewBoolean].
 */
-func NewBoolean(x any, constraints ...Constraint) (b Boolean, err error) {
+func NewBoolean(x any, constraints ...Constraint) (Boolean, error) {
+	var (
+		b   Boolean
+		err error
+	)
+
 	switch tv := x.(type) {
 	case Truthy:
 		b = Boolean(tv.Bool())
@@ -99,6 +106,18 @@ func NewBoolean(x any, constraints ...Constraint) (b Boolean, err error) {
 	}
 
 	return b, err
+}
+
+/*
+MustNewBoolean returns an instance of [Boolean] and panics if [NewBoolean]
+returned an error during processing of x.
+*/
+func MustNewBoolean(x any, constraints ...Constraint) Boolean {
+	b, err := NewBoolean(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 type booleanCodec[T Truthy] struct {

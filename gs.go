@@ -26,9 +26,15 @@ var GraphicStringConstraintPhase = CodecConstraintDecoding
 /*
 NewGraphicString returns an instance of [GraphicString] alongside an error
 following attempt to marshal x.
+
+See also [MustNewGraphicString].
 */
-func NewGraphicString(x any, constraints ...Constraint) (gs GraphicString, err error) {
-	var s string
+func NewGraphicString(x any, constraints ...Constraint) (GraphicString, error) {
+	var (
+		s   string
+		gs  GraphicString
+		err error
+	)
 	switch tv := x.(type) {
 	case string:
 		s = tv
@@ -38,21 +44,33 @@ func NewGraphicString(x any, constraints ...Constraint) (gs GraphicString, err e
 		s = tv.String()
 	default:
 		err = errorBadTypeForConstructor("GRAPHIC STRING", x)
-		return
+		return gs, err
 	}
 
 	_gs := GraphicString(s)
 	err = GraphicSpec(_gs)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup = constraints
-		err = group.Constrain(_gs)
+		err = ConstraintGroup(constraints).Constrain(_gs)
 	}
 
 	if err == nil {
 		gs = _gs
 	}
 
-	return
+	return gs, err
+}
+
+/*
+MustNewGraphicString returns an instance of [GraphicString] and
+panics if [NewGraphicString] returned an error during processing
+of x.
+*/
+func MustNewGraphicString(x any, constraints ...Constraint) GraphicString {
+	b, err := NewGraphicString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

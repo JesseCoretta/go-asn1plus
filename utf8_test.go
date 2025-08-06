@@ -7,6 +7,15 @@ import (
 	"unicode/utf8"
 )
 
+func TestMustNewUTF8String_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewUTF8String(struct{}{})
+}
+
 func ExampleUTF8String() {
 	u8, err := NewUTF8String(`this is a UTF-8 string`)
 	if err != nil {

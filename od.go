@@ -25,6 +25,8 @@ var ObjectDescriptorConstraintPhase = CodecConstraintDecoding
 /*
 NewObjectDescriptor returns an instance of [ObjectDescriptor] alongside
 an error following an attempt to marshal x.
+
+See also [MustNewObjectDescriptor].
 */
 func NewObjectDescriptor(x any, constraints ...Constraint) (ObjectDescriptor, error) {
 	var (
@@ -48,8 +50,7 @@ func NewObjectDescriptor(x any, constraints ...Constraint) (ObjectDescriptor, er
 	_od := ObjectDescriptor(str)
 	err = ObjectDescriptorSpec(_od)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup = constraints
-		err = group.Constrain(_od)
+		err = ConstraintGroup(constraints).Constrain(_od)
 	}
 
 	if err == nil {
@@ -57,6 +58,19 @@ func NewObjectDescriptor(x any, constraints ...Constraint) (ObjectDescriptor, er
 	}
 
 	return od, err
+}
+
+/*
+MustNewObjectDescriptor returns an instance of [ObjectDescriptor] and
+panics if [NewObjectDescriptor] returned an error during processing
+of x.
+*/
+func MustNewObjectDescriptor(x any, constraints ...Constraint) ObjectDescriptor {
+	b, err := NewObjectDescriptor(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

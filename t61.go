@@ -57,6 +57,8 @@ T61String returns an instance of [T61String] alongside an error
 following an analysis of x in the context of a Teletex String, per
 [ITU-T Rec. T.61].
 
+See also [MustNewT61String].
+
 [ITU-T Rec. T.61]: https://www.itu.int/rec/T-REC-T.61
 */
 func NewT61String(x any, constraints ...Constraint) (T61String, error) {
@@ -89,6 +91,19 @@ func NewT61String(x any, constraints ...Constraint) (T61String, error) {
 	}
 
 	return t61, err
+}
+
+/*
+MustNewT61String returns an instance of [T61String] and
+panics if [NewT61String] returned an error during processing
+of x.
+*/
+func MustNewT61String(x any, constraints ...Constraint) T61String {
+	b, err := NewT61String(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*

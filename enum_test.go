@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMustNewEnumerated_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewEnumerated(struct{}{})
+}
+
 func TestCustomEnumerated_withControls(t *testing.T) {
 	orig, _ := NewEnumerated(123456, func(any) error {
 		return nil

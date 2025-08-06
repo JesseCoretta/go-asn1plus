@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+func TestMustNewUTCTime_MustPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+		}
+	}()
+	_ = MustNewUTCTime(struct{}{})
+}
+
 func ExampleUTCTime_withConstraint() {
 	deadlineConstraint := func(x any) (err error) {
 		o, _ := x.(Temporal)

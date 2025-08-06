@@ -26,6 +26,8 @@ var GeneralStringConstraintPhase = CodecConstraintDecoding
 /*
 NewGeneralString returns an instance of [GeneralString] alongside an error
 following attempt to marshal x.
+
+See also [MustNewGeneralString].
 */
 func NewGeneralString(x any, constraints ...Constraint) (gen GeneralString, err error) {
 	var s string
@@ -53,6 +55,19 @@ func NewGeneralString(x any, constraints ...Constraint) (gen GeneralString, err 
 	}
 
 	return
+}
+
+/*
+MustNewGeneralString returns an instance of [GeneralString] and
+panics if [NewGeneralString] returned an error during processing
+of x.
+*/
+func MustNewGeneralString(x any, constraints ...Constraint) GeneralString {
+	b, err := NewGeneralString(x, constraints...)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 /*
