@@ -93,7 +93,6 @@ func (r Class) New(
 ) (*ClassInstance, error) {
 	var err error
 
-	// apply options
 	cfg := &classFieldInstanceConfig{
 		parsers: make(map[string]ClassInstanceFieldParser)}
 
@@ -106,14 +105,14 @@ func (r Class) New(
 		Values: make(map[string]any, len(r.Fields)),
 	}
 
-	addV := func(fld ClassField, value any) {
+	addV := func(fld *ClassField, value any) {
 		inst.Values[fld.Label] = value
 		if fld.Label != fld.WithLabel && fld.WithLabel != "" {
 			inst.Values[fld.WithLabel] = value
 		}
 	}
 
-	getP := func(fld ClassField) (p ClassInstanceFieldParser, ok bool) {
+	getP := func(fld *ClassField) (p ClassInstanceFieldParser, ok bool) {
 		if p, ok = cfg.parsers[fld.Label]; !ok {
 			p, ok = cfg.parsers[fld.WithLabel]
 		}
@@ -127,6 +126,8 @@ func (r Class) New(
 			ok    bool
 		)
 
+		ptrFld := r.fieldLUT[fld.Label]
+
 		if raw, ok = vals[fld.Label]; !ok {
 			if raw, ok = vals[fld.WithLabel]; !ok {
 				if !fld.opts.Optional {
@@ -135,20 +136,21 @@ func (r Class) New(
 				}
 				continue
 			}
-			label = fld.WithLabel
 		}
-		if label == "" {
-			label = fld.Label
-		}
+		label = fld.deferLabel()
 
 		// if importer provided a parser, use it
-		if parser, found := getP(fld); found {
+		if parser, found := getP(ptrFld); found {
 			var val any
 			if val, err = parser(raw); err != nil {
 				err = classErrorf(label, " field parser error: ", err)
 				break
 			}
-			addV(fld, val)
+
+			addV(ptrFld, val)
+			if err = r.checkUnique(ptrFld, val, inst); err != nil {
+				break
+			}
 			continue
 		}
 
@@ -161,7 +163,11 @@ func (r Class) New(
 				fld.Type, " type, got ", rt)
 			break
 		}
-		addV(fld, raw)
+
+		addV(ptrFld, raw)
+		if err = r.checkUnique(ptrFld, raw, inst); err != nil {
+			break
+		}
 	}
 
 	return inst, err
@@ -191,6 +197,35 @@ type ClassField struct {
 }
 
 /*
+deferLabel returns the value associated with the "WithLabel" field (if non
+zero), else the value associated with the "Label" field is returned as a
+fallback.
+*/
+func (r ClassField) deferLabel() (label string) {
+	label = r.Label
+	if r.WithLabel != "" {
+		label = r.WithLabel
+	}
+	return
+}
+
+func (r *Class) checkUnique(fld *ClassField, raw any, inst *ClassInstance) (err error) {
+	// If enforced for this field, confirm value uniqueness.
+	if fld.opts.Unique {
+		if _, exists := r.uniqueLUT[fld.Label][raw]; exists {
+			err = classErrorf("uniqueness violation for CLASS ",
+				r.Name, ", field ", fld.Label)
+		} else {
+			r.uniqueLUT[fld.Label][raw] = inst
+			if fld.Label != fld.WithLabel && fld.WithLabel != "" {
+				r.uniqueLUT[fld.WithLabel][raw] = inst
+			}
+		}
+	}
+	return
+}
+
+/*
 Class implements the ASN.1 CLASS template construct. Please note that
 these instances are NOT intended to be encoded like SEQUENCES or SETs,
 rather instances of this type are merely used to create compile-time
@@ -204,16 +239,19 @@ type Class struct {
 	Name   string
 	Fields []ClassField
 
-	fieldLUT map[string]*ClassField
+	fieldLUT  map[string]*ClassField
+	uniqueLUT map[string]map[any]*ClassInstance
 }
 
 /*
 NewClass populates and returns an instance of [Class] alongside an
 error following an attempt to read the input name and [ClassField]
-slices.
+slices. See the [ClassFieldKind.NewField] method for a means of
+creating new instances of [ClassField] for input to this method.
 
 See also the [Class.WithSyntax] method for a means of associating
 alternative names (e.g.: "DESC") with base names (e.g.: "&desc")
+following the successful creation of a [Class] instance.
 */
 func NewClass(name string, fields ...ClassField) (Class, error) {
 	if name == "" {
@@ -235,8 +273,12 @@ func NewClass(name string, fields ...ClassField) (Class, error) {
 	}
 
 	lut := make(map[string]*ClassField, len(fields))
+	uLUT := make(map[string]map[any]*ClassInstance)
 	for i := range fields {
 		lut[fields[i].Label] = &fields[i]
+		if fields[i].opts.Unique {
+			uLUT[fields[i].Label] = make(map[any]*ClassInstance)
+		}
 	}
 	return Class{Name: name, Fields: fields, fieldLUT: lut}, nil
 }
@@ -292,6 +334,9 @@ func (r *Class) WithSyntax(w map[string]string) (err error) {
 
 		field.WithLabel = k   // register alt. name
 		r.fieldLUT[k] = field // add new association to lookup table
+		if field.opts.Unique {
+			r.uniqueLUT[k] = make(map[any]*ClassInstance)
+		}
 	}
 
 	return

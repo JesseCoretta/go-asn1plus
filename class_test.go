@@ -5,6 +5,74 @@ import (
 	"testing"
 )
 
+func TestClassInstance_Unique(t *testing.T) {
+	must := func(cf ClassField, err error) ClassField {
+		if err != nil {
+			panic(err)
+		}
+		return cf
+	}
+
+	// Based on 13.12 of ITU-T rec. X.501 (10/2019).
+	/*
+	   SYNTAX-NAME ::= CLASS {
+	    &desc UTF8String,
+	    &Type,
+	    &id OBJECT IDENTIFIER UNIQUE }
+	   WITH SYNTAX {
+	    DESC &desc
+	    DIRECTORY SYNTAX &Type
+	    ID &id }
+	*/
+
+	optional := &Options{Optional: true}
+	unique := &Options{Unique: true}
+
+	syntax, _ := NewClass("SYNTAX-NAME",
+		must(ClassValueField.NewField("&desc", UTF8String(``), optional)),
+		must(ClassTypeField.NewField("&Type", nil)), // dynamically typed
+		must(ClassValueField.NewField("&id", ObjectIdentifier{}, unique)))
+
+	oidParser := func(x any) (any, error) {
+		return NewObjectIdentifier(x)
+	}
+
+	descParser := func(x any) (any, error) {
+		return NewUTF8String(x)
+	}
+
+	// Make two ClassInstance instances, each bearing the same OID
+	// in violation of the above mandate regarding OID uniqueness.
+
+	// We can shadow both returns of the first instance since we
+	// don't need them.
+	_, _ = syntax.New(
+		map[string]any{
+			"DESC":  "Enhanced Guide",
+			"&Type": struct{}{},
+			"&id":   "1.3.6.1.4.1.1466.115.121.1.21",
+		},
+		syntax.FieldHandler("&desc", descParser), // "DESC"
+		syntax.FieldHandler("ID", oidParser),     // "&id"
+	)
+
+	// Shadow the ClassInstance return, but keep the error just for
+	// confirmation.
+	_, err := syntax.New(
+		map[string]any{
+			"DESC":  "Duplicate Enhanced Guide",
+			"&Type": struct{}{},
+			"&id":   "1.3.6.1.4.1.1466.115.121.1.21", // should VIOLATE uniqueness
+		},
+		syntax.FieldHandler("&desc", descParser), // "DESC"
+		syntax.FieldHandler("ID", oidParser),     // "&id"
+	)
+
+	if err == nil {
+		t.Fatalf("%s failed: expected ClassInstance duplication error, got nil", t.Name())
+	}
+}
+
 /*
 This example demonstrates a basic X.501 SYNTAX-NAME implementation
 using the EnhancedGuide syntax. In particular, the creation of the

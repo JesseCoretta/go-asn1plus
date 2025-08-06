@@ -32,6 +32,13 @@ type Options struct {
 	// "optional" keyword during field parsing.
 	Optional bool
 
+	// If true, the field is monitored for uniqueness.
+	//
+	// Note that this only has any meaning when dealing
+	// with ClassInstance fields, and does not apply to
+	// bare primitives nor SEQUENCEs or SETs.
+	Unique bool
+
 	// If true, the field must be nil AND a pointer type.
 	Absent bool
 
