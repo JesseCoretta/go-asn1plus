@@ -6,11 +6,107 @@ import (
 )
 
 /*
+This example demonstrates a basic X.501 SYNTAX-NAME implementation
+using the EnhancedGuide syntax. In particular, the creation of the
+"SYNTAX-NAME" [Class] demonstrates the use of <nil> as a prototype,
+which the package interprets as an intent to use any type in the
+subsequent creation of [ClassInstance] instances.
+
+Note that errors are shadowed in this example for brevity.
+*/
+func ExampleClassInstance_syntaxFromTemplate() {
+	// panicky field constructor for convenience.
+	must := func(cf ClassField, err error) ClassField {
+		if err != nil {
+			panic(err)
+		}
+		return cf
+	}
+
+	// Based on 13.12 of ITU-T rec. X.501 (10/2019).
+	/*
+		SYNTAX-NAME ::= CLASS {
+		 &desc UTF8String,
+		 &Type,
+		 &id OBJECT IDENTIFIER UNIQUE }
+		WITH SYNTAX {
+		 DESC &desc
+		 DIRECTORY SYNTAX &Type
+		 ID &id }
+	*/
+
+	optional := &Options{Optional: true}
+
+	syntax, _ := NewClass("SYNTAX-NAME",
+		must(ClassValueField.NewField("&desc", UTF8String(``), optional)),
+		// nil == allow any type in a derived ClassInstance
+		must(ClassTypeField.NewField("&Type", nil)),
+		must(ClassValueField.NewField("&id", ObjectIdentifier{})))
+
+	// Engage 'WITH SYNTAX' support
+	_ = syntax.WithSyntax(map[string]string{
+		"DESC":             "&desc",
+		"DIRECTORY SYNTAX": "&Type",
+		"ID":               "&id",
+	})
+
+	// Wrap the standard OID constructor
+	// for the "&id" field.
+	oidParser := func(x any) (any, error) {
+		return NewObjectIdentifier(x)
+	}
+
+	// Wrap the standard UTF-8 string constructor
+	// for the "&desc" field.
+	descParser := func(x any) (any, error) {
+		return NewUTF8String(x)
+	}
+
+	// this is just a dummy type per 9.2.11 of ITU-T
+	// rec X.520 (Enhanced Guide syntax), and is used
+	// solely for demonstration purposes here.
+	type EnhancedGuide struct {
+		ObjectClass string
+		Criteria    any
+		Subset      int
+	}
+
+	eGuide, _ := syntax.New(
+		// Set some values of interest. Here, we use
+		// alternative names declared via WithSyntax
+		// above, mixed with some base names.
+		/*
+			enhancedGuide SYNTAX-NAME ::= {
+			 DESC "Enhanced Guide"
+			 DIRECTORY SYNTAX EnhancedGuide
+			 ID id-lsx-enhancedGuide }
+		*/
+		map[string]any{
+			"DESC":  "Enhanced Guide",                // "DESC" ("&desc")
+			"&Type": (*EnhancedGuide)(nil),           // "DIRECTORY SYNTAX"
+			"&id":   "1.3.6.1.4.1.1466.115.121.1.21", // "ID"
+		},
+		syntax.FieldHandler("&desc", descParser), // "DESC"
+		syntax.FieldHandler("ID", oidParser),     // "&id"
+	)
+
+	// Grab the values of interest. Here, we use the
+	// alternative names declared via WithSyntax
+	// above, mixed with some base names.
+	desc, _ := eGuide.Field(`&desc`)           // (or "DESC")
+	oid, _ := eGuide.Field(`ID`)               // (or "&id")
+	typ, _ := eGuide.Field(`DIRECTORY SYNTAX`) // (or "&Type")
+
+	fmt.Printf("%s syntax (%s) expects type %T", desc.(UTF8String), oid.(ObjectIdentifier), typ)
+	// Output: Enhanced Guide syntax (1.3.6.1.4.1.1466.115.121.1.21) expects type *asn1plus.EnhancedGuide
+}
+
+/*
 This example demonstrates the instantiation of an instance of the X.501
 ATTRIBUTE class. The resultant instance represents the official 'name'
 attribute type (name, 2.5.4.41) as defined in section 2.18 of RFC 4519.
 */
-func ExampleClassInstance_fromTemplate() {
+func ExampleClassInstance_attributeFromTemplate() {
 	// panicky field constructor for convenience.
 	must := func(cf ClassField, err error) ClassField {
 		if err != nil {
@@ -37,22 +133,24 @@ func ExampleClassInstance_fromTemplate() {
 	// Note that this need only be done once. We shadow the
 	// error here simply for brevity.
 
+	optional := &Options{Optional: true}
+
 	tmpl, _ := NewClass("ATTRIBUTE",
-		must(ClassObjectField.NewField("&derivation", (*AttributeType)(nil), true)),
-		must(ClassTypeField.NewField("&Type", (*AttributeType)(nil), true)),
-		must(ClassObjectField.NewField("&equality-match", (*MatchingRule)(nil), true)),
-		must(ClassObjectField.NewField("&ordering-match", (*MatchingRule)(nil), true)),
-		must(ClassObjectField.NewField("&substrings-match", (*MatchingRule)(nil), true)),
-		must(ClassValueField.NewField("&single-valued", false, true)),
-		must(ClassValueField.NewField("&collective", false, true)),
-		must(ClassValueField.NewField("&dummy", false, true)),
-		must(ClassValueField.NewField("&no-user-modification", false, true)),
-		must(ClassValueField.NewField("&usage", AttributeUsage(0), true)),
-		must(ClassValueField.NewField("&ldapSyntax", (*LDAPSyntax)(nil), true)),
-		must(ClassValueField.NewField("&ldapName", []string{}, true)),
-		must(ClassValueField.NewField("&ldapDesc", "", true)),
-		must(ClassValueField.NewField("&obsolete", false, true)),
-		must(ClassValueField.NewField("&id", ObjectIdentifier{}, false)),
+		must(ClassObjectField.NewField("&derivation", (*AttributeType)(nil), optional)),
+		must(ClassTypeField.NewField("&Type", (*AttributeType)(nil), optional)),
+		must(ClassObjectField.NewField("&equality-match", (*MatchingRule)(nil), optional)),
+		must(ClassObjectField.NewField("&ordering-match", (*MatchingRule)(nil), optional)),
+		must(ClassObjectField.NewField("&substrings-match", (*MatchingRule)(nil), optional)),
+		must(ClassValueField.NewField("&single-valued", false, optional)),
+		must(ClassValueField.NewField("&collective", false, optional)),
+		must(ClassValueField.NewField("&dummy", false, optional)),
+		must(ClassValueField.NewField("&no-user-modification", false, optional)),
+		must(ClassValueField.NewField("&usage", AttributeUsage(0), optional)),
+		must(ClassValueField.NewField("&ldapSyntax", (*LDAPSyntax)(nil), optional)),
+		must(ClassValueField.NewField("&ldapName", []string{}, optional)),
+		must(ClassValueField.NewField("&ldapDesc", "", optional)),
+		must(ClassValueField.NewField("&obsolete", false, optional)),
+		must(ClassValueField.NewField("&id", ObjectIdentifier{})),
 	)
 
 	// OPTIONAL: we can define parsers for individual
@@ -137,8 +235,8 @@ func ExampleClassInstance_fromTemplate() {
 
 	// Grab the values of interest. Once again, we shadow
 	// error for brevity.
-	name, _ := Name.Field(`ldapName`)
-	oid, _ := Name.Field(`id`)
+	name, _ := Name.Field(`&ldapName`)
+	oid, _ := Name.Field(`&id`)
 
 	fmt.Printf("%s (%s)", name.([]string)[0], oid.(ObjectIdentifier))
 	// Output: name (2.5.4.41)
@@ -164,14 +262,16 @@ func ExampleClass_objectClass() {
 		ObjectClassKind int // 0 = structural, 1 = auxiliary, 2 = abstract
 	)
 
+	optional := &Options{Optional: true}
+
 	obj, err := NewClass("OBJECT-CLASS",
-		must(ClassObjectField.NewField("&superClasses", SuperClasses{}, true)),
-		must(ClassValueField.NewField("&kind", ObjectClassKind(0), true)),
-		must(ClassTypeField.NewField("&mandatoryAttributes", Mandatory{}, true)),
-		must(ClassTypeField.NewField("&optionalAttributes", Optional{}, true)),
-		must(ClassValueField.NewField("&ldapName", []string{}, true)),
-		must(ClassValueField.NewField("&ldapDesc", "", true)),
-		must(ClassValueField.NewField("&id", ObjectIdentifier{}, false)),
+		must(ClassObjectField.NewField("&SuperClasses", SuperClasses{}, optional)),
+		must(ClassValueField.NewField("&kind", ObjectClassKind(0), optional)),
+		must(ClassTypeField.NewField("&MandatoryAttributes", Mandatory{}, optional)),
+		must(ClassTypeField.NewField("&OptionalAttributes", Optional{}, optional)),
+		must(ClassValueField.NewField("&ldapName", []string{}, optional)),
+		must(ClassValueField.NewField("&ldapDesc", "", optional)),
+		must(ClassValueField.NewField("&id", ObjectIdentifier{})),
 	)
 
 	if err != nil {
@@ -184,47 +284,65 @@ func ExampleClass_objectClass() {
 }
 
 func TestClass(t *testing.T) {
+	tname := t.Name()
 	must := func(cf ClassField, err error) ClassField {
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("%s failed: unexpected error: %v", tname, err)
 		}
 		return cf
 	}
 
-	valCF := must(ClassValueField.NewField("&answer", 42, false))
-	dupeCF := must(ClassValueField.NewField("&answer", 42, false))
-	objCF := must(ClassObjectField.NewField("&ptr", (*struct{})(nil), true))
+	valCF := must(ClassValueField.NewField("&answer", 42))
+	dupeCF := must(ClassValueField.NewField("&answer", 42))
+	objCF := must(ClassObjectField.NewField("&ptr", (*struct{})(nil), &Options{Optional: true}))
 
 	cl, err := NewClass("TEST-CLASS", valCF, objCF)
 	if err != nil {
-		t.Fatalf("NewClass failed: %v", err)
+		t.Fatalf("%s failed: NewClass failed: %v", tname, err)
 	}
 
 	if _, err = NewClass(""); err == nil {
-		t.Fatalf("Unnamed CLASS generated no error")
+		t.Fatalf("%s failed: Unnamed CLASS generated no error", tname)
 	}
 
 	_, err = NewClass("DUPLICATE-FIELD-CLASS", valCF, dupeCF, objCF)
 	if err == nil {
-		t.Fatalf("Duplicate CLASS field generated no error")
+		t.Fatalf("%s failed: Duplicate CLASS field generated no error", tname)
 	}
 
 	got, ok := cl.Field("&answer")
 	if !ok || !deepEq(*got, valCF) {
-		t.Fatalf("Field lookup mismatch: ok=%v got=%+v want=%+v", ok, got, valCF)
+		t.Fatalf("%s Field lookup mismatch: ok=%v got=%+v want=%+v",
+			tname, ok, got, valCF)
 	}
 
-	cl = cl.WithSyntax("ID &answer")
-	if cl.Syntax != "ID &answer" {
-		t.Fatalf("WithSyntax failed: got %q", cl.Syntax)
+	if err = cl.WithSyntax(map[string]string{
+		"ANSWER":  "&answer",
+		"POINTER": "&ptr",
+	}); err != nil {
+		t.Fatalf("%s failed [WithSyntax]: %v", tname, err)
 	}
 
-	if _, err := ClassValueField.NewField("bad", 1, false); err == nil {
-		t.Fatalf("expected error for label without leading '&'")
+	altLabel := "ANSWER"
+	field, _ := cl.Field(altLabel)
+	if field == nil {
+		t.Fatalf("%s failed [WithSyntax]: failed to find field %s", tname, altLabel)
 	}
 
-	if _, err := ClassValueField.NewField("&nilProto", nil, false); err == nil {
-		t.Fatalf("expected error for nil prototype")
+	// coverage
+	for idx, bogus := range []map[string]string{
+		{"BOGUS": "&bogus"},
+		{"BOGUS": "bogus"},
+		{"ANSWER": "bogus"},
+		{"BOGUS": "ANSWER"},
+	} {
+		if err = cl.WithSyntax(bogus); err == nil {
+			t.Fatalf("%s[%d] failed [WithSyntax]: expected error for bogus map, got nil", tname, idx)
+		}
+	}
+
+	if _, err := ClassValueField.NewField("bad", 1); err == nil {
+		t.Fatalf("%s failed: expected error for label without leading '&'", tname)
 	}
 
 	badLabelField := ClassField{
@@ -233,11 +351,11 @@ func TestClass(t *testing.T) {
 		Type:  refTypeOf(0), // any non-nil type
 	}
 	if _, err := NewClass("BAD1", badLabelField); err == nil {
-		t.Fatalf("expected error for field label without '&'")
+		t.Fatalf("%s failed: expected error for field label without '&'", tname)
 	}
 
-	_, _ = ClassObjectField.NewField("", nil, false)
-	_, _ = ClassObjectField.NewField("", nil, false)
+	_, _ = ClassObjectField.NewField("", nil)
+	_, _ = ClassObjectField.NewField("", nil)
 
 	nilTypeField := ClassField{
 		Label: "&noType",
@@ -245,6 +363,6 @@ func TestClass(t *testing.T) {
 		Type:  nil,
 	}
 	if _, err := NewClass("BAD2", nilTypeField); err == nil {
-		t.Fatalf("expected error for field with nil Typ")
+		t.Fatalf("%s failed: expected error for field with nil Typ", tname)
 	}
 }

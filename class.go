@@ -21,11 +21,9 @@ type ClassInstance struct {
 
 /*
 Field returns the value associated with label. Case folding is
-significant in the matching process, however the field label
-need not include the ampersand (&) prefix.
+significant in the matching process.
 */
 func (r ClassInstance) Field(label string) (any, bool) {
-	label = classFieldLabelPrependAmp(label)
 	out, found := r.Values[label]
 	return out, found
 }
@@ -59,15 +57,15 @@ a [ClassInstanceFieldHandler].
 
 If the input label is not found within the receiver instance, a
 dummy [ClassInstanceFieldHandler] containing an error is returned.
-Note that while case folding is significant in the matching process,
-the field label need not include the ampersand (&) prefix.
+Case folding is significant in the matching process. Note that the
+label value may represent a base field name (e.g.: "&id") or an
+alternative 'WITH SYNTAX' label (e.g.: "ID").
 
 Instances of this type are used as input to the [Class.New] method,
 should the associated field require special handling and/or validity
 checks.
 */
 func (r Class) FieldHandler(label string, p ClassInstanceFieldParser) ClassInstanceFieldHandler {
-	label = classFieldLabelPrependAmp(label)
 	if _, found := r.Field(label); !found {
 		// Bogus field; replace the input parser
 		// with a dummy that contains an error.
@@ -108,34 +106,62 @@ func (r Class) New(
 		Values: make(map[string]any, len(r.Fields)),
 	}
 
+	addV := func(fld ClassField, value any) {
+		inst.Values[fld.Label] = value
+		if fld.Label != fld.WithLabel && fld.WithLabel != "" {
+			inst.Values[fld.WithLabel] = value
+		}
+	}
+
+	getP := func(fld ClassField) (p ClassInstanceFieldParser, ok bool) {
+		if p, ok = cfg.parsers[fld.Label]; !ok {
+			p, ok = cfg.parsers[fld.WithLabel]
+		}
+		return
+	}
+
 	for _, fld := range r.Fields {
-		raw, ok := vals[fld.Label]
-		if !ok {
-			if !fld.Opt {
-				err = classErrorf("missing mandatory field ", fld.Label)
-				break
+		var (
+			label string
+			raw   any
+			ok    bool
+		)
+
+		if raw, ok = vals[fld.Label]; !ok {
+			if raw, ok = vals[fld.WithLabel]; !ok {
+				if !fld.opts.Optional {
+					err = classErrorf("missing mandatory field ", fld.Label)
+					break
+				}
+				continue
 			}
-			continue
+			label = fld.WithLabel
+		}
+		if label == "" {
+			label = fld.Label
 		}
 
 		// if importer provided a parser, use it
-		if parser, found := cfg.parsers[fld.Label]; found {
+		if parser, found := getP(fld); found {
 			var val any
 			if val, err = parser(raw); err != nil {
-				err = classErrorf(fld.Label, " field parser error: ", err)
+				err = classErrorf(label, " field parser error: ", err)
 				break
 			}
-			inst.Values[fld.Label] = val
+			addV(fld, val)
 			continue
 		}
 
-		// default: simple type‐check
-		if rt := refTypeOf(raw); rt != fld.Type {
-			err = classErrorf("field ", fld.Label, ": expected ",
+		// Check if the registered type is a dynType instance,
+		// which indicates the user passed nil as a prototype
+		// during the original CLASS template creation. If so,
+		// allow any type.
+		if rt := refTypeOf(raw); rt != fld.Type && refDynType != fld.Type {
+			err = classErrorf("field ", label, ": expected ",
 				fld.Type, " type, got ", rt)
 			break
 		}
-		inst.Values[fld.Label] = raw
+		addV(fld, raw)
 	}
 
 	return inst, err
@@ -157,10 +183,11 @@ const (
 ClassField defines a single field ("row") in a [Class] template instance.
 */
 type ClassField struct {
-	Label string
-	Kind  ClassFieldKind
-	Type  reflect.Type
-	Opt   bool // OPTIONAL / DEFAULT
+	Label, // base label
+	WithLabel string // WITH SYNTAX label
+	Kind ClassFieldKind
+	Type reflect.Type
+	opts *Options
 }
 
 /*
@@ -176,15 +203,17 @@ means to create any associated [ClassInstance] instances.
 type Class struct {
 	Name   string
 	Fields []ClassField
-	Syntax string // for WITH SYNTAX
 
 	fieldLUT map[string]*ClassField
 }
 
 /*
-NewClass populates and returns an instance of [Class]
-alongside an error following an attempt to read the input name and
-[ClassField] slices.
+NewClass populates and returns an instance of [Class] alongside an
+error following an attempt to read the input name and [ClassField]
+slices.
+
+See also the [Class.WithSyntax] method for a means of associating
+alternative names (e.g.: "DESC") with base names (e.g.: "&desc")
 */
 func NewClass(name string, fields ...ClassField) (Class, error) {
 	if name == "" {
@@ -213,11 +242,59 @@ func NewClass(name string, fields ...ClassField) (Class, error) {
 }
 
 /*
-WithSyntax allows the assignment of a SYNTAX value in fluent form.
+WithSyntax returns an error following an attempt to parse an instance of
+map[string]string, which serves as the abstraction for the "WITH SYNTAX"
+ASN.1 keyword for the purpose of associating alternative names to CLASS
+fields.
+
+The syntax for w is ALT-LABEL (key) -> AMP-LABEL (value), e.g.:
+
+	map[string]string{
+	  "DIRECTORY SYNTAX": "&Type",
+	  ...
+	}
+
+A non-nil error is returned if the AMP-LABEL is not found, or if w
+does not contain the exact number of keys as fields in r.
+
+Permitted characters for an ALT-LABEL are effectively the same as
+ordinary ASN.1 identifiers, except that support for SPACE is included,
+so long as it is neither trailing nor leading, and is non-consecutive.
 */
-func (r Class) WithSyntax(s string) Class {
-	r.Syntax = s
-	return r
+func (r *Class) WithSyntax(w map[string]string) (err error) {
+	lf, lw := len(r.Fields), len(w)
+	if lf != lw {
+		err = classErrorf("CLASS 'WITH SYNTAX' length mismatch: want ",
+			lf, ", got ", lw)
+		return
+	}
+
+	for k, v := range w {
+		if _, found := r.Field(k); found {
+			err = classErrorf("Duplicate 'WITH SYNTAX' field '", k, "'")
+			break
+		} else if hasPfx(k, "&") {
+			err = classErrorf("Invalid 'WITH SYNTAX' field '",
+				k, "': alt. label must not begin with '&'")
+			break
+		} else if !hasPfx(v, "&") {
+			err = classErrorf("Invalid 'WITH SYNTAX' source '",
+				v, "': reference must begin with '&'")
+			break
+		}
+
+		field, found := r.Field(v)
+		if !found {
+			err = classErrorf("Unknown field '", v,
+				"' in ", r.Name, " CLASS (WITH SYNTAX)")
+			break
+		}
+
+		field.WithLabel = k   // register alt. name
+		r.fieldLUT[k] = field // add new association to lookup table
+	}
+
+	return
 }
 
 /*
@@ -231,11 +308,20 @@ func (r Class) Field(label string) (*ClassField, bool) {
 
 /*
 NewField returns a new instance of [ClassField] based upon the receiver value.
+
+The input label value must start with '&' and represents the base name of the
+[Class] field.
+
+The prototype value represents a concrete type to be enforced during subsequent
+[ClassInstance] use, or nil if there is more than one possible concrete type.
+
+The opts (*[Options]) variadic input allows for select parameters to be supplied,
+though at the time of this writing only "Optional" (bool) has any meaning.
 */
 func (k ClassFieldKind) NewField(
-	label string, // Name of field (must start with '&')
-	prototype any, // value that represents the type (e.g. OID{} or (*T)(nil))
-	opt bool, // OPTIONAL / DEFAULT flag
+	label string,
+	prototype any, // value that represents a fixed type, or nil if unfixed
+	opts ...*Options,
 ) (ClassField, error) {
 
 	if label == "" {
@@ -244,15 +330,23 @@ func (k ClassFieldKind) NewField(
 	if !hasPfx(label, "&") {
 		return ClassField{}, classErrorf("ClassField ", label, ": must start with ‘&’")
 	}
+
 	if prototype == nil {
-		return ClassField{}, classErrorf("ClassField ", label, ": nil prototype")
+		prototype = dynType{}
 	}
 
-	rt := refTypeOf(prototype)
+	o := deferImplicit(nil)
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
 	return ClassField{
 		Label: label,
 		Kind:  k,
-		Type:  rt,
-		Opt:   opt,
+		Type:  refTypeOf(prototype),
+		opts:  o,
 	}, nil
 }
+
+type dynType struct{} // for when a CLASS &Type is unfixed, such as with X.501 SYNTAX-NAME instances
+var refDynType = refTypeOf(dynType{})
