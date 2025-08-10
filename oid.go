@@ -121,11 +121,29 @@ func NewObjectIdentifierValue(x any) (ObjectIdentifierValue, error) {
 	case []string:
 		nfs = tv
 	default:
-		err = generalErrorf("Unsupported ", x, " input type for ObjectIdentifierValue")
+		err = generalErrorf("ObjectIdentifierValue: Unsupported input type", x)
 		return oiv, err
 	}
 
-	// prepare temporary instance
+	// Ensure at least one arc resides within the slice type.
+	if len(nfs) == 0 {
+		err = errorMinOIDArcs
+		return oiv, err
+	}
+
+	// If the input has a nameForm as the first element (with
+	// NO number form), ensure it matches the known root names.
+	// If so, replace this "shorthand" with the fully qualified
+	// NameAndNumberForm. If unknown, we die here.
+	if !cntns(nfs[0], `(`) {
+		nf, found := oivRoots[nfs[0]]
+		if !found {
+			err = generalErrorf("ObjectIdentifierValue: unknown root ", nfs[0])
+			return oiv, err
+		}
+		nfs[0] += `(` + itoa(nf) + `)`
+	}
+
 	var _oiv ObjectIdentifierValue
 	for i := 0; i < len(nfs) && err == nil; i++ {
 		var nanf NameAndNumberForm
@@ -205,6 +223,14 @@ func (r NameAndNumberForm) String() string {
 	return n
 }
 
+/*
+NewNameAndNumberForm returns an instance of [NameAndNumberForm]
+alongside an error following an attempt to marshal x.
+
+This function is not normally needed by the end user, and only
+exists to be used in iterative fashion by [NewObjectIdentifierValue]
+and [MustNewObjectIdentifierValue].
+*/
 func NewNameAndNumberForm(x string) (NameAndNumberForm, error) {
 	var (
 		r   NameAndNumberForm
@@ -221,9 +247,7 @@ func NewNameAndNumberForm(x string) (NameAndNumberForm, error) {
 		// name). If this is the case, parse as an
 		// integer by itself, else throw an error.
 		var n Integer
-		if n, err = NewInteger(x); err != nil {
-			err = errorNameAndNumberFormParen
-		} else {
+		if n, err = newNumberForm(x); err == nil {
 			r = NameAndNumberForm{
 				numberForm: n,
 				parsed:     true,
@@ -242,7 +266,7 @@ func NewNameAndNumberForm(x string) (NameAndNumberForm, error) {
 	}
 
 	var n Integer
-	if n, err = NewInteger(x[idx+1 : len(x)-1]); err == nil {
+	if n, err = newNumberForm(x[idx+1 : len(x)-1]); err == nil {
 		// Parse/verify what appears to be the
 		// identifier string value.
 		if id := x[:idx]; !isNameForm(id) {
@@ -259,6 +283,21 @@ func NewNameAndNumberForm(x string) (NameAndNumberForm, error) {
 	}
 
 	return r, err
+}
+
+/*
+newNumberForm returns an [Integer] alongside an error following
+an attempt to marshal x. This function incorporates the Unsigned
+[Constraint] to ensure non-negative arcs.
+*/
+func newNumberForm(x string) (nf Integer, err error) {
+	nf, err = NewInteger(x, func(X any) (err error) {
+		if i, ok := X.(Integer); ok && i.Lt(0) {
+			err = errorNumberFormNegative
+		}
+		return
+	})
+	return
 }
 
 /*

@@ -34,13 +34,32 @@ func TestMustNewRelativeOID_MustPanic(t *testing.T) {
 	_ = MustNewRelativeOID(struct{}{})
 }
 
+func ExampleMustNewRelativeOID() {
+	rel := MustNewRelativeOID(4, 1, 56521)
+	fmt.Println(rel)
+	// Output: 4.1.56521
+}
+
+func ExampleMustNewObjectIdentifier() {
+	oid := MustNewObjectIdentifier(1, 3, 6, 1)
+	fmt.Println(oid)
+	// Output: 1.3.6.1
+}
+
+func ExampleMustNewObjectIdentifierValue() {
+	raw := `{ iso identified-organization(3) 6 1 4 1 56521 }`
+	oiv := MustNewObjectIdentifierValue(raw)
+	fmt.Println(oiv)
+	// Output: {iso(1) identified-organization(3) 6 1 4 1 56521}
+}
+
 /*
 This example demonstrates the creation of a new [ObjectIdentifierValue]
 instance using parsed text input, followed by calls for name form string
 representation.
 */
 func ExampleObjectIdentifierValue() {
-	raw := `{ iso(1) identified-organization(3) 6 1 4 1 56521 }`
+	raw := `{ iso identified-organization(3) 6 1 4 1 56521 }`
 	oiv, err := NewObjectIdentifierValue(raw)
 	if err != nil {
 		fmt.Println(err)
@@ -65,6 +84,18 @@ func ExampleObjectIdentifierValue() {
 	// OIV: {iso(1) identified-organization(3) 6 1 4 1 56521}
 	// OID: 1.3.6.1.4.1.56521
 	// NANF: identified-organization(3)
+}
+
+func TestNewObjectIdentifierValue_Bogus(t *testing.T) {
+	for idx, oiv := range []string{
+		`{ iSo identified-organization(3) 6 1 4 1 56521 }`,
+		`{ bogus identified-organization(3) }`,
+		`{ iso(1) identified-organization(-3) }`,
+	} {
+		if _, err := NewObjectIdentifierValue(oiv); err == nil {
+			t.Fatalf("%s[%d] failed: expected error, got nil", t.Name(), idx)
+		}
+	}
 }
 
 /*
@@ -276,6 +307,8 @@ func TestObjectIdentifier_codecov(_ *testing.T) {
 	o.IntSlice()
 	o.IsPrimitive()
 	o.Uint64Slice()
+
+	newNumberForm(`barf`)
 
 	_, _ = NewObjectIdentifier(`JERRY. HELLO.`)
 	_, _ = NewObjectIdentifier(struct{}{})
