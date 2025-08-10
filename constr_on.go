@@ -9,6 +9,20 @@ import (
 )
 
 /*
+Unsigned implements an [Integer] [Constraint] which prohibits negative numbers.
+This closure instance is intended to be passed as a variadic argument to the
+[NewInteger] and [MustNewInteger] functions.
+*/
+func Unsigned(x any) (err error) {
+	if i, ok := x.(Integer); !ok {
+		err = primitiveErrorf("Invalid Integer")
+	} else if i.Lt(0) {
+		err = errorNegativeInteger
+	}
+	return
+}
+
+/*
 Union returns an instance of [Constraint] which checks if at least one (1)
 of the provided constraints is satisfied. Essentially, this is an "OR"ed
 operation.
