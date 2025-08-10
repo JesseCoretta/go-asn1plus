@@ -76,10 +76,11 @@ var (
 primitive errors
 */
 var (
-	errorMinOIDArcs    = primitiveErrorf("OBJECT IDENTIFIER: an OID must have two (2) or more number forms")
-	errorMinRelOIDArcs = primitiveErrorf("RELATIVE-OID must have at least one arc")
-	errorBadUTCTime    = primitiveErrorf("UTCTime is invalid")
-	errorBadGT         = primitiveErrorf("GeneralizedTime is invalid")
+	errorNegativeInteger = primitiveErr{mkerr("Integer is negative")}
+	errorMinOIDArcs      = primitiveErr{mkerr("OBJECT IDENTIFIER: an OID must have two (2) or more number forms")}
+	errorMinRelOIDArcs   = primitiveErr{mkerr("RELATIVE-OID must have at least one arc")}
+	errorBadUTCTime      = primitiveErr{mkerr("UTCTime is invalid")}
+	errorBadGT           = primitiveErr{mkerr("GeneralizedTime is invalid")}
 )
 
 /*
@@ -100,6 +101,7 @@ var (
 	errorBadNameForm                 = generalErr{mkerr("OBJECT IDENTIFIER VALUE: name form syntax must conform to: LOWER *[ [-] +[ UPPER / LOWER / DIGIT ] ]")}
 	errorNameAndNumberFormParen      = generalErr{mkerr("OBJECT IDENTIFIER VALUE: missing opening and/or closing parenthesis in nameAndNumberForm")}
 	errorZeroLengthNameAndNumberForm = generalErr{mkerr("OBJECT IDENTIFIER VALUE: zero length nameAndNumberForm")}
+	errorNumberFormNegative          = generalErr{mkerr("OBJECT IDENTIFIER VALUE: number form is negative")}
 )
 
 /*
