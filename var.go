@@ -156,6 +156,15 @@ var classKeywords = map[string]struct{}{
 	"private":          {},
 }
 
+var oivRoots = map[string]int{
+	`itu-t`:           0,
+	`itu-r`:           0,
+	`ccitt`:           0,
+	`iso`:             1,
+	`joint-iso-itu-t`: 2,
+	`joint-iso-ccitt`: 2,
+}
+
 const (
 	zeroByte   = 0x00 // zero byte
 	longByte   = 0x1F // long-form tag marker
