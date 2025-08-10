@@ -24,6 +24,7 @@ var (
 	errorNoDataAtOffset       error = mkerr("no data available at offset ")
 	errorTruncDefLen          error = mkerr("definite length value truncated")
 	errorBadLength            error = mkerr("error reading length")
+	errorNoPanic              error = mkerr("expected panic, got success")
 )
 
 /*

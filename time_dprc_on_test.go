@@ -11,7 +11,7 @@ import (
 func TestMustNewUTCTime_MustPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
 		}
 	}()
 	_ = MustNewUTCTime(struct{}{})

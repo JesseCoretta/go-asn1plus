@@ -410,7 +410,7 @@ func ExampleConstraintGroup_octetString() {
 func TestConstraint_codecov(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
 		}
 	}()
 
@@ -437,7 +437,7 @@ func TestFromConstraint(t *testing.T) {
 func TestConstraint_PanicOnDuplicateGroup(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatalf("expected panic on duplicate group")
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
 		}
 	}()
 	cgrp := ConstraintGroup{}

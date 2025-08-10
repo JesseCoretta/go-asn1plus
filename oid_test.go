@@ -10,7 +10,7 @@ import (
 func TestMustNewObjectIdentifierValue_MustPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
 		}
 	}()
 	_ = MustNewObjectIdentifierValue(struct{}{})
@@ -19,7 +19,7 @@ func TestMustNewObjectIdentifierValue_MustPanic(t *testing.T) {
 func TestMustNewObjectIdentifier_MustPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
 		}
 	}()
 	_ = MustNewObjectIdentifier(struct{}{})
@@ -28,7 +28,7 @@ func TestMustNewObjectIdentifier_MustPanic(t *testing.T) {
 func TestMustNewRelativeOID_MustPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Fatalf("%s failed: expected panic but function did not panic", t.Name())
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
 		}
 	}()
 	_ = MustNewRelativeOID(struct{}{})
