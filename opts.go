@@ -224,7 +224,7 @@ func (r Options) String() string {
 	addStringConfigValue(&parts, r.Sequence, "sequence")
 
 	for _, c := range r.Constraints {
-		parts = append(parts, "constraint:"+c)
+		parts = append(parts, "constrained-by:"+c)
 	}
 
 	addStringConfigValue(&parts, r.OmitEmpty, "omitempty")
@@ -255,8 +255,10 @@ The syntax of tag is the same as [encoding/asn1], e.g.:
 	asn1:"application"
 	asn1:"tag:4,explicit"
 
-This function exists solely for diagnostic purposes, and generally
-need not be leveraged by the end user.
+This function exists solely for diagnostic or templating purposes,
+and generally need not be leveraged by the end user.
+
+See also [MustNewOptions].
 */
 func NewOptions(tag string) (Options, error) {
 	var (
@@ -275,6 +277,19 @@ func NewOptions(tag string) (Options, error) {
 	}
 
 	return opts, err
+}
+
+/*
+MustNewOptions returns an instance of [Options] following a call
+of [NewOptions] in an attempt to marshal tag. This function will
+panic if an error is encountered.
+*/
+func MustNewOptions(tag string) Options {
+	opts, err := NewOptions(tag)
+	if err != nil {
+		panic(err)
+	}
+	return opts
 }
 
 /*
@@ -311,6 +326,10 @@ func parseOptions(tagStr string) (opts Options, err error) {
 		case hasPfx(token, "constraint:"):
 			po.Constraints = append(po.Constraints,
 				trimPfx(token, "constraint:"))
+
+		case hasPfx(token, "constrained-by:"):
+			po.Constraints = append(po.Constraints,
+				trimPfx(token, "constrained-by:"))
 
 		case hasPfx(token, "choices:"):
 			po.Choices = trimPfx(token, "choices:")

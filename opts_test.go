@@ -27,6 +27,17 @@ func ExampleOptions_byAssembly() {
 	// Output: tag:11,application,explicit
 }
 
+func TestMustNewOptions(t *testing.T) {
+	_ = MustNewOptions("tag:11,application")
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("%s failed: %v", t.Name(), errorNoPanic)
+		}
+	}()
+	_ = MustNewOptions("tag:11,applfdsication")
+}
+
 func TestOptions_codecov(_ *testing.T) {
 	for _, raw := range []string{
 		`asn1:"utf8,printable,fargus,tag:3"`,
