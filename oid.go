@@ -4,7 +4,7 @@ package asn1plus
 oid.go contains all types and methods pertaining to the ASN.1
 OBJECT IDENTIFIER and RELATIVE-OID types.
 
-DISCLAIMER: much of the OID logic is adapted from the now-archived
+DISCLAIMER: much of the OID logic is adapted from the now-defunct
 JesseCoretta/go-objectid, but with small improvements.
 */
 
@@ -16,9 +16,13 @@ import (
 
 /*
 ObjectIdentifierValue implements a type containing any number of
-[NameAndNumberForm] instances.
+[NameAndNumberForm] instances, e.g.:
 
-Note that instances of this type are not intended to be encoded.
+	{iso(1) identified-organization(3)}
+	{0 0 1}
+	{iso(1) identified-organization(3) 6 1 4 1 56521}
+
+Note that instances of this type are NOT intended to be encoded.
 */
 type ObjectIdentifierValue []NameAndNumberForm
 
