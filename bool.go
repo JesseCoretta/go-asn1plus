@@ -24,9 +24,11 @@ type Boolean bool
 
 /*
 BooleanConstraintPhase declares the appropriate phase for
-the constraining of values during codec operations. See the
-[CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var BooleanConstraintPhase = CodecConstraintDecoding
 
@@ -101,8 +103,7 @@ func NewBoolean(x any, constraints ...Constraint) (Boolean, error) {
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup = constraints
-		err = group.Constrain(Boolean(b == true))
+		err = ConstraintGroup(constraints).Constrain(Boolean(b == true))
 	}
 
 	return b, err

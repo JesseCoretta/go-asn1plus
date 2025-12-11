@@ -8,30 +8,14 @@ ENUMERATED type.
 import "reflect"
 
 /*
-Enumeration implements a map of [Enumerated] string values. This
-is not a standard type and is implemented merely for convenience.
-*/
-type Enumeration map[Enumerated]string
-
-/*
 EnumeratedConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var EnumeratedConstraintPhase = CodecConstraintDecoding
-
-/*
-Name scans the receiver instance to determine the string name for the
-input [Enumerated] value.
-*/
-func (r Enumeration) Name(e Enumerated) string {
-	var n string = "unknown (" + itoa(int(e)) + ")"
-	if name, ok := r[e]; ok {
-		n = name
-	}
-	return n
-}
 
 /*
 Enumerated implements the ASN.1 ENUMERATED type (tag 10).
@@ -73,8 +57,7 @@ func NewEnumerated(x any, constraints ...Constraint) (enum Enumerated, err error
 	}
 
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup = constraints
-		err = group.Constrain(Enumerated(e))
+		err = ConstraintGroup(constraints).Constrain(Enumerated(e))
 	}
 
 	if err == nil {

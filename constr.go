@@ -190,10 +190,14 @@ func constrDoD(expect rune, token string) (c string) {
 }
 
 const (
+	// CodecConstraintNone disables use of any
+	// constraints, regardless of current phase.
+	CodecConstraintNone = iota
+
 	// CodecConstraintEncoding indicates that codec
 	// operations should only execute constraints
 	// during the encoding (write) phase.
-	CodecConstraintEncoding = iota + 1
+	CodecConstraintEncoding
 
 	// CodecConstraintDecoding indicates that codec
 	// operations should only execute constraints

@@ -15,6 +15,16 @@ as the [encoding/asn1.RawContent] type.
 type RawContent []byte
 
 /*
+SequenceComponentsConstraintPhase declares the appropriate phase for
+the enforcement of PRESENT/ABSENT field values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
+*/
+var SequenceComponentsConstraintPhase = CodecConstraintDecoding
+
+/*
 marshalSequence returns an error following an
 attempt to marshal sequence (struct) v into pkt.
 */
@@ -25,6 +35,14 @@ func marshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	typ := v.Type()
 	fields := structFields(typ)
 	rawIdx := findRawContentIndex(typ, fields)
+
+	// If 'WITH COMPONENTS' is specified, ensure field value
+	// states are in full compliance in terms of PRESENT/ABSENT.
+	if len(opts.WithComponents) > 0 {
+		if err = checkWithComponents(v.Interface(), opts); err != nil {
+			return
+		}
+	}
 
 	if isSet(v.Interface(), opts) {
 		err = marshalSet(v, pkt, opts)
@@ -301,9 +319,7 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	}
 
 	var extIdx int
-	if extIdx, err = findExtensibleIndex(fields, opts); err != nil {
-		return
-	}
+	extIdx, err = findExtensibleIndex(fields, opts)
 
 	auto := optsIsAutoTag(opts)
 	for i := 0; i < len(fields) && err == nil; i++ {
@@ -320,6 +336,14 @@ func unmarshalSequence(v reflect.Value, pkt PDU, opts *Options) (err error) {
 					err = unmarshalSequenceField(field.Name, v.Field(i), sub, fOpts)
 				}
 			}
+		}
+	}
+
+	// If 'WITH COMPONENTS' is specified, ensure field value
+	// states are in full compliance in terms of PRESENT/ABSENT.
+	if err == nil {
+		if len(opts.WithComponents) > 0 {
+			err = checkWithComponents(v.Interface(), opts)
 		}
 	}
 

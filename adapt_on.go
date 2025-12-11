@@ -368,7 +368,7 @@ func registerStringAdapters() {
 			return NewUniversalString(s, cs...)
 		},
 		func(p *UniversalString) string { return string(*p) },
-		"universal", "universalstring",
+		"univ", "universalstring",
 	)
 
 	RegisterAdapter[OctetString, []byte](

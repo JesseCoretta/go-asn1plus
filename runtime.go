@@ -20,7 +20,7 @@ one or more of:
 If an [EncodingRule] is not specified, the value of [DefaultEncoding] is used,
 which is [BER] by default.
 
-See also [Unmarshal] and [With].
+See also [MustMarshal], [MustUnmarshal], [Unmarshal] and [With].
 */
 func Marshal(x any, with ...EncodingOption) (pkt PDU, err error) {
 	cfg := &encodingConfig{rule: DefaultEncoding}
@@ -37,6 +37,18 @@ func Marshal(x any, with ...EncodingOption) (pkt PDU, err error) {
 	}
 
 	return
+}
+
+/*
+MustMarshal returns an instance of [PDU] and panics if [Marshal] returned an
+error during processing.
+*/
+func MustMarshal(x any, with ...EncodingOption) PDU {
+	pkt, err := Marshal(x, with...)
+	if err != nil {
+		panic(err)
+	}
+	return pkt
 }
 
 /*
@@ -321,7 +333,7 @@ It is not necessary to declare a particular [EncodingRule] using the [With] pack
 function, as the input instance of [PDU] already has this information. Providing an
 [EncodingRule] to Unmarshal -- whether valid or not -- will produce no perceptible effect.
 
-See also [Marshal] and [With].
+See also [Marshal], [MustMarshal], [MustUnmarshal] and [With].
 */
 func Unmarshal(pkt PDU, x any, with ...EncodingOption) error {
 	rv := refValueOf(x)
@@ -346,6 +358,15 @@ func Unmarshal(pkt PDU, x any, with ...EncodingOption) error {
 
 	err = unmarshalValue(pkt, rv.Elem(), cfg.opts)
 	return err
+}
+
+/*
+MustUnmarshal panics if [Unmarshal] returned an error during processing.
+*/
+func MustUnmarshal(pkt PDU, x any, with ...EncodingOption) {
+	if err := Unmarshal(pkt, x, with...); err != nil {
+		panic(err)
+	}
 }
 
 /*

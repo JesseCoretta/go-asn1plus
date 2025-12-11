@@ -299,8 +299,9 @@ func ListAdapters() []AdapterInfo {
 }
 
 /*
-RegisterAdapter binds a pair of types—an ASN.1 [Primitive] `T` and a
-Go type `GoT` to one or more textual keywords.
+RegisterAdapter binds a pair of types -- an ASN.1 [Primitive] `T` and a
+Go type `GoT`. The binding is then associated with one or more textual
+keywords.
 
 Once registered, [Marshal] and [Unmarshal] will automatically convert
 between the two representations whenever:

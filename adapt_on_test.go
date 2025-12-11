@@ -595,7 +595,7 @@ func TestAdapterPF_codecov(_ *testing.T) {
 			input: "BMP strings are fat",
 		},
 		{
-			ident: "universal",
+			ident: "univ",
 			input: "Universal strings are morbidly obese",
 		},
 		{

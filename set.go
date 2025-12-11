@@ -6,7 +6,6 @@ ASN.1 SET type.
 */
 
 import (
-	//"fmt"
 	"reflect"
 	"slices"
 )
@@ -75,7 +74,6 @@ func marshalSet(v reflect.Value, pkt PDU, opts *Options) (err error) {
 	for i := 0; i < v.Len() && err == nil; i++ {
 		tmp := typ.New()
 		subOpts := clearChildOpts(opts)
-
 		subOpts.incDepth()
 		if err = marshalValue(v.Index(i), tmp, subOpts); err == nil {
 			elements = append(elements, tmp.Data())
@@ -435,7 +433,7 @@ func unmarshalSetWithExtensions(
 				pkt.AddOffset(tlv.Length)
 				exts = append(exts, tlv)
 			}
-			if err = refSetValue(f, reflect.ValueOf(exts)); err != nil {
+			if err = refSetValue(f, refValueOf(exts)); err != nil {
 				return
 			}
 			continue

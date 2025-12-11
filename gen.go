@@ -17,9 +17,11 @@ type GeneralString string
 
 /*
 GeneralStringConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var GeneralStringConstraintPhase = CodecConstraintDecoding
 
@@ -46,8 +48,7 @@ func NewGeneralString(x any, constraints ...Constraint) (gen GeneralString, err 
 	_gen := GeneralString(s)
 	err = GeneralSpec(_gen)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup = constraints
-		err = group.Constrain(_gen)
+		err = ConstraintGroup(constraints).Constrain(_gen)
 	}
 
 	if err == nil {

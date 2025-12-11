@@ -103,6 +103,23 @@ type Options struct {
 	// key:value expression during field parsing.
 	Choices string
 
+	// Name(s) of 'WITH COMPONENTS' registered rules. It is an error to
+	// utilize this option when dealing with struct field values that
+	// are not SEQUENCEs, SETs or CHOICEs themselves.
+	//
+	// If multiple names are specified, they are evaluated as a union
+	// (e.g.: an OR'ed statement), where only one successful run is
+	// required.
+	//
+	// Case is not significant.
+	//
+	// Please see the RegisterWithComponents function for details on
+	// registering rules.
+	//
+	// Note that this can be declared textually via the "with-components:<name>"
+	// key:value expression during field parsing.
+	WithComponents []string
+
 	// Primitive identifier name. Only used when an adapter-based type
 	// (e.g.: string, []byte, etc.) is used instead of the equivalent
 	// Primitive type, and only when the adapter is used in a non-default
@@ -111,7 +128,7 @@ type Options struct {
 	// Valid values are: "bmp", "bit", "bool", "date", "datetime", "duration",
 	// "enum", "general", "gt", "graphic", "ia5", "int", "numeric", "descriptor",
 	// "oid", "octet", "printable", "real", "relativeoid", "t61", "time",
-	// "timeofday", "utc", "utf8", "universal", "videotex", "visible".
+	// "timeofday", "utc", "utf8", "univ", "videotex", "visible".
 	//
 	// Case is not significant.
 	Identifier string
@@ -128,7 +145,7 @@ type Options struct {
 	//
 	// Case is not significant.
 	//
-	// Note that this can be declared textually via the "constraint:<name,...>"
+	// Note that this can be declared textually via the "constrained-by:<name,...>"
 	// key:comma-delim-values expression during field parsing.
 	Constraints []string
 
@@ -136,6 +153,15 @@ type Options struct {
 	// RegisterDefaultValue function for details on registration and
 	// the LookupDefaultValue function for looking-up such elements.
 	Default any
+
+	// Children allows the nesting of *Options instances for a given struct
+	// field or slice index. This is useful in complex situations where the
+	// act of preregistering globally-applied options for a given type (via
+	// the RegisterOverrideOptions function) is not feasible, but where any
+	// special controls over nested elements are required. Use of this value
+	// may also be useful in cases where struct-tagging is not possible due
+	// to the type(s) being imported and not modifiable.
+	Children map[int]*Options
 
 	tag, // if non-nil, indicates an alternative tag number.
 	class *int // represents the ASN.1 class: universal, application, context-specific, or private.
@@ -208,6 +234,21 @@ func (r *Options) Header() byte {
 }
 
 /*
+Child returns the subordinate *[Options] instance associated with
+the provided index. If not found, a zero instance is returned.
+*/
+func (r Options) Child(idx int) *Options {
+	var opts *Options
+	if r.Children != nil {
+		opts, _ = r.Children[idx]
+	}
+	if opts == nil {
+		opts = borrowOptions()
+	}
+	return opts
+}
+
+/*
 String returns the string representation of the receiver instance.
 */
 func (r Options) String() string {
@@ -234,6 +275,10 @@ func (r Options) String() string {
 
 	strDef := stringifyDefault(r.Default)
 	addStringConfigValue(&parts, !regDef && strDef != "", "default:"+strDef)
+
+	for _, wc := range r.WithComponents {
+		parts = append(parts, "with-components:"+wc)
+	}
 
 	addStringConfigValue(&parts, r.Extension, "...")
 	addStringConfigValue(&parts, r.ComponentsOf, "components-of")
@@ -324,12 +369,16 @@ func parseOptions(tagStr string) (opts Options, err error) {
 			po.setBool(token)
 
 		case hasPfx(token, "constraint:"):
+			// TODO: Deprecate this
 			po.Constraints = append(po.Constraints,
 				trimPfx(token, "constraint:"))
 
 		case hasPfx(token, "constrained-by:"):
 			po.Constraints = append(po.Constraints,
 				trimPfx(token, "constrained-by:"))
+
+		case isWithComponents(token):
+			po.setWithComponents(token)
 
 		case hasPfx(token, "choices:"):
 			po.Choices = trimPfx(token, "choices:")
@@ -354,6 +403,20 @@ Done:
 	out := *po
 	po.Free()
 	return out, err
+}
+
+func isWithComponents(token string) bool {
+	return hasPfx(token, `with-component`)
+}
+
+func (r *Options) setWithComponents(token string) {
+	if hasPfx(token, "with-components:") {
+		r.WithComponents = append(r.WithComponents,
+			trimPfx(token, "with-components:"))
+	} else if hasPfx(token, "with-component:") {
+		r.WithComponents = append(r.WithComponents,
+			trimPfx(token, "with-component:"))
+	}
 }
 
 func isBoolKeyword(tok string) bool  { _, ok := boolKeywords[tok]; return ok }
@@ -387,10 +450,10 @@ func (r *Options) setBool(name string) {
 }
 
 func (r *Options) writeClassToken(name string) (written bool) {
-	// NOTE: universal NOT listed because the "universal"
-	// token is NOT related to ClassUniversal, rather it
-	// relates to the ASN.1 UNIVERSAL STRING type.
 	switch {
+	case name == "universal":
+		r.SetClass(ClassUniversal)
+		written = true
 	case name == "application":
 		r.SetClass(ClassApplication)
 		written = true
@@ -612,7 +675,7 @@ func borrowOptions() (o *Options) {
 }
 
 var (
-	overrideOptions map[reflect.Type]*Options
+	overrideOptions map[reflect.Type]*Options = make(map[reflect.Type]*Options)
 	opMu            sync.RWMutex
 )
 
@@ -727,6 +790,6 @@ func lookupOverrideOptions(typ any) (opts *Options, err error) {
 	return
 }
 
-func init() {
-	overrideOptions = make(map[reflect.Type]*Options)
-}
+//func init() {
+//	overrideOptions = make(map[reflect.Type]*Options)
+//}

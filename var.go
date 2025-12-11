@@ -150,6 +150,7 @@ var boolKeywords = map[string]struct{}{
 }
 
 var classKeywords = map[string]struct{}{
+	"universal":        {},
 	"application":      {},
 	"context-specific": {},
 	"context specific": {},
@@ -193,6 +194,7 @@ func init() {
 	cerOID, _ = NewObjectIdentifier(2, 1, 2, 0)
 	derOID, _ = NewObjectIdentifier(2, 1, 2, 1)
 
+	// TODO
 	//perOID, _ = NewObjectIdentifier(2, 1, 3, 0, 0)
 	//cperOID, _ = NewObjectIdentifier(2, 1, 3, 1, 0)
 	//ucperOID, _ = NewObjectIdentifier(2, 1, 3, 1, 1)

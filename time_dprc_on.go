@@ -15,9 +15,11 @@ type UTCTime Time
 
 /*
 UTCTimeConstraintPhase declares the appropriate phase for
-the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var UTCTimeConstraintPhase = CodecConstraintDecoding
 

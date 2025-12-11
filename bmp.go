@@ -15,8 +15,8 @@ The structure for instances of this type is as follows:
 
 Tag T represents ASN.1 BMPSTRING tag integer 30 (0x1E). Number N is an
 int-cast byte value that cannot exceed 255. The remaining bytes, which
-may be zero (0) or more in number, define payload P. N must equal size
-of payload P.
+may be zero (0) or more in magnitude, define payload P.  N must equal
+size of P.
 
 Note that this type may not be "string cast friendly", as it requires
 specific byte composition involving the tag and UTF-16-centric length
@@ -27,10 +27,11 @@ octets.
 type BMPString []byte
 
 /*
-BMPStringConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+BMPStringConstraintPhase declares the appropriate phase for the
+constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding], [CodecConstraintDecoding]
+and [CodecConstraintBoth] constants for possible settings.
 */
 var BMPStringConstraintPhase = CodecConstraintDecoding
 
@@ -77,10 +78,10 @@ func NewBMPString(x any, constraints ...Constraint) (bmp BMPString, err error) {
 
 	_bmp := BMPString(out)
 
-	var group ConstraintGroup = constraints
-	if err = group.Constrain(_bmp); err == nil {
+	if err = ConstraintGroup(constraints).Constrain(_bmp); err == nil {
 		bmp = _bmp
 	}
+
 	return
 }
 

@@ -10,6 +10,29 @@ import (
 	"time"
 )
 
+func ExampleNewEnumerated_withConstraint() {
+	// Create a new Constraint using the hard-coded map
+	// instance via the Enumeration "factory" function.
+	//
+	// Note that the map key can be any of the candidates
+	// in the Numerical interface (e.g.: int32, uint8).
+	// value should always be string.
+	constraint := Enumeration(map[int]string{
+		1: "one",
+		2: "two",
+		3: "three",
+		4: "four",
+		5: "five",
+	})
+
+	// Pass the constraint closure to NewEnumerated after
+	// the input value 6.
+	if _, err := NewEnumerated(6, constraint); err != nil {
+		fmt.Println(err)
+	}
+	// Output: CONSTRAINT VIOLATION: ENUMERATED: disallowed ENUM value 6
+}
+
 // sequence is an unexported type used only in examples.
 // It implements the Lengthy interface.
 type (
@@ -37,7 +60,7 @@ Thus, the reader would be expected to devise their own such type.
 	    return len(r)
 	}
 */
-func ExampleSizeConstraint_uniqueSetOf() {
+func ExampleSize_uniqueSetOf() {
 	UniqueConstraint := func(s exampleSetOf) error {
 		seen := make(map[string]struct{}, len(s))
 		for _, item := range s {
@@ -52,7 +75,7 @@ func ExampleSizeConstraint_uniqueSetOf() {
 	// For this example, we require the set to have between 2 and 4 elements.
 	lower, _ := NewInteger(2)
 	upper, _ := NewInteger(4)
-	sizeConstraint := SizeConstraint[exampleSetOf](lower, upper)
+	sizeConstraint := Size[exampleSetOf](lower, upper)
 
 	// validSet has 3 unique elements.
 	validSet := exampleSetOf{"apple", "banana", "cherry"}
@@ -95,13 +118,13 @@ reader would be expected to devise their own such type.
 	    return len(r)
 	}
 */
-func ExampleSizeConstraint_sequenceOf() {
+func ExampleSize_sequenceOf() {
 	// Define lower and upper bounds for the size constraint.
 	lower, _ := NewInteger(1)
 	upper, _ := NewInteger(3)
 
 	// Create a SizeConstraint for types that implement Lengthy.
-	constraint := SizeConstraint[exampleSeqOf](lower, upper)
+	constraint := Size[exampleSeqOf](lower, upper)
 
 	// Define two sequences using the unexported type "sequence".
 	validSeq := exampleSeqOf{"a", "b"}             // length 2 -- PASS
@@ -126,11 +149,11 @@ func ExampleSizeConstraint_sequenceOf() {
 	// CONSTRAINT VIOLATION: size 4 is out of bounds [1, 3]
 }
 
-func ExampleSizeConstraint_octetString() {
+func ExampleSize_octetString() {
 	// We require that the OctetString's logical length is between 3 and 6.
 	lower, _ := NewInteger(3)
 	upper, _ := NewInteger(6)
-	constraint := SizeConstraint[OctetString](lower, upper)
+	constraint := Size[OctetString](lower, upper)
 
 	valid := OctetString("abcd")       // length 4 => valid
 	invalid := OctetString("abcdefgh") // length 8 => invalid
@@ -230,8 +253,8 @@ func ExampleIntersection() {
 	// Output: No school for you, kid.
 }
 
-// ExampleTimePointRangeConstraint demonstrates the use of [TimePointRangeConstraint].
-func ExampleTimePointRangeConstraint() {
+// ExampleTimePointRange demonstrates the use of [TimePointRangeConstraint].
+func ExampleTimePointRange() {
 	// Define a range from the beginning to the end of 2020.
 	min, _ := NewDateTime("2020-01-01T00:00:00")
 	max, _ := NewDateTime("2020-12-31T23:59:59")
@@ -241,7 +264,7 @@ func ExampleTimePointRangeConstraint() {
 	above, _ := NewDateTime("2021-01-01T00:00:00")
 
 	// Create the range constraint.
-	rangeCon := TimePointRangeConstraint(min, max)
+	rangeCon := TimePointRange(min, max)
 
 	// Check a value inside the range.
 	if err := rangeCon(inside); err != nil {
@@ -268,7 +291,7 @@ func ExampleTimePointRangeConstraint() {
 	// CONSTRAINT VIOLATION: time 2021-01-01T00:00:00 is not in allowed range [2020-01-01T00:00:00, 2020-12-31T23:59:59]
 }
 
-func ExampleRecurrenceConstraint() {
+func ExampleRecurrence() {
 	// For our demonstration we set a period of 24 hours.
 	period := 24 * time.Hour
 	// Allowed window is from 0 to 1 hour.
@@ -280,7 +303,7 @@ func ExampleRecurrenceConstraint() {
 	notAllowed, _ := NewDateTime("2020-11-22T02:00:00")
 
 	// Create the recurrence constraint.
-	recCon := RecurrenceConstraint[DateTime](period, windowStart, windowEnd)
+	recCon := Recurrence[DateTime](period, windowStart, windowEnd)
 
 	// Apply the constraint to the value that is within the allowed window.
 	if err := recCon(allowed); err != nil {
@@ -301,9 +324,9 @@ func ExampleRecurrenceConstraint() {
 	// CONSTRAINT VIOLATION: time 2020-11-22T02:00:00 (remainder 2h0m0s) is not within the recurrence window [0s, 1h0m0s]
 }
 
-func ExampleRangeConstraint() {
+func ExampleRange() {
 	// Create a range constraint for int values from 10 to 20.
-	rCon := RangeConstraint[int](10, 20)
+	rCon := Range[int](10, 20)
 
 	// Check a value that is within the range.
 	if err := rCon(15); err != nil {
@@ -421,7 +444,7 @@ func TestConstraint_codecov(t *testing.T) {
 	RegisterTaggedConstraintGroup("duplicateConstraints", cgrp)
 }
 
-func TestFromConstraint(t *testing.T) {
+func TestFrom(t *testing.T) {
 	from := From("abcxyz")
 	if err := from(struct{}{}); err == nil {
 		t.Error("expected error for struct{}")

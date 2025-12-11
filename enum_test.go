@@ -1,9 +1,6 @@
 package asn1plus
 
-import (
-	"fmt"
-	"testing"
-)
+import "testing"
 
 func TestMustNewEnumerated_MustPanic(t *testing.T) {
 	defer func() {
@@ -18,17 +15,17 @@ func TestCustomEnumerated_withControls(t *testing.T) {
 	orig, _ := NewEnumerated(123456, func(any) error {
 		return nil
 	})
-	var cust enum = enum(orig) // cheat
+	var cust testEnum = testEnum(orig) // cheat
 
-	RegisterEnumeratedAlias[enum](TagEnum,
+	RegisterEnumeratedAlias[testEnum](TagEnum,
 		EnumeratedConstraintPhase,
 		func([]byte) error {
 			return nil
 		},
-		func(enum) ([]byte, error) {
+		func(testEnum) ([]byte, error) {
 			return []byte{0x9, 0x5, 0xc1, 0x3, 0x12, 0xd6, 0x87}, nil
 		},
-		func([]byte) (enum, error) {
+		func([]byte) (testEnum, error) {
 			return cust, nil
 		},
 		func(any) error { return nil },
@@ -39,51 +36,29 @@ func TestCustomEnumerated_withControls(t *testing.T) {
 		t.Fatalf("%s failed [BER encoding]: %v", t.Name(), err)
 	}
 
-	var next enum
+	var next testEnum
 	if err = Unmarshal(pkt, &next); err != nil {
 		t.Fatalf("%s failed [BER decoding]: %v", t.Name(), err)
 	}
 	unregisterType(refTypeOf(cust))
 }
 
-func ExampleEnumerated_roundTripBER() {
-	var e Enumerated = 3
-	pkt, err := Marshal(e, With(BER)) // or CER, DER, et al.
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+type testEnum int
 
-	if err = Unmarshal(pkt, &e); err == nil {
-		enums := Enumeration{
-			Enumerated(1): "one",
-			Enumerated(2): "two",
-			Enumerated(3): "three",
-			Enumerated(4): "four",
-			Enumerated(5): "five",
-		}
-		fmt.Printf("Known Enumerated: %s (%d)\n", enums.Name(e), e)
-	}
-
-	// Output: Known Enumerated: three (3)
-}
-
-type enum int
-
-func (_ enum) Tag() int          { return TagEnum }
-func (_ enum) String() string    { return `` }
-func (_ enum) IsPrimitive() bool { return true }
+func (_ testEnum) Tag() int          { return TagEnum }
+func (_ testEnum) String() string    { return `` }
+func (_ testEnum) IsPrimitive() bool { return true }
 
 func TestEnumerated_codecov(t *testing.T) {
 
-	RegisterEnumeratedAlias[enum](TagEnum,
+	RegisterEnumeratedAlias[testEnum](TagEnum,
 		EnumeratedConstraintPhase,
 		func(b []byte) error { return nil },
-		func(b enum) ([]byte, error) {
+		func(b testEnum) ([]byte, error) {
 			return []byte{0x00}, nil
 		},
-		func(b []byte) (enum, error) {
-			return enum(3), nil
+		func(b []byte) (testEnum, error) {
+			return testEnum(3), nil
 		},
 		nil)
 

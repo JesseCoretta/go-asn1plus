@@ -61,9 +61,11 @@ type Time time.Time
 
 /*
 TimeConstraintPhase declares the appropriate phase for the
-constraining of values during codec operations. See the
-[CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var TimeConstraintPhase = CodecConstraintDecoding
 
@@ -277,9 +279,11 @@ type Date Time
 
 /*
 DateConstraintPhase declares the appropriate phase for the
-constraining of values during codec operations. See the
-[CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var DateConstraintPhase = CodecConstraintDecoding
 
@@ -476,9 +480,11 @@ type DateTime Time
 
 /*
 DateTimeConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var DateTimeConstraintPhase = CodecConstraintDecoding
 
@@ -664,9 +670,11 @@ type TimeOfDay Time
 
 /*
 TimeOfDayConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var TimeOfDayConstraintPhase = CodecConstraintDecoding
 
@@ -860,9 +868,11 @@ type Duration struct {
 
 /*
 DurationConstraintPhase declares the appropriate phase for
-the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var DurationConstraintPhase = CodecConstraintDecoding
 
@@ -1307,9 +1317,11 @@ type GeneralizedTime Time
 
 /*
 GeneralizedTimeConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var GeneralizedTimeConstraintPhase = CodecConstraintDecoding
 

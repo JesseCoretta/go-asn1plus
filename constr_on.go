@@ -9,6 +9,34 @@ import (
 )
 
 /*
+Enumeration returns an instance of [Constraint] based upon a hard-coded
+map. K may be any [Numerical] value, while V must always be a string.
+
+If the input map is nil or zero, this function will panic.
+*/
+func Enumeration[K Numerical, V string](enum map[K]V) Constraint {
+	if len(enum) == 0 {
+		panic("ENUMERATED: constraint prefab error received nil or zero enum map")
+	}
+
+	keyType := refTypeOf((*K)(nil)).Elem()
+	return func(x any) (err error) {
+		v := refValueOf(x)
+		if !v.Type().ConvertibleTo(keyType) {
+			err = constraintViolationf("ENUMERATED: invalid type ", keyType,
+				", expected Numerical qualifier")
+			return
+		}
+
+		kVal := v.Convert(keyType).Interface().(K)
+		if _, ok := enum[kVal]; !ok {
+			err = constraintViolationf("ENUMERATED: disallowed ENUM value ", kVal)
+		}
+		return
+	}
+}
+
+/*
 Unsigned implements an [Integer] [Constraint] which prohibits negative numbers.
 This closure instance is intended to be passed as a variadic argument to the
 [NewInteger] and [MustNewInteger] functions.
@@ -84,16 +112,26 @@ func From(allowed string) Constraint {
 }
 
 /*
-RangeConstraint returns an instance of [Constraint] that checks if a value
-of any ordered type is between the specified minimum and maximum.
+Deprecated: RangeConstraint returns an instance of [Constraint] following
+a call of [Range].
+
+Use [Range] directly instead.
 */
-func RangeConstraint[T constraints.Ordered](min, max T) Constraint {
+func RangeConstraint[T constraints.Ordered](minimum, maximum T) Constraint {
+	return Range[T](minimum, maximum)
+}
+
+/*
+Range returns an instance of [Constraint] that checks if a value of any
+[constraints.Ordered] type is between the specified minimum and maximum.
+*/
+func Range[T constraints.Ordered](minimum, maximum T) Constraint {
 	return func(val any) error {
 		v, ok := val.(T)
 		if !ok {
 			return constraintViolationf("type assertion to ordered failed")
 		}
-		if v < min || v > max {
+		if v < minimum || v > maximum {
 			return constraintViolationf("value is out of range")
 		}
 		return nil
@@ -101,12 +139,32 @@ func RangeConstraint[T constraints.Ordered](min, max T) Constraint {
 }
 
 /*
-Size returns an instance of [Constraint] that checks if a value's logical
-length is not outside of the boundaries defined by minimum and maximum.
+Deprecated: SizeConstraint returns an instance of [Constraint] following
+a call of [Size].
+
+Use [Size] directly instead.
 */
 func SizeConstraint[T Lengthy](minimum, maximum any) Constraint {
-	var min, max Integer
-	var err error
+	return Size[T](minimum, maximum)
+}
+
+/*
+Size returns an instance of [Constraint] that is hard-coded with the input
+minimum and maximum values for the purpose of checking if a value's logical
+length is not outside of the specified boundaries.
+
+This constructor is primarily intended to enforce upper bounds constraints
+for certain ASN.1 primitive values, e.g.:
+
+	ub-international-isdn-number INTEGER ::= 16
+	InternationalISDNNumber ::= NumericString(SIZE (1..ub-international-isdn-number))
+*/
+func Size[T Lengthy](minimum, maximum any) Constraint {
+	var (
+		min, max Integer
+		err      error
+	)
+
 	if min, err = assertInteger(minimum); err != nil {
 		panic(err)
 	}
@@ -120,27 +178,37 @@ func SizeConstraint[T Lengthy](minimum, maximum any) Constraint {
 			return constraintViolationf("type assertion to Lengthy failed")
 		}
 		size, err := NewInteger(v.Len())
-		if err != nil {
-			return err
+		if err == nil {
+			if size.Lt(min) || size.Gt(max) {
+				err = constraintViolationf(
+					"size ", size.String(),
+					" is out of bounds [", min.String(),
+					", "+max.String(), "]",
+				)
+			}
 		}
-		if size.Lt(min) || size.Gt(max) {
-			return constraintViolationf(
-				"size ", size.String(),
-				" is out of bounds [", min.String(),
-				", "+max.String(), "]",
-			)
-		}
-		return nil
+		return err
 	}
 }
 
 /*
-RecurrenceConstraint returns a Constraint for temporal values that
-must fall within a recurring window. period is the recurrence period
-(e.g., 24h); windowStart and windowEnd represent the allowable offset
-(as durations) within each period.
+Deprecated: RecurrenceConstraint returns a [Temporal] [Constraint] following
+a call of [Recurrence].
+
+Use [Recurrence] directly instead.
 */
 func RecurrenceConstraint[T Temporal](period time.Duration, windowStart, windowEnd time.Duration) Constraint {
+	return Recurrence[T](period, windowStart, windowEnd)
+}
+
+/*
+Recurrence returns a [Temporal] [Constraint] for values that must fall
+within a recurring window.
+
+period is the recurrence period (e.g., 24h); windowStart and windowEnd
+represent the allowable offset (as durations) within each period.
+*/
+func Recurrence[T Temporal](period time.Duration, windowStart, windowEnd time.Duration) Constraint {
 	return func(val any) (err error) {
 		tm, ok := val.(Temporal)
 		if !ok {
@@ -159,7 +227,22 @@ func RecurrenceConstraint[T Temporal](period time.Duration, windowStart, windowE
 	}
 }
 
-func TimePointRangeConstraint[T Temporal](min, max T) Constraint {
+/*
+Deprecated: TimePointRangeConstraint returns a [Temporal] [Constraint]
+following a call of [TimePointRange].
+
+Use [TimePointRange] directly instead.
+*/
+func TimePointRangeConstraint[T Temporal](minimum, maximum T) Constraint {
+	return TimePointRange[T](minimum, maximum)
+}
+
+/*
+TimePointRange returns a [Temporal] [Constraint] function hard-coded with
+the specified min and max values for the purpose of constraining [Temporal]
+values to a specific time window.
+*/
+func TimePointRange[T Temporal](minimum, maximum T) Constraint {
 	return func(val any) (err error) {
 		tm, ok := val.(Temporal)
 		if !ok {
@@ -167,10 +250,10 @@ func TimePointRangeConstraint[T Temporal](min, max T) Constraint {
 			return
 		}
 		t := tm.Cast()
-		if t.Before(min.Cast()) || t.After(max.Cast()) {
+		if t.Before(minimum.Cast()) || t.After(maximum.Cast()) {
 			err = constraintViolationf("time ", tm.String(),
 				" is not in allowed range [",
-				min.String(), ", ", max.String(), "]")
+				minimum.String(), ", ", maximum.String(), "]")
 		}
 		return
 	}

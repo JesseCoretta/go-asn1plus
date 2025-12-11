@@ -83,6 +83,15 @@ type Lengthy interface {
 }
 
 /*
+Numerical is qualified through any native Go integer type, whether signed
+or unsigned.
+*/
+type Numerical interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+/*
 sizeOfInt returns the byte size of i based on its magnitude.
 */
 func sizeOfInt(i int) int {
@@ -167,7 +176,7 @@ func canAssign(dest, src reflect.Value) (err error) {
 refSetValue returns an error following an attempt to write src into dest
 */
 func refSetValue(dest, src reflect.Value) (err error) {
-	if err := canAssign(dest, src); err == nil {
+	if err = canAssign(dest, src); err == nil {
 		if src.Type().AssignableTo(dest.Type()) {
 			dest.Set(src)
 		} else {

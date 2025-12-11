@@ -16,9 +16,11 @@ type ObjectDescriptor string
 
 /*
 ObjectDescriptorConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var ObjectDescriptorConstraintPhase = CodecConstraintDecoding
 

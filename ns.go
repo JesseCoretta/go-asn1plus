@@ -19,9 +19,11 @@ type NumericString string
 
 /*
 NumericStringConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var NumericStringConstraintPhase = CodecConstraintDecoding
 
@@ -70,14 +72,14 @@ func NewNumericString(x any, constraints ...Constraint) (NumericString, error) {
 		_ns := NumericString(raw)
 		err = NumericSpec(_ns)
 		if len(constraints) > 0 && err == nil {
-			var group ConstraintGroup = constraints
-			err = group.Constrain(_ns)
+			err = ConstraintGroup(constraints).Constrain(_ns)
 		}
 
 		if err == nil {
 			ns = _ns
 		}
 	}
+
 	return ns, err
 }
 

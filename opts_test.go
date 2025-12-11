@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+// Tests fix for issue #96
+func TestOptions_parseUniversalClass(t *testing.T) {
+	str := `asn1:"tag:4,universal"`
+	parsed, err := NewOptions(str)
+	if err != nil {
+		t.Fatalf("%s failed: %v", t.Name(), err)
+	}
+
+	class := parsed.Class()
+	tag := parsed.Tag()
+
+	if class != ClassUniversal || tag != 4 {
+		t.Fatalf("%s failed: want UNIVERSAL [4], got %d/%d", t.Name(), class, tag)
+	}
+}
+
 func ExampleOptions_byParse() {
 	opts, err := NewOptions(`asn1:"tag:7,application"`)
 	if err != nil {

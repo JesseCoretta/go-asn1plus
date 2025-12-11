@@ -17,9 +17,11 @@ type IA5String string
 
 /*
 IA5StringConstraintPhase declares the appropriate phase
-for the constraining of values during codec operations. See
-the [CodecConstraintEncoding], [CodecConstraintDecoding] and
-[CodecConstraintBoth] constants for possible settings.
+for the constraining of values during codec operations.
+
+See the [CodecConstraintNone], [CodecConstraintEncoding],
+[CodecConstraintDecoding] and [CodecConstraintBoth] constants
+for possible settings.
 */
 var IA5StringConstraintPhase = CodecConstraintDecoding
 
@@ -77,8 +79,7 @@ func NewIA5String(x any, constraints ...Constraint) (IA5String, error) {
 	_ia5 := IA5String(raw)
 	err = IA5Spec(_ia5)
 	if len(constraints) > 0 && err == nil {
-		var group ConstraintGroup = constraints
-		err = group.Constrain(_ia5)
+		err = ConstraintGroup(constraints).Constrain(_ia5)
 	}
 
 	if err == nil {
