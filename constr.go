@@ -79,9 +79,9 @@ to the package-level [Constraint] registry. The input name is used within
 "asn1" struct tags and called via the "constraint" keyword when encountered,
 e.g.:
 
-	`asn1:"... other params ...,constraint:myConstraint"`
+	`asn1:"... other params ...,constrained-by:myConstraint"`
 
-Multiple occurrences of "constraint:..." are permitted in tagged instructions.
+Multiple occurrences of "constrained-by:..." are permitted in tagged instructions.
 
 It is not necessary to register [Constraint] instances if they are manually
 (directly) passed to type constructors as input parameters.
@@ -101,9 +101,9 @@ RegisterTaggedConstraintGroup assigns the provided [ConstraintGroup] instance
 to the package-level [Constraint] registry. The input name is used within
 "asn1" struct tags and called via the "constraint" keyword when executed, e.g.:
 
-	`asn1:"... other params ...,constraint:myConstraintGroup"`
+	`asn1:"... other params ...,constrained-by:myConstraintGroup"`
 
-Multiple occurrences of "constraint:..." are permitted in tagged instructions.
+Multiple occurrences of "constrained-by:..." are permitted in tagged instructions.
 
 It is not necessary to register [ConstraintGroup] instances if they are manually
 (directly) passed to type constructors as variadic input parameters.

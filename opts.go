@@ -368,11 +368,6 @@ func parseOptions(tagStr string) (opts Options, err error) {
 		case isBoolKeyword(token):
 			po.setBool(token)
 
-		case hasPfx(token, "constraint:"):
-			// TODO: Deprecate this
-			po.Constraints = append(po.Constraints,
-				trimPfx(token, "constraint:"))
-
 		case hasPfx(token, "constrained-by:"):
 			po.Constraints = append(po.Constraints,
 				trimPfx(token, "constrained-by:"))

@@ -484,7 +484,7 @@ func ExampleOctetString_sequenceFieldConstraintViolation() {
 
 	type MySequence struct {
 		Name  PrintableString
-		Badge OctetString `asn1:"constraint:ucOnly"`
+		Badge OctetString `asn1:"constrained-by:ucOnly"`
 	}
 
 	my := MySequence{
@@ -533,7 +533,7 @@ func ExampleOctetString_sequenceFieldConstraintGroupViolation() {
 		// ^ means only run during ENCODING (at field read)
 		// $ means only run during DECODING (at field write)
 		// <neither> means run during both (inefficient)
-		Badge OctetString `asn1:"constraint:^groupedConstraint"`
+		Badge OctetString `asn1:"constrained-by:^groupedConstraint"`
 	}
 
 	my := MySequence{

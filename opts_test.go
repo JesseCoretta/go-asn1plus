@@ -66,7 +66,7 @@ func TestOptions_codecov(_ *testing.T) {
 		`asn1:"application,tag:2,choices:myChoices"`,
 		`asn1:"application,tag:2,default:true"`,
 		`asn1:"application,tag:2,default:thanks"`,
-		`asn1:"application,constraint:fakeConstraint,tag:2,default:thanks"`,
+		`asn1:"application,constrained-by:fakeConstraint,tag:2,default:thanks"`,
 		`asn1:"application,tag:2,default:thanks"`,
 	} {
 		opts, _ := NewOptions(raw)
