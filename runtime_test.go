@@ -3,8 +3,7 @@ package asn1plus
 import "testing"
 
 func TestMustMarshalRoundtrip(t *testing.T) {
-	x := MustNewPrintableString("testing123")
-	pkt := MustMarshal(x)
+	// Simply for code coverage
 	var dest PrintableString
-	MustUnmarshal(pkt, &dest)
+	MustUnmarshal(MustMarshal(MustNewPrintableString("testing123")), &dest)
 }
