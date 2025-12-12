@@ -41,13 +41,13 @@ var PrintableStringConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagPrintableString].
 */
-func (r PrintableString) Tag() int { return TagPrintableString }
+func (_ PrintableString) Tag() int { return TagPrintableString }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r PrintableString) IsPrimitive() bool { return true }
+func (_ PrintableString) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.

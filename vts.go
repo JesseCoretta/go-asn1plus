@@ -102,13 +102,13 @@ func (r VideotexString) String() string { return string(r) }
 /*
 Tag returns the integer constant [TagVideotexString].
 */
-func (r VideotexString) Tag() int { return TagVideotexString }
+func (_ VideotexString) Tag() int { return TagVideotexString }
 
 /*
 IsPrimitive returns true, indicative the receiver is a known
 ASN.1 primitive.
 */
-func (r VideotexString) IsPrimitive() bool { return true }
+func (_ VideotexString) IsPrimitive() bool { return true }
 
 /*
 VideotexSpec implements the formal [Constraint] specification for [VideotexString].

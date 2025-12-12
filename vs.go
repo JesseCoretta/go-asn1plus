@@ -99,13 +99,13 @@ func (r VisibleString) String() string { return string(r) }
 /*
 Tag returns the integer constant [TagVisibleString].
 */
-func (r VisibleString) Tag() int { return TagVisibleString }
+func (_ VisibleString) Tag() int { return TagVisibleString }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r VisibleString) IsPrimitive() bool { return true }
+func (_ VisibleString) IsPrimitive() bool { return true }
 
 func init() {
 	VisibleSpec = func(vs any) (err error) {

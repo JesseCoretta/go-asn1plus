@@ -102,13 +102,13 @@ func (r ObjectDescriptor) String() string { return string(r) }
 /*
 Tag returns the integer constant [TagObjectDescriptor].
 */
-func (r ObjectDescriptor) Tag() int { return TagObjectDescriptor }
+func (_ ObjectDescriptor) Tag() int { return TagObjectDescriptor }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r ObjectDescriptor) IsPrimitive() bool { return true }
+func (_ ObjectDescriptor) IsPrimitive() bool { return true }
 
 func graphicStringDecoderVerify(b []byte) (err error) {
 	runes := []rune(string(b))

@@ -149,7 +149,7 @@ IsPrimitive returns true, indicating the receiver is considered an
 ASN.1 primitive type. This method serves as a marker to differentiate
 qualified instances from other interfaces of a similar design.
 */
-func (r BitString) IsPrimitive() bool { return true }
+func (_ BitString) IsPrimitive() bool { return true }
 
 func bitStringByteToBinary(b byte, width int) string {
 	s := fmtInt(int64(b), 2)
@@ -245,7 +245,7 @@ func (r BitString) IsZero() bool { return len(r.Bytes) == 0 && r.BitLength == 0 
 /*
 Tag returns the integer constant [TagBitString] (3).
 */
-func (r BitString) Tag() int { return TagBitString }
+func (_ BitString) Tag() int { return TagBitString }
 
 /*
 Positive returns a Boolean value indicative of bit being in a positive state

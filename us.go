@@ -28,13 +28,13 @@ var UniversalStringConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagUniversalString].
 */
-func (r UniversalString) Tag() int { return TagUniversalString }
+func (_ UniversalString) Tag() int { return TagUniversalString }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r UniversalString) IsPrimitive() bool { return true }
+func (_ UniversalString) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.

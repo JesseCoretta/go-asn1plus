@@ -217,13 +217,13 @@ func (r Real) String() string {
 /*
 Tag returns the integer constant [TagReal].
 */
-func (r Real) Tag() int { return TagReal }
+func (_ Real) Tag() int { return TagReal }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r Real) IsPrimitive() bool { return true }
+func (_ Real) IsPrimitive() bool { return true }
 
 /*
 encodeRealExponent returns an instance of []byte, containing the

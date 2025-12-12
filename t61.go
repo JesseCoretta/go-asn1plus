@@ -31,13 +31,13 @@ var T61StringConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagT61String].
 */
-func (r T61String) Tag() int { return TagT61String }
+func (_ T61String) Tag() int { return TagT61String }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r T61String) IsPrimitive() bool { return true }
+func (_ T61String) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.

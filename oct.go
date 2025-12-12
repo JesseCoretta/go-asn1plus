@@ -82,7 +82,7 @@ var OctetStringConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagOctetString].
 */
-func (r OctetString) Tag() int { return TagOctetString }
+func (_ OctetString) Tag() int { return TagOctetString }
 
 /*
 IsZero returns a Boolean value indicative of a nil receiver state.
@@ -93,7 +93,7 @@ func (r *OctetString) IsZero() bool { return r == nil }
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r OctetString) IsPrimitive() bool { return true }
+func (_ OctetString) IsPrimitive() bool { return true }
 
 /*
 String returns the string representation of the receiver instance.

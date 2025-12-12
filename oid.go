@@ -411,13 +411,13 @@ func (r ObjectIdentifier) Eq(o ObjectIdentifier) bool {
 /*
 Tag returns the integer constant [TagOID].
 */
-func (r ObjectIdentifier) Tag() int { return TagOID }
+func (_ ObjectIdentifier) Tag() int { return TagOID }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r ObjectIdentifier) IsPrimitive() bool { return true }
+func (_ ObjectIdentifier) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.
@@ -847,13 +847,13 @@ func MustNewRelativeOID(x ...any) RelativeOID {
 /*
 Tag returns the integer constant [TagRelativeOID].
 */
-func (r RelativeOID) Tag() int { return TagRelativeOID }
+func (_ RelativeOID) Tag() int { return TagRelativeOID }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r RelativeOID) IsPrimitive() bool { return true }
+func (_ RelativeOID) IsPrimitive() bool { return true }
 
 /*
 IsZero returns a Boolean value indicative of a nil receiver state.

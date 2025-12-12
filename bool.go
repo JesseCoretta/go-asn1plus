@@ -35,7 +35,7 @@ var BooleanConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant one (1) for [TagBoolean].
 */
-func (r Boolean) Tag() int { return TagBoolean }
+func (_ Boolean) Tag() int { return TagBoolean }
 
 /*
 Byte returns the verisimilitude of the receiver instance expressed
@@ -65,7 +65,7 @@ IsPrimitive returns true, indicating the receiver is considered an
 ASN.1 primitive type. This method serves as a marker to differentiate
 qualified instances from other interfaces of a similar design.
 */
-func (r Boolean) IsPrimitive() bool { return true }
+func (_ Boolean) IsPrimitive() bool { return true }
 
 /*
 NewBoolean returns an instance of [Boolean] alongside an error following

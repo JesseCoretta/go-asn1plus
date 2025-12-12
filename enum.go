@@ -25,7 +25,7 @@ type Enumerated int
 /*
 Tag returns the integer constant [TagEnum].
 */
-func (r Enumerated) Tag() int { return TagEnum }
+func (_ Enumerated) Tag() int { return TagEnum }
 
 /*
 Enumerated returns the string representation of the receiver instance.
@@ -37,7 +37,7 @@ IsPrimitive returns true, indicating the receiver is considered an
 ASN.1 primitive type. This method serves as a marker to differentiate
 qualified instances from other interfaces of a similar design.
 */
-func (r Enumerated) IsPrimitive() bool { return true }
+func (_ Enumerated) IsPrimitive() bool { return true }
 
 /*
 NewEnumerated returns an instance of [Enumerated] alongside an error

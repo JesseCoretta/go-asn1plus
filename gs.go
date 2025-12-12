@@ -101,13 +101,13 @@ func (r GraphicString) String() string { return string(r) }
 /*
 Tag returns the integer constant [TagGraphicString].
 */
-func (r GraphicString) Tag() int { return TagGraphicString }
+func (_ GraphicString) Tag() int { return TagGraphicString }
 
 /*
 IsPrimitive returns true, indicating the receiver instance is a
 known ASN.1 primitive.
 */
-func (r GraphicString) IsPrimitive() bool { return true }
+func (_ GraphicString) IsPrimitive() bool { return true }
 
 func init() {
 	GraphicSpec = func(gs any) (err error) {

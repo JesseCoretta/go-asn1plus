@@ -124,14 +124,14 @@ var BMPSpec Constraint
 /*
 Tag returns the integer constant [TagBMPString].
 */
-func (r BMPString) Tag() int { return TagBMPString }
+func (_ BMPString) Tag() int { return TagBMPString }
 
 /*
 IsPrimitive returns true, indicating the receiver is considered an
 ASN.1 primitive type. This method serves as a marker to differentiate
 qualified instances from other interfaces of a similar design.
 */
-func (r BMPString) IsPrimitive() bool { return true }
+func (_ BMPString) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.

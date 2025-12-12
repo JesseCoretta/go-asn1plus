@@ -33,13 +33,13 @@ func (r IA5String) Len() int { return len(r) }
 /*
 Tag returns the integer constant [TagIA5String].
 */
-func (r IA5String) Tag() int { return TagIA5String }
+func (_ IA5String) Tag() int { return TagIA5String }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive type.
 */
-func (r IA5String) IsPrimitive() bool { return true }
+func (_ IA5String) IsPrimitive() bool { return true }
 
 /*
 String returns the string representation of the receiver instance.

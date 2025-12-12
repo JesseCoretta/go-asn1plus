@@ -30,13 +30,13 @@ var NumericStringConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagNumericString].
 */
-func (r NumericString) Tag() int { return TagNumericString }
+func (_ NumericString) Tag() int { return TagNumericString }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r NumericString) IsPrimitive() bool { return true }
+func (_ NumericString) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.

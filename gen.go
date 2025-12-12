@@ -97,13 +97,13 @@ func (r GeneralString) String() string { return string(r) }
 /*
 Tag returns the ASN.1 tag for GeneralString.
 */
-func (r GeneralString) Tag() int { return TagGeneralString }
+func (_ GeneralString) Tag() int { return TagGeneralString }
 
 /*
 IsPrimitive returns true, indicating that the receiver instance is
 a known ASN.1 primitive.
 */
-func (r GeneralString) IsPrimitive() bool { return true }
+func (_ GeneralString) IsPrimitive() bool { return true }
 
 var generalStringBitmap [65536 / 64]uint64 // one cache-line per 64 runes
 

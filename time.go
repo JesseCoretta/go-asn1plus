@@ -124,13 +124,13 @@ func MustNewTime(x any, constraints ...Constraint) Time {
 /*
 Tag returns the integer constant [TagTime].
 */
-func (r Time) Tag() int { return TagTime }
+func (_ Time) Tag() int { return TagTime }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r Time) IsPrimitive() bool { return true }
+func (_ Time) IsPrimitive() bool { return true }
 
 /*
 Cast returns the receiver instance cast as an instance of [time.Time].
@@ -460,13 +460,13 @@ func (r Date) Layout() string {
 /*
 Tag returns the integer constant [TagDate].
 */
-func (r Date) Tag() int { return TagDate }
+func (_ Date) Tag() int { return TagDate }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r Date) IsPrimitive() bool { return true }
+func (_ Date) IsPrimitive() bool { return true }
 
 /*
 Cast returns the receiver instance cast as an instance of [time.Time].
@@ -608,13 +608,13 @@ func encDateTime(d DateTime) ([]byte, error) {
 /*
 Tag returns the integer constant [TagDateTime].
 */
-func (r DateTime) Tag() int { return TagDateTime }
+func (_ DateTime) Tag() int { return TagDateTime }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r DateTime) IsPrimitive() bool { return true }
+func (_ DateTime) IsPrimitive() bool { return true }
 
 /*
 Cast returns the receiver instance cast as an instance of [time.Time].
@@ -786,13 +786,13 @@ func (r TimeOfDay) Layout() string { return timeOfDayLayout }
 /*
 Tag returns the integer constant [TagTimeOfDay].
 */
-func (r TimeOfDay) Tag() int { return TagTimeOfDay }
+func (_ TimeOfDay) Tag() int { return TagTimeOfDay }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r TimeOfDay) IsPrimitive() bool { return true }
+func (_ TimeOfDay) IsPrimitive() bool { return true }
 
 /*
 Cast returns the receiver instance cast as an instance of [time.Time].
@@ -1129,13 +1129,13 @@ func (r *Duration) marshalYMD(datePart string, parser func(string, byte) (float6
 /*
 Tag returns the integer constant [TagDuration].
 */
-func (r Duration) Tag() int { return TagDuration }
+func (_ Duration) Tag() int { return TagDuration }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r Duration) IsPrimitive() bool { return true }
+func (_ Duration) IsPrimitive() bool { return true }
 
 /*
 Eq returns a Boolean value indicative of r being equal to d.
@@ -1328,13 +1328,13 @@ var GeneralizedTimeConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagGeneralizedTime].
 */
-func (r GeneralizedTime) Tag() int { return TagGeneralizedTime }
+func (_ GeneralizedTime) Tag() int { return TagGeneralizedTime }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r GeneralizedTime) IsPrimitive() bool { return true }
+func (_ GeneralizedTime) IsPrimitive() bool { return true }
 
 /*
 NewGeneralizedTime returns an instance of [GeneralizedTime] alongside an error

@@ -99,13 +99,13 @@ func assertInteger[T any](v T) (i Integer, err error) {
 /*
 Tag returns the integer constant [TagInteger].
 */
-func (r Integer) Tag() int { return TagInteger }
+func (_ Integer) Tag() int { return TagInteger }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r Integer) IsPrimitive() bool { return true }
+func (_ Integer) IsPrimitive() bool { return true }
 
 /*
 IsZero returns a Boolean value indicative of a nil receiver state.

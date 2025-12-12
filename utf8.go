@@ -26,13 +26,13 @@ var UTF8StringConstraintPhase = CodecConstraintDecoding
 /*
 Tag returns the integer constant [TagUTF8String].
 */
-func (r UTF8String) Tag() int { return TagUTF8String }
+func (_ UTF8String) Tag() int { return TagUTF8String }
 
 /*
 IsPrimitive returns true, indicating the receiver is a known
 ASN.1 primitive.
 */
-func (r UTF8String) IsPrimitive() bool { return true }
+func (_ UTF8String) IsPrimitive() bool { return true }
 
 /*
 Len returns the integer length of the receiver instance.
