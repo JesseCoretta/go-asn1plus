@@ -256,7 +256,7 @@ func (r Options) String() string {
 
 	//addStringConfigValue(&parts, r.depth > 0, "depth:"+itoa(r.depth))
 	addStringConfigValue(&parts, r.Tag() >= 0, "tag:"+itoa(r.Tag()))
-	addStringConfigValue(&parts, validClass(r.Class()) && r.Class() > 0, lc(ClassNames[r.Class()]))
+	addStringConfigValue(&parts, validClass(r.Class()) && r.Class() > -1, lc(ClassNames[r.Class()]))
 	addStringConfigValue(&parts, r.Explicit, "explicit")
 	addStringConfigValue(&parts, r.Optional, "optional")
 	addStringConfigValue(&parts, r.Absent, "absent")
