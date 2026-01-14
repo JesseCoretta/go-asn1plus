@@ -14,6 +14,10 @@ This package is under heavy development and is **HIGHLY EXPERIMENTAL**. As such,
 
 Go version 1.21 or later is required
 
+## Donations for animal/environmental causes
+
+If you or your organization use my software regularly and find it useful, I only ask that you donate to animal shelters, non-profit environmental entities or similar. If you cannot afford a monetary contribution to these causes, please volunteer at animal shelters and/or visit kill shelters for the purpose of liberating animals unfairly awaiting execution.
+
 ## Help Wanted!
 
 As indicated by the above badge, I am actively looking for experienced open source volunteers who have a keen grasp of ASN.1, encoding rules and other relevant components.
